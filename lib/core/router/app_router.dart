@@ -9,6 +9,11 @@ import '../../features/splash/screens/splash_screen.dart';
 import '../../features/search/screens/search_screen.dart';
 import '../../features/restaurant/screens/restaurant_detail_screen.dart';
 import '../../features/cart/screens/cart_screen.dart';
+import '../../features/payment/screens/payment_screen.dart';
+import '../../features/orders/screens/order_confirmation_screen.dart';
+import '../../features/orders/screens/order_tracking_screen.dart';
+import '../../features/orders/screens/orders_screen.dart';
+import '../../features/orders/screens/review_screen.dart';
 
 /// GoRouter provider with auth-based redirects
 final routerProvider = Provider<GoRouter>((ref) {
@@ -52,7 +57,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
-      // ─── Restaurant Detail (standalone, not in shell) ───
+      // ─── Restaurant Detail (standalone, no bottom nav) ───
       GoRoute(
         path: '/restaurant/:id',
         builder: (context, state) {
@@ -62,8 +67,48 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
-      // ─── Cart (standalone, not in shell) ───
+      // ─── Cart (standalone) ───
       GoRoute(path: '/cart', builder: (context, state) => const CartScreen()),
+
+      // ─── Payment (standalone) ───
+      GoRoute(
+        path: '/payment',
+        builder: (context, state) => const PaymentScreen(),
+      ),
+
+      // ─── Order Confirmation (standalone) ───
+      GoRoute(
+        path: '/order-confirmation/:id',
+        builder: (context, state) {
+          return OrderConfirmationScreen(
+            orderId: state.pathParameters['id'] ?? '',
+          );
+        },
+      ),
+
+      // ─── Order Tracking (standalone) ───
+      GoRoute(
+        path: '/order-tracking/:id',
+        builder: (context, state) {
+          return OrderTrackingScreen(orderId: state.pathParameters['id'] ?? '');
+        },
+      ),
+
+      // ─── Order Detail (reuses tracking for now) ───
+      GoRoute(
+        path: '/order-detail/:id',
+        builder: (context, state) {
+          return OrderTrackingScreen(orderId: state.pathParameters['id'] ?? '');
+        },
+      ),
+
+      // ─── Review (standalone) ───
+      GoRoute(
+        path: '/review/:id',
+        builder: (context, state) {
+          return ReviewScreen(orderId: state.pathParameters['id'] ?? '');
+        },
+      ),
 
       // ─── Main App (Authenticated, with bottom nav) ───
       ShellRoute(
@@ -83,11 +128,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/orders',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: Scaffold(
-                body: Center(child: Text('Orders — Coming Soon')),
-              ),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: OrdersScreen()),
           ),
           GoRoute(
             path: '/profile',

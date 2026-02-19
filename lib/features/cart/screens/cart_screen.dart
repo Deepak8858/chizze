@@ -396,15 +396,7 @@ class CartScreen extends ConsumerWidget {
       child: ChizzeButton(
         label: 'Proceed to Payment · ₹${cartState.grandTotal.toInt()}',
         icon: Icons.lock_rounded,
-        onPressed: () {
-          // TODO: Navigate to payment screen (Phase 3)
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Payment integration coming in Phase 3!'),
-              backgroundColor: AppColors.info,
-            ),
-          );
-        },
+        onPressed: () => context.push('/payment'),
       ),
     );
   }

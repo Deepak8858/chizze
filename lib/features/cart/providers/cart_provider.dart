@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/menu_item.dart';
+import '../../restaurant/models/menu_item.dart';
 
 /// Cart item — a menu item with quantity and selected customizations
 class CartItem {

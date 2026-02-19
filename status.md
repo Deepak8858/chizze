@@ -1,9 +1,9 @@
 # Chizze — Project Status
 
-> **Last Updated:** 2026-02-19T21:55:00+05:30
-> **Current Phase:** Phase 2 — Customer Core
+> **Last Updated:** 2026-02-19T22:08:00+05:30
+> **Current Phase:** Phase 3 — Ordering & Payments
 > **Phase Status:** ✅ COMPLETE
-> **Next Action:** Phase 3 — Ordering & Payments (awaiting user go-ahead)
+> **Next Action:** Phase 4 — Restaurant Partner (awaiting user go-ahead)
 
 ---
 
@@ -20,8 +20,7 @@ stack:
   backend_api: Go (planned, not yet started)
   database: Appwrite Collections (managed by Appwrite Cloud)
   storage: Appwrite Storage (managed)
-  cache: Redis (planned)
-  payments: Razorpay (planned)
+  payments: Razorpay (razorpay_flutter 1.4.1)
   maps: Google Maps (planned)
 appwrite:
   endpoint: https://sgp.cloud.appwrite.io/v1
@@ -45,7 +44,7 @@ design_system:
 |---|---|---|---|---|
 | 1 | Foundation | 1-3 | ✅ COMPLETE | 100% |
 | 2 | Customer Core | 4-6 | ✅ COMPLETE | 100% |
-| 3 | Ordering & Payments | 7-9 | ⏳ NOT STARTED | 0% |
+| 3 | Ordering & Payments | 7-9 | ✅ COMPLETE | 100% |
 | 4 | Restaurant Partner | 10-12 | ⏳ NOT STARTED | 0% |
 | 5 | Delivery Partner | 13-15 | ⏳ NOT STARTED | 0% |
 | 6 | Polish & Advanced | 16-18 | ⏳ NOT STARTED | 0% |
@@ -56,37 +55,24 @@ design_system:
 
 ### 1.1 Project Setup ✅
 
-- [x] Flutter project initialized
-- [x] pubspec.yaml with all Phase 1 dependencies (133 packages installed)
-- [x] Asset directories created (images, icons, animations, fonts)
-- [x] Analysis clean — 0 errors in `lib/`
+- [x] Flutter project initialized, 134+ packages
+- [x] Asset directories, analysis clean
 
 ### 1.2 Design System ✅
 
-- [x] `app_colors.dart` — Full dark theme palette (primary orange, backgrounds, text, semantic, glass effects, food indicators)
-- [x] `app_typography.dart` — Plus Jakarta Sans across all levels (h1-h3, body1-2, caption, button, buttonSmall, price, priceLarge, badge, overline)
-- [x] `app_spacing.dart` — Spacing scale (4-64dp), border radius, icon sizes, avatar sizes, touch targets
-- [x] `app_theme.dart` — Complete ThemeData for all Material widgets
-- [x] `theme.dart` — Barrel export
+- [x] AppColors, AppTypography, AppSpacing, AppTheme, barrel exports
 
 ### 1.3 Core Widgets ✅
 
-- [x] `glass_card.dart` — Glassmorphism card (6% white bg, 10% white border, 20px blur, tap support)
-- [x] `chizze_button.dart` — Primary gradient CTA button + ChipButton
-- [x] `shimmer_loader.dart` — Skeleton loaders
-- [x] `widgets.dart` — Barrel export
+- [x] GlassCard, ChizzeButton/ChipButton, ShimmerLoader
 
 ### 1.4 Architecture ✅
 
-- [x] `appwrite_service.dart` — Riverpod providers (Client, Account, Databases, Storage, Realtime)
-- [x] `auth_provider.dart` — Email, Phone OTP, OAuth, session persistence, logout
-- [x] `app_router.dart` — GoRouter with auth redirects + ShellRoute with bottom nav
+- [x] Appwrite service providers, Auth provider, GoRouter
 
 ### 1.5 Auth Screens ✅
 
-- [x] `splash_screen.dart` — Animated splash
-- [x] `login_screen.dart` — Phone + Email + Social login
-- [x] `otp_screen.dart` — 6-digit OTP verification
+- [x] Splash, Login, OTP screens
 
 ---
 
@@ -94,96 +80,105 @@ design_system:
 
 ### 2.1 Data Models ✅
 
-- [x] `appwrite_constants.dart` — Database/collection/bucket ID constants
-- [x] `restaurant.dart` — Restaurant model with fromMap/toMap + 5 mock restaurants (Bengaluru-based)
-- [x] `menu_item.dart` — MenuItem + MenuCategory + CustomizationGroup/Option models with mock data (6 items, 3 categories)
+- [x] Restaurant, MenuItem, MenuCategory, CartItem, CartState models
 
 ### 2.2 State Management ✅
 
-- [x] `cart_provider.dart` — CartItem (with customization pricing), CartState (with fee calc: delivery/platform/GST/discount), CartNotifier (add/remove/update/coupon/clear)
+- [x] CartProvider with full operations
 
-### 2.3 Home Screen (Enhanced) ✅
+### 2.3–2.7 Screens ✅
 
-- [x] Location header with delivery address
-- [x] Search bar → navigates to /search
-- [x] Horizontal category chips → navigate to /search
-- [x] Promo banner (50% off)
-- [x] Restaurant cards using Restaurant model with:
-  - Cuisine emoji placeholder images
-  - Rating badge (green ≥4.0, yellow <4.0)
-  - Delivery time & price for two
-  - Promoted/Featured badges
-  - VEG tag for pure vegetarian restaurants
-  - Tap → navigates to /restaurant/:id
-
-### 2.4 Search Screen ✅
-
-- [x] Auto-focus search text field with clear button
-- [x] Horizontal filter chips: Sort, Pure Veg, Rating 4.0+, cuisine categories
-- [x] Sort bottom sheet: Relevance, Rating, Delivery Time, Cost Low/High
-- [x] Filtered restaurant list using Riverpod providers
-- [x] Empty state for no results
-- [x] Animated card entrance
-
-### 2.5 Restaurant Detail Screen ✅
-
-- [x] Hero header with cuisine emoji + gradient overlay
-- [x] Restaurant info: name, rating, cuisines, delivery time, price for two, total ratings
-- [x] Pure Veg badge for vegetarian restaurants
-- [x] Veg-only toggle (filters menu items)
-- [x] Categorized menu sections with item counts
-- [x] Menu item cards with:
-  - Veg/non-veg indicator (green/red dot)
-  - ★ Bestseller and Must Try badges
-  - Price, description, image placeholder
-  - ADD button
-- [x] Customization bottom sheet (checkboxes, required tags, price add-ons)
-- [x] Add-to-cart with snackbar confirmation
-- [x] Sticky cart bar at bottom (item count + total + "View Cart")
-
-### 2.6 Cart Screen ✅
-
-- [x] Empty cart state with emoji + browse button
-- [x] Cart item cards with veg/non-veg badges
-- [x] Quantity controls (+/−) with remove on zero
-- [x] Selected customizations display
-- [x] Special instructions text field
-- [x] Delivery instructions selector (Leave at door / Call on arrival / No contact)
-- [x] Bill summary: Item Total, Delivery Fee (FREE above ₹500), Platform Fee, GST (5%), Discount
-- [x] Grand Total
-- [x] Checkout button (→ Phase 3 payment)
-
-### 2.7 Router Updates ✅
-
-- [x] `/restaurant/:id` route (standalone, no bottom nav)
-- [x] `/cart` route (standalone, no bottom nav)
-- [x] `/search` inside ShellRoute with bottom nav
-- [x] MainShell now extends ConsumerWidget
+- [x] Home (enhanced), Search, Restaurant Detail, Cart, Router updates
 
 ---
 
-## Phase 3 — Ordering & Payments (NOT STARTED)
+## Phase 3 — Ordering & Payments (COMPLETE)
 
-### 3.1 Payment Integration
+### 3.1 Razorpay Payment Integration ✅
 
-- [ ] Razorpay SDK integration
-- [ ] UPI, Cards, Wallets, COD support
-- [ ] Payment verification via Go backend
-- [ ] Order confirmation screen
+- [x] `razorpay_flutter` package added (v1.4.1, official SDK)
+- [x] `payment_provider.dart` — Full Razorpay integration:
+  - Opens Razorpay checkout with Chizze orange branding
+  - Handles success, error, and external wallet callbacks
+  - Converts amounts to paise for Razorpay API
+  - Creates Order from CartState after payment
+  - Clears cart on successful payment
+  - Configurable test/live key via `RazorpayConfig`
+- [x] `payment_screen.dart` — Payment method selection:
+  - Order summary with item list and bill breakdown
+  - Delivery tip selector (₹0/20/30/50)
+  - Payment method cards: "Pay Online" (Razorpay) with UPI/Cards/Wallets/Net Banking, "Cash on Delivery"
+  - Radio selection with animated highlighting
+  - Error display for failed payments
+  - Split-layout pay bar (Total on left, Pay button on right)
+  - COD orders bypass Razorpay gateway
 
-### 3.2 Order Tracking
+### 3.2 Order Model & State ✅
 
-- [ ] Real-time order status updates (placed → confirmed → preparing → ready → picked_up → delivered)
-- [ ] Appwrite Realtime subscription for status changes
-- [ ] Order timeline UI
-- [ ] Delivery partner info card
+- [x] `order.dart` — Full order model:
+  - 8-stage lifecycle: placed → confirmed → preparing → ready → picked_up → out_for_delivery → delivered → cancelled
+  - OrderStatus enum with labels, emoji, and progress percentage
+  - OrderItem with veg/non-veg, customizations
+  - fromMap/toMap for Appwrite serialization
+  - copyWith for status updates
+  - Mock orders for UI development
+- [x] `orders_provider.dart` — Orders state management:
+  - Active and past order filtering
+  - Add new orders (from payment)
+  - Update status (from Appwrite Realtime)
+  - Query by ID
 
-### 3.3 Order History
+### 3.3 Order Confirmation ✅
 
-- [ ] Recent orders list
-- [ ] Order detail screen
-- [ ] Reorder functionality
-- [ ] Review & rating flow
+- [x] `order_confirmation_screen.dart`:
+  - Animated success check (elastic scale animation)
+  - Order number and ETA display
+  - Order details card (restaurant, items, payment method, total)
+  - Track Order button → order tracking
+  - Back to Home link
+
+### 3.4 Order Tracking ✅
+
+- [x] `order_tracking_screen.dart`:
+  - Status header with emoji and description
+  - Vertical timeline with 7 stages, glowing current step with shadow
+  - Completed steps show green checkmarks
+  - ETA card with countdown
+  - Delivery partner card with call/chat buttons (appears on pickup)
+  - Order items summary with totals
+  - "Rate this Order" button (appears on delivery)
+  - **Demo mode**: Auto-progresses through statuses every 8 seconds for testing
+
+### 3.5 Order History ✅
+
+- [x] `orders_screen.dart`:
+  - Active/Past tabs with counts
+  - Order cards with status badges (color-coded by stage)
+  - Item preview (shows first 2 items + "more" count)
+  - Relative date formatting (min/hours/yesterday/date)
+  - Active orders: "Track Order" button
+  - Past orders: "Reorder" + "Rate" buttons
+  - Empty states for both tabs
+
+### 3.6 Review & Rating ✅
+
+- [x] `review_screen.dart`:
+  - Restaurant info card
+  - Star ratings for food (animated scale on select)
+  - Star ratings for delivery
+  - Selectable tag chips: 😋 Great Food, 🚀 Fast Delivery, 📦 Well Packed, etc.
+  - Optional text review field
+  - Submit button (disabled until food rating given)
+
+### 3.7 Router & Navigation Updates ✅
+
+- [x] `/payment` route (standalone)
+- [x] `/order-confirmation/:id` route (standalone)
+- [x] `/order-tracking/:id` route (standalone)
+- [x] `/order-detail/:id` route (reuses tracking screen)
+- [x] `/review/:id` route (standalone)
+- [x] `/orders` tab now uses real OrdersScreen instead of placeholder
+- [x] Cart checkout button now navigates to `/payment`
 
 ---
 
@@ -195,11 +190,11 @@ H:\chizze\
 │   ├── main.dart
 │   ├── core/
 │   │   ├── auth/
-│   │   │   └── auth_provider.dart             # Auth state management
+│   │   │   └── auth_provider.dart
 │   │   ├── constants/
-│   │   │   └── appwrite_constants.dart        # [NEW] DB/collection/bucket IDs
+│   │   │   └── appwrite_constants.dart
 │   │   ├── router/
-│   │   │   └── app_router.dart                # [UPDATED] + restaurant/:id, /cart, /search routes
+│   │   │   └── app_router.dart                # [UPDATED] + Phase 3 routes
 │   │   ├── services/
 │   │   │   └── appwrite_service.dart
 │   │   └── theme/
@@ -212,24 +207,39 @@ H:\chizze\
 │   │   ├── auth/screens/
 │   │   │   ├── login_screen.dart
 │   │   │   └── otp_screen.dart
-│   │   ├── cart/                               # [NEW] Phase 2
+│   │   ├── cart/
 │   │   │   ├── providers/
-│   │   │   │   └── cart_provider.dart          # Cart state + notifier
+│   │   │   │   └── cart_provider.dart          # [UPDATED] import fix + checkout nav
 │   │   │   └── screens/
-│   │   │       └── cart_screen.dart            # Cart & checkout screen
+│   │   │       └── cart_screen.dart            # [UPDATED] → /payment
 │   │   ├── home/
 │   │   │   ├── models/
-│   │   │   │   └── restaurant.dart            # [NEW] Restaurant model
+│   │   │   │   └── restaurant.dart
 │   │   │   └── screens/
-│   │   │       └── home_screen.dart           # [UPDATED] Uses Restaurant model
-│   │   ├── restaurant/                         # [NEW] Phase 2
+│   │   │       └── home_screen.dart
+│   │   ├── orders/                             # [NEW] Phase 3
 │   │   │   ├── models/
-│   │   │   │   └── menu_item.dart             # MenuItem + MenuCategory models
+│   │   │   │   └── order.dart                 # Order + OrderItem + OrderStatus
+│   │   │   ├── providers/
+│   │   │   │   └── orders_provider.dart       # Orders state management
 │   │   │   └── screens/
-│   │   │       └── restaurant_detail_screen.dart  # Full restaurant + menu screen
-│   │   ├── search/                             # [NEW] Phase 2
+│   │   │       ├── order_confirmation_screen.dart  # Post-payment success
+│   │   │       ├── order_tracking_screen.dart      # Real-time tracking
+│   │   │       ├── orders_screen.dart              # Active/Past history
+│   │   │       └── review_screen.dart              # Rating & review
+│   │   ├── payment/                            # [NEW] Phase 3
+│   │   │   ├── providers/
+│   │   │   │   └── payment_provider.dart      # Razorpay integration
 │   │   │   └── screens/
-│   │   │       └── search_screen.dart         # Search + filters screen
+│   │   │       └── payment_screen.dart        # Payment method + checkout
+│   │   ├── restaurant/
+│   │   │   ├── models/
+│   │   │   │   └── menu_item.dart
+│   │   │   └── screens/
+│   │   │       └── restaurant_detail_screen.dart
+│   │   ├── search/
+│   │   │   └── screens/
+│   │   │       └── search_screen.dart
 │   │   └── splash/screens/
 │   │       └── splash_screen.dart
 │   └── shared/widgets/
@@ -242,7 +252,47 @@ H:\chizze\
 ├── design.md
 ├── implementation_plan.md
 ├── production_architecture.md
-└── status.md                                   # THIS FILE
+└── status.md
+```
+
+---
+
+## Complete User Flow (Phases 1-3)
+
+```
+App Launch → Splash (animated) → Auth Check
+  ├── Not authenticated → Login → Phone OTP / Social / Email → OTP Verify
+  └── Authenticated → Home Screen
+        ├── Search bar → Search Screen (filters, sort, results)
+        ├── Category chips → Search Screen
+        ├── Restaurant card → Restaurant Detail
+        │     ├── Browse menu by category
+        │     ├── Toggle veg only
+        │     ├── ADD item (with customization sheet)
+        │     └── Cart bar → Cart Screen
+        │           ├── Edit quantities
+        │           ├── Special/delivery instructions
+        │           ├── View bill summary
+        │           └── Proceed to Payment → Payment Screen
+        │                 ├── Choose: Razorpay (UPI/Card/Wallet) or COD
+        │                 ├── Add delivery tip
+        │                 └── Pay → Razorpay SDK opens
+        │                       ├── Success → Order Confirmation → Track Order
+        │                       │                                       ├── Timeline (7 stages)
+        │                       │                                       ├── Delivery partner card
+        │                       │                                       └── Delivered → Rate Order
+        │                       │                                             ├── Food stars
+        │                       │                                             ├── Delivery stars
+        │                       │                                             ├── Tags
+        │                       │                                             └── Review text
+        │                       └── Error → Error display + retry
+        └── Bottom Nav
+              ├── Home
+              ├── Search
+              ├── Orders (Active/Past tabs)
+              │     ├── Active → Track Order
+              │     └── Past → Reorder / Rate
+              └── Profile (placeholder)
 ```
 
 ---
@@ -251,50 +301,39 @@ H:\chizze\
 
 | ID | Severity | File | Issue | Status |
 |---|---|---|---|---|
-| TD-001 | LOW | `appwrite_client.dart` | Legacy file, superseded by `core/services/appwrite_service.dart` | To remove |
-| TD-002 | LOW | `config/environment.dart` | Legacy config, not used by new architecture | To remove |
-| TD-003 | LOW | `test/widget_test.dart` | References old `MyApp` class, needs update for `ChizzeApp` | To fix |
-| TD-004 | LOW | `test/appwrite_connection_test.dart` | Uses `print()` and deprecated APIs | To refactor |
-| TD-005 | MEDIUM | Login screen | Google/Apple OAuth wired but need Appwrite OAuth config | Phase 3+ |
-| TD-006 | LOW | All screens | Uses mock data — needs Appwrite collections created | When backend ready |
-| TD-007 | LOW | Fonts | Using google_fonts package (network) — font files not bundled | OK for dev |
-| TD-008 | LOW | Restaurant detail | Image placeholders use emoji — need real images | When storage ready |
+| TD-001 | LOW | `appwrite_client.dart` | Legacy file, superseded | To remove |
+| TD-002 | LOW | `config/environment.dart` | Legacy config | To remove |
+| TD-003 | LOW | `test/widget_test.dart` | References old MyApp | To fix |
+| TD-004 | LOW | `test/appwrite_connection_test.dart` | Deprecated APIs | To refactor |
+| TD-005 | MEDIUM | Login screen | OAuth needs Appwrite config | Phase 4+ |
+| TD-006 | LOW | All screens | Mock data — needs Appwrite collections | When backend ready |
+| TD-007 | LOW | Fonts | Using google_fonts (network) | OK for dev |
+| TD-008 | LOW | Restaurant detail | Emoji placeholders for images | When storage ready |
+| TD-009 | MEDIUM | payment_provider.dart | `RazorpayConfig.keyId` needs real key | Before testing |
+| TD-010 | MEDIUM | payment_provider.dart | `order_id` field empty — need Go backend to create Razorpay orders | Before production |
 
 ---
 
-## Go Backend (NOT STARTED)
+## Razorpay Integration Details
 
 ```yaml
-status: NOT STARTED
-go_version: 1.25.7 (confirmed installed)
-planned_framework: Gin
-planned_features:
-  - REST API (70+ endpoints)
-  - WebSocket for real-time order tracking
-  - Razorpay payment verification
-  - Redis caching
-  - Appwrite SDK integration
-```
-
----
-
-## Appwrite Cloud Collections (NOT CREATED)
-
-```yaml
-status: NOT CREATED
-planned_collections:
-  - users (extended profile)
-  - restaurants
-  - menu_categories
-  - menu_items
-  - orders
-  - order_items
-  - addresses
-  - reviews
-  - coupons
-  - delivery_partners
-  - notifications
-  - favorites
+package: razorpay_flutter 1.4.1
+config_file: lib/features/payment/providers/payment_provider.dart
+key_location: RazorpayConfig.keyId (currently test placeholder)
+flow:
+  1. User taps "Pay Now" on payment screen
+  2. PaymentNotifier.startPayment() called with amount, user details
+  3. Amount converted to paise (× 100)
+  4. Razorpay.open() called with options (key, amount, prefill, theme)
+  5. Razorpay SDK shows its native checkout UI
+  6. On success: PaymentState updated, cart cleared, order created, navigate to confirmation
+  7. On error: PaymentState.error set, user can retry
+  8. COD: Bypasses Razorpay, creates order directly
+production_requirements:
+  - Replace test key with live Razorpay key
+  - Create Razorpay orders via Go backend (server-side)
+  - Verify payment signature server-side
+  - Handle refunds via Go backend
 ```
 
 ---
@@ -303,14 +342,16 @@ planned_collections:
 
 | Date | Action | Details |
 |---|---|---|
-| 2026-02-19 21:55 | Phase 2 Complete | Created 7 new files, updated 2 files, 0 analysis errors |
-| 2026-02-19 21:52 | Search screen created | Filter chips, sort bottom sheet, filtered results |
-| 2026-02-19 21:52 | Restaurant detail created | Hero header, categorized menu, customization sheet, cart bar |
-| 2026-02-19 21:52 | Cart screen created | Items, quantity controls, bill summary, checkout |
-| 2026-02-19 21:51 | Data models created | Restaurant, MenuItem, MenuCategory, CartItem, CartState models |
-| 2026-02-19 21:51 | Appwrite constants created | Database/collection/bucket ID constants |
-| 2026-02-19 21:49 | status.md created | Project tracking file for LLM continuity |
+| 2026-02-19 22:08 | Phase 3 Complete | 8 new files, 3 updated, 0 analysis errors |
+| 2026-02-19 22:07 | Router updated | Phase 3 routes, Orders tab wired |
+| 2026-02-19 22:06 | Review screen | Star ratings, tags, text review |
+| 2026-02-19 22:06 | Orders screen | Active/Past tabs, order cards |
+| 2026-02-19 22:05 | Order tracking | Timeline, ETA, delivery partner, demo mode |
+| 2026-02-19 22:05 | Order confirmation | Animated success, order details |
+| 2026-02-19 22:04 | Payment screen | Razorpay + COD, tip, bill summary |
+| 2026-02-19 22:03 | Payment provider | Razorpay SDK integration |
+| 2026-02-19 22:02 | Orders provider | Active/past orders, status updates |
+| 2026-02-19 22:01 | Order model | 8-stage lifecycle, OrderStatus enum |
+| 2026-02-19 22:00 | razorpay_flutter added | v1.4.1 installed |
+| 2026-02-19 21:55 | Phase 2 Complete | 7 files, 0 errors |
 | 2026-02-19 21:49 | Phase 1 Complete | 19 files, 133 deps, 0 errors |
-| 2026-02-19 21:30 | Dependencies fixed | Resolved intl version conflict |
-| 2026-02-19 21:25 | Phase 1 started | Theme, widgets, auth, router, screens, main.dart |
-| 2026-02-19 ~20:00 | Documents finalized | design.md, implementation_plan.md, production_architecture.md |
