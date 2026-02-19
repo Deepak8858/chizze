@@ -4,7 +4,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_card.dart';
-import '../../../shared/widgets/shimmer_loader.dart';
 
 /// Customer home screen — restaurant discovery feed
 class HomeScreen extends ConsumerWidget {

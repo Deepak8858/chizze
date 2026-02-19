@@ -131,7 +131,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> verifyPhoneOTP(String userId, String otp) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await _account.updatePhoneSession(userId: userId, secret: otp);
+      await _account.createSession(userId: userId, secret: otp);
       final user = await _account.get();
       state = state.copyWith(
         status: AuthStatus.authenticated,
