@@ -6,6 +6,9 @@ import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/splash/screens/splash_screen.dart';
+import '../../features/search/screens/search_screen.dart';
+import '../../features/restaurant/screens/restaurant_detail_screen.dart';
+import '../../features/cart/screens/cart_screen.dart';
 
 /// GoRouter provider with auth-based redirects
 final routerProvider = Provider<GoRouter>((ref) {
@@ -49,7 +52,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
-      // ─── Main App (Authenticated) ───
+      // ─── Restaurant Detail (standalone, not in shell) ───
+      GoRoute(
+        path: '/restaurant/:id',
+        builder: (context, state) {
+          return RestaurantDetailScreen(
+            restaurantId: state.pathParameters['id'] ?? '',
+          );
+        },
+      ),
+
+      // ─── Cart (standalone, not in shell) ───
+      GoRoute(path: '/cart', builder: (context, state) => const CartScreen()),
+
+      // ─── Main App (Authenticated, with bottom nav) ───
       ShellRoute(
         builder: (context, state, child) {
           return MainShell(child: child);
@@ -62,11 +78,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/search',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: Scaffold(
-                body: Center(child: Text('Search — Coming Soon')),
-              ),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: SearchScreen()),
           ),
           GoRoute(
             path: '/orders',
@@ -91,7 +104,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 });
 
 /// Main app shell with bottom navigation
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
@@ -106,7 +119,7 @@ class MainShell extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: child,
       bottomNavigationBar: Container(

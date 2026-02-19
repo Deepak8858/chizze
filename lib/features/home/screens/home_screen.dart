@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../models/restaurant.dart';
 
 /// Customer home screen — restaurant discovery feed
 class HomeScreen extends ConsumerWidget {
@@ -13,6 +15,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     final userName = authState.user?.name ?? 'Foodie';
+    final restaurants = Restaurant.mockList;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -45,7 +48,7 @@ class HomeScreen extends ConsumerWidget {
 
             // ─── Category Chips ───
             SliverToBoxAdapter(
-              child: SizedBox(height: 100, child: _buildCategories()),
+              child: SizedBox(height: 100, child: _buildCategories(context)),
             ),
 
             // ─── Promo Banner ───
@@ -61,7 +64,9 @@ class HomeScreen extends ConsumerWidget {
 
             // ─── Section: Top Picks ───
             SliverToBoxAdapter(
-              child: _buildSectionHeader('Top Picks for You', 'See All'),
+              child: _buildSectionHeader('Top Picks for You', 'See All', () {
+                context.go('/search');
+              }),
             ),
 
             // ─── Restaurant Cards ───
@@ -69,8 +74,9 @@ class HomeScreen extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildRestaurantCard(index),
-                  childCount: 5,
+                  (context, index) =>
+                      _buildRestaurantCard(context, restaurants[index], index),
+                  childCount: restaurants.length,
                 ),
               ),
             ),
@@ -122,8 +128,6 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
         ),
-
-        // Profile avatar
         Container(
           width: 40,
           height: 40,
@@ -144,9 +148,7 @@ class HomeScreen extends ConsumerWidget {
 
   Widget _buildSearchBar(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        // TODO: Navigate to search screen
-      },
+      onTap: () => context.go('/search'),
       child: Container(
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
@@ -171,7 +173,7 @@ class HomeScreen extends ConsumerWidget {
     ).animate(delay: 100.ms).fadeIn().slideY(begin: 0.05);
   }
 
-  Widget _buildCategories() {
+  Widget _buildCategories(BuildContext context) {
     final categories = [
       ('🍕', 'Pizza'),
       ('🍔', 'Burgers'),
@@ -194,23 +196,26 @@ class HomeScreen extends ConsumerWidget {
         final (emoji, name) = categories[index];
         return Padding(
           padding: const EdgeInsets.only(right: AppSpacing.md),
-          child: Column(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.divider),
+          child: GestureDetector(
+            onTap: () => context.go('/search'),
+            child: Column(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.divider),
+                  ),
+                  child: Center(
+                    child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                  ),
                 ),
-                child: Center(
-                  child: Text(emoji, style: const TextStyle(fontSize: 26)),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(name, style: AppTypography.caption),
-            ],
+                const SizedBox(height: AppSpacing.xs),
+                Text(name, style: AppTypography.caption),
+              ],
+            ),
           ),
         ).animate(delay: (100 + index * 50).ms).fadeIn().slideX(begin: 0.2);
       },
@@ -253,7 +258,7 @@ class HomeScreen extends ConsumerWidget {
     ).animate(delay: 300.ms).fadeIn().slideY(begin: 0.1);
   }
 
-  Widget _buildSectionHeader(String title, String action) {
+  Widget _buildSectionHeader(String title, String action, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.xl,
@@ -265,37 +270,34 @@ class HomeScreen extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(title, style: AppTypography.h3),
-          Text(
-            action,
-            style: AppTypography.caption.copyWith(color: AppColors.primary),
+          GestureDetector(
+            onTap: onTap,
+            child: Text(
+              action,
+              style: AppTypography.caption.copyWith(color: AppColors.primary),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildRestaurantCard(int index) {
-    final restaurants = [
-      ('Burger King', '4.2', '25-30 min', '₹150 for two', '🍔'),
-      ('Pizza Hut', '4.0', '30-35 min', '₹200 for two', '🍕'),
-      ('Biryani Blues', '4.5', '35-40 min', '₹250 for two', '🍛'),
-      ('Starbucks', '4.3', '15-20 min', '₹300 for two', '☕'),
-      ('Subway', '3.9', '20-25 min', '₹180 for two', '🥗'),
-    ];
-
-    final (name, rating, time, price, emoji) = restaurants[index % 5];
+  Widget _buildRestaurantCard(
+    BuildContext context,
+    Restaurant restaurant,
+    int index,
+  ) {
+    final emoji = _cuisineEmoji(restaurant.cuisines.first);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.base),
       child: GlassCard(
-        onTap: () {
-          // TODO: Navigate to restaurant detail
-        },
+        onTap: () => context.push('/restaurant/${restaurant.id}'),
         padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image placeholder
+            // Image
             Container(
               height: 160,
               decoration: BoxDecoration(
@@ -304,8 +306,56 @@ class HomeScreen extends ConsumerWidget {
                   top: Radius.circular(AppSpacing.radiusLg),
                 ),
               ),
-              child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 48)),
+              child: Stack(
+                children: [
+                  Center(
+                    child: Text(emoji, style: const TextStyle(fontSize: 48)),
+                  ),
+                  if (restaurant.isPromoted)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: AppColors.primaryGradient,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Promoted',
+                          style: AppTypography.overline.copyWith(
+                            color: Colors.white,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (restaurant.isFeatured)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '⭐ Featured',
+                          style: AppTypography.overline.copyWith(
+                            color: Colors.black,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
 
@@ -318,19 +368,30 @@ class HomeScreen extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(name, style: AppTypography.h3),
+                      Expanded(
+                        child: Text(
+                          restaurant.name,
+                          style: AppTypography.h3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.sm,
                           vertical: AppSpacing.xs,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.success,
+                          color: restaurant.rating >= 4.0
+                              ? AppColors.success
+                              : AppColors.warning,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Row(
                           children: [
-                            Text(rating, style: AppTypography.badge),
+                            Text(
+                              restaurant.rating.toStringAsFixed(1),
+                              style: AppTypography.badge,
+                            ),
                             const SizedBox(width: 2),
                             const Icon(
                               Icons.star_rounded,
@@ -343,6 +404,14 @@ class HomeScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    restaurant.cuisines
+                        .map((c) => c.replaceAll('_', ' '))
+                        .join(' · '),
+                    style: AppTypography.caption,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
                       Icon(
@@ -351,11 +420,37 @@ class HomeScreen extends ConsumerWidget {
                         color: AppColors.textTertiary,
                       ),
                       const SizedBox(width: 4),
-                      Text(time, style: AppTypography.caption),
+                      Text(
+                        '${restaurant.avgDeliveryTimeMin} min',
+                        style: AppTypography.caption,
+                      ),
                       const SizedBox(width: AppSpacing.md),
                       Text('·', style: AppTypography.caption),
                       const SizedBox(width: AppSpacing.md),
-                      Text(price, style: AppTypography.caption),
+                      Text(
+                        '₹${restaurant.priceForTwo} for two',
+                        style: AppTypography.caption,
+                      ),
+                      if (restaurant.isVegOnly) ...[
+                        const SizedBox(width: AppSpacing.md),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.veg.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            'VEG',
+                            style: AppTypography.overline.copyWith(
+                              color: AppColors.veg,
+                              fontSize: 8,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -365,5 +460,26 @@ class HomeScreen extends ConsumerWidget {
         ),
       ),
     ).animate(delay: (400 + index * 100).ms).fadeIn().slideY(begin: 0.05);
+  }
+
+  String _cuisineEmoji(String cuisine) {
+    const map = {
+      'biryani': '🍛',
+      'north_indian': '🍛',
+      'mughlai': '🍖',
+      'pizza': '🍕',
+      'italian': '🍝',
+      'pasta': '🍝',
+      'chinese': '🍜',
+      'indo_chinese': '🥡',
+      'thai': '🍜',
+      'healthy': '🥗',
+      'salads': '🥙',
+      'continental': '🍽️',
+      'cafe': '☕',
+      'snacks': '🍟',
+      'beverages': '🥤',
+    };
+    return map[cuisine] ?? '🍽️';
   }
 }
