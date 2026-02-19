@@ -14,8 +14,12 @@ import '../../features/orders/screens/order_confirmation_screen.dart';
 import '../../features/orders/screens/order_tracking_screen.dart';
 import '../../features/orders/screens/orders_screen.dart';
 import '../../features/orders/screens/review_screen.dart';
+import '../../features/partner/screens/partner_dashboard_screen.dart';
+import '../../features/partner/screens/partner_orders_screen.dart';
+import '../../features/partner/screens/menu_management_screen.dart';
+import '../../features/partner/screens/analytics_screen.dart';
 
-/// GoRouter provider with auth-based redirects
+/// GoRouter provider with auth + role-based redirects
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
 
@@ -28,6 +32,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           state.uri.path == '/login' ||
           state.uri.path == '/otp' ||
           state.uri.path == '/';
+      final isPartnerRoute = state.uri.path.startsWith('/partner');
 
       // Still loading initial auth check
       if (authState.status == AuthStatus.initial) return '/';
@@ -36,7 +41,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!isAuth && !isAuthRoute) return '/login';
 
       // Authenticated → redirect away from auth routes
-      if (isAuth && isAuthRoute) return '/home';
+      if (isAuth && isAuthRoute) {
+        return authState.isPartner ? '/partner/dashboard' : '/home';
+      }
+
+      // Partner trying to access customer routes (and vice versa)
+      if (isAuth && authState.isPartner && !isPartnerRoute && !isAuthRoute) {
+        // Allow some shared routes
+        if (state.uri.path == '/cart' ||
+            state.uri.path == '/payment' ||
+            state.uri.path.startsWith('/order') ||
+            state.uri.path.startsWith('/review') ||
+            state.uri.path.startsWith('/restaurant')) {
+          return null;
+        }
+        return '/partner/dashboard';
+      }
 
       return null; // No redirect needed
     },
@@ -57,14 +77,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
-      // ─── Restaurant Detail (standalone, no bottom nav) ───
+      // ─── Restaurant Detail (standalone) ───
       GoRoute(
         path: '/restaurant/:id',
-        builder: (context, state) {
-          return RestaurantDetailScreen(
-            restaurantId: state.pathParameters['id'] ?? '',
-          );
-        },
+        builder: (context, state) => RestaurantDetailScreen(
+          restaurantId: state.pathParameters['id'] ?? '',
+        ),
       ),
 
       // ─── Cart (standalone) ───
@@ -76,45 +94,39 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const PaymentScreen(),
       ),
 
-      // ─── Order Confirmation (standalone) ───
+      // ─── Order Confirmation ───
       GoRoute(
         path: '/order-confirmation/:id',
-        builder: (context, state) {
-          return OrderConfirmationScreen(
-            orderId: state.pathParameters['id'] ?? '',
-          );
-        },
+        builder: (context, state) =>
+            OrderConfirmationScreen(orderId: state.pathParameters['id'] ?? ''),
       ),
 
-      // ─── Order Tracking (standalone) ───
+      // ─── Order Tracking ───
       GoRoute(
         path: '/order-tracking/:id',
-        builder: (context, state) {
-          return OrderTrackingScreen(orderId: state.pathParameters['id'] ?? '');
-        },
+        builder: (context, state) =>
+            OrderTrackingScreen(orderId: state.pathParameters['id'] ?? ''),
       ),
 
-      // ─── Order Detail (reuses tracking for now) ───
+      // ─── Order Detail ───
       GoRoute(
         path: '/order-detail/:id',
-        builder: (context, state) {
-          return OrderTrackingScreen(orderId: state.pathParameters['id'] ?? '');
-        },
+        builder: (context, state) =>
+            OrderTrackingScreen(orderId: state.pathParameters['id'] ?? ''),
       ),
 
-      // ─── Review (standalone) ───
+      // ─── Review ───
       GoRoute(
         path: '/review/:id',
-        builder: (context, state) {
-          return ReviewScreen(orderId: state.pathParameters['id'] ?? '');
-        },
+        builder: (context, state) =>
+            ReviewScreen(orderId: state.pathParameters['id'] ?? ''),
       ),
 
-      // ─── Main App (Authenticated, with bottom nav) ───
+      // ══════════════════════════════════════════
+      // ─── Customer Shell (bottom nav) ───
+      // ══════════════════════════════════════════
       ShellRoute(
-        builder: (context, state, child) {
-          return MainShell(child: child);
-        },
+        builder: (context, state, child) => MainShell(child: child),
         routes: [
           GoRoute(
             path: '/home',
@@ -141,14 +153,45 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
+
+      // ══════════════════════════════════════════
+      // ─── Partner Shell (bottom nav) ───
+      // ══════════════════════════════════════════
+      ShellRoute(
+        builder: (context, state, child) => PartnerShell(child: child),
+        routes: [
+          GoRoute(
+            path: '/partner/dashboard',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: PartnerDashboardScreen()),
+          ),
+          GoRoute(
+            path: '/partner/orders',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: PartnerOrdersScreen()),
+          ),
+          GoRoute(
+            path: '/partner/menu',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: MenuManagementScreen()),
+          ),
+          GoRoute(
+            path: '/partner/analytics',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: AnalyticsScreen()),
+          ),
+        ],
+      ),
     ],
   );
 });
 
-/// Main app shell with bottom navigation
+// ══════════════════════════════════════════
+// Customer Shell
+// ══════════════════════════════════════════
+
 class MainShell extends ConsumerWidget {
   final Widget child;
-
   const MainShell({super.key, required this.child});
 
   int _currentIndex(BuildContext context) {
@@ -174,16 +217,12 @@ class MainShell extends ConsumerWidget {
             switch (index) {
               case 0:
                 context.go('/home');
-                break;
               case 1:
                 context.go('/search');
-                break;
               case 2:
                 context.go('/orders');
-                break;
               case 3:
                 context.go('/profile');
-                break;
             }
           },
           items: const [
@@ -206,6 +245,73 @@ class MainShell extends ConsumerWidget {
               icon: Icon(Icons.person_outline_rounded),
               activeIcon: Icon(Icons.person_rounded),
               label: 'Profile',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════
+// Partner Shell
+// ══════════════════════════════════════════
+
+class PartnerShell extends ConsumerWidget {
+  final Widget child;
+  const PartnerShell({super.key, required this.child});
+
+  int _currentIndex(BuildContext context) {
+    final location = GoRouterState.of(context).uri.path;
+    if (location.startsWith('/partner/dashboard')) return 0;
+    if (location.startsWith('/partner/orders')) return 1;
+    if (location.startsWith('/partner/menu')) return 2;
+    if (location.startsWith('/partner/analytics')) return 3;
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Color(0xFF2A2A2A), width: 0.5)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex(context),
+          onTap: (index) {
+            switch (index) {
+              case 0:
+                context.go('/partner/dashboard');
+              case 1:
+                context.go('/partner/orders');
+              case 2:
+                context.go('/partner/menu');
+              case 3:
+                context.go('/partner/analytics');
+            }
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard_rounded),
+              label: 'Dashboard',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long_outlined),
+              activeIcon: Icon(Icons.receipt_long_rounded),
+              label: 'Orders',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.restaurant_menu_outlined),
+              activeIcon: Icon(Icons.restaurant_menu_rounded),
+              label: 'Menu',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.analytics_outlined),
+              activeIcon: Icon(Icons.analytics_rounded),
+              label: 'Analytics',
             ),
           ],
         ),

@@ -12,12 +12,14 @@ class AuthState {
   final models.User? user;
   final String? error;
   final bool isLoading;
+  final String userRole; // 'customer' | 'restaurant_owner'
 
   const AuthState({
     this.status = AuthStatus.initial,
     this.user,
     this.error,
     this.isLoading = false,
+    this.userRole = 'customer',
   });
 
   AuthState copyWith({
@@ -25,16 +27,19 @@ class AuthState {
     models.User? user,
     String? error,
     bool? isLoading,
+    String? userRole,
   }) {
     return AuthState(
       status: status ?? this.status,
       user: user ?? this.user,
       error: error,
       isLoading: isLoading ?? this.isLoading,
+      userRole: userRole ?? this.userRole,
     );
   }
 
   bool get isAuthenticated => status == AuthStatus.authenticated;
+  bool get isPartner => userRole == 'restaurant_owner';
 }
 
 /// Auth Notifier — manages login, signup, logout, session checks
