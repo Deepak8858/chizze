@@ -18,6 +18,10 @@ import '../../features/partner/screens/partner_dashboard_screen.dart';
 import '../../features/partner/screens/partner_orders_screen.dart';
 import '../../features/partner/screens/menu_management_screen.dart';
 import '../../features/partner/screens/analytics_screen.dart';
+import '../../features/delivery/screens/delivery_dashboard_screen.dart';
+import '../../features/delivery/screens/active_delivery_screen.dart';
+import '../../features/delivery/screens/earnings_screen.dart';
+import '../../features/delivery/screens/delivery_profile_screen.dart';
 
 /// GoRouter provider with auth + role-based redirects
 final routerProvider = Provider<GoRouter>((ref) {
@@ -42,7 +46,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Authenticated → redirect away from auth routes
       if (isAuth && isAuthRoute) {
-        return authState.isPartner ? '/partner/dashboard' : '/home';
+        if (authState.isPartner) return '/partner/dashboard';
+        if (authState.isDeliveryPartner) return '/delivery/dashboard';
+        return '/home';
       }
 
       // Partner trying to access customer routes (and vice versa)
@@ -182,6 +188,35 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
+
+      // ══════════════════════════════════════════
+      // ─── Delivery Shell (bottom nav) ───
+      // ══════════════════════════════════════════
+      ShellRoute(
+        builder: (context, state, child) => DeliveryShell(child: child),
+        routes: [
+          GoRoute(
+            path: '/delivery/dashboard',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: DeliveryDashboardScreen()),
+          ),
+          GoRoute(
+            path: '/delivery/active',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ActiveDeliveryScreen()),
+          ),
+          GoRoute(
+            path: '/delivery/earnings',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: EarningsScreen()),
+          ),
+          GoRoute(
+            path: '/delivery/profile',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: DeliveryProfileScreen()),
+          ),
+        ],
+      ),
     ],
   );
 });
@@ -312,6 +347,73 @@ class PartnerShell extends ConsumerWidget {
               icon: Icon(Icons.analytics_outlined),
               activeIcon: Icon(Icons.analytics_rounded),
               label: 'Analytics',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════
+// Delivery Shell
+// ══════════════════════════════════════════
+
+class DeliveryShell extends ConsumerWidget {
+  final Widget child;
+  const DeliveryShell({super.key, required this.child});
+
+  int _currentIndex(BuildContext context) {
+    final location = GoRouterState.of(context).uri.path;
+    if (location.startsWith('/delivery/dashboard')) return 0;
+    if (location.startsWith('/delivery/active')) return 1;
+    if (location.startsWith('/delivery/earnings')) return 2;
+    if (location.startsWith('/delivery/profile')) return 3;
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Color(0xFF2A2A2A), width: 0.5)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex(context),
+          onTap: (index) {
+            switch (index) {
+              case 0:
+                context.go('/delivery/dashboard');
+              case 1:
+                context.go('/delivery/active');
+              case 2:
+                context.go('/delivery/earnings');
+              case 3:
+                context.go('/delivery/profile');
+            }
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard_rounded),
+              label: 'Dashboard',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.delivery_dining_outlined),
+              activeIcon: Icon(Icons.delivery_dining_rounded),
+              label: 'Active',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              activeIcon: Icon(Icons.account_balance_wallet_rounded),
+              label: 'Earnings',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline_rounded),
+              activeIcon: Icon(Icons.person_rounded),
+              label: 'Profile',
             ),
           ],
         ),

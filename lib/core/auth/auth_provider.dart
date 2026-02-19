@@ -40,6 +40,7 @@ class AuthState {
 
   bool get isAuthenticated => status == AuthStatus.authenticated;
   bool get isPartner => userRole == 'restaurant_owner';
+  bool get isDeliveryPartner => userRole == 'delivery_partner';
 }
 
 /// Auth Notifier — manages login, signup, logout, session checks
