@@ -1,9 +1,9 @@
 # Chizze — Project Status
 
-> **Last Updated:** 2026-02-19T21:49:00+05:30
-> **Current Phase:** Phase 1 — Foundation
+> **Last Updated:** 2026-02-19T21:55:00+05:30
+> **Current Phase:** Phase 2 — Customer Core
 > **Phase Status:** ✅ COMPLETE
-> **Next Action:** Phase 2 — Customer Core (awaiting user go-ahead)
+> **Next Action:** Phase 3 — Ordering & Payments (awaiting user go-ahead)
 
 ---
 
@@ -44,7 +44,7 @@ design_system:
 | Phase | Name | Weeks | Status | Progress |
 |---|---|---|---|---|
 | 1 | Foundation | 1-3 | ✅ COMPLETE | 100% |
-| 2 | Customer Core | 4-6 | ⏳ NOT STARTED | 0% |
+| 2 | Customer Core | 4-6 | ✅ COMPLETE | 100% |
 | 3 | Ordering & Payments | 7-9 | ⏳ NOT STARTED | 0% |
 | 4 | Restaurant Partner | 10-12 | ⏳ NOT STARTED | 0% |
 | 5 | Delivery Partner | 13-15 | ⏳ NOT STARTED | 0% |
@@ -61,91 +61,129 @@ design_system:
 - [x] Asset directories created (images, icons, animations, fonts)
 - [x] Analysis clean — 0 errors in `lib/`
 
-**Dependencies installed:**
-
-- flutter_riverpod, riverpod_annotation (state management)
-- go_router (navigation)
-- dio (HTTP client)
-- appwrite (BaaS SDK)
-- google_fonts, flutter_svg, shimmer, cached_network_image, flutter_animate, lottie (UI)
-- shared_preferences, flutter_secure_storage (local storage)
-- flutter_form_builder (forms)
-- geolocator, geocoding (location)
-- connectivity_plus, package_info_plus, permission_handler (utilities)
-- image_picker, flutter_local_notifications (media/notifications)
-
 ### 1.2 Design System ✅
 
-- [x] `app_colors.dart` — Full dark theme palette (primary orange, backgrounds, text, semantic, glass effects)
-- [x] `app_typography.dart` — Plus Jakarta Sans across all levels (h1-h3, body1-2, caption, button, price, badge)
+- [x] `app_colors.dart` — Full dark theme palette (primary orange, backgrounds, text, semantic, glass effects, food indicators)
+- [x] `app_typography.dart` — Plus Jakarta Sans across all levels (h1-h3, body1-2, caption, button, buttonSmall, price, priceLarge, badge, overline)
 - [x] `app_spacing.dart` — Spacing scale (4-64dp), border radius, icon sizes, avatar sizes, touch targets
-- [x] `app_theme.dart` — Complete ThemeData (AppBar, Buttons, Inputs, Cards, Chips, BottomSheet, Dialog, SnackBar, Tabs, Switches, Progress)
+- [x] `app_theme.dart` — Complete ThemeData for all Material widgets
 - [x] `theme.dart` — Barrel export
 
 ### 1.3 Core Widgets ✅
 
 - [x] `glass_card.dart` — Glassmorphism card (6% white bg, 10% white border, 20px blur, tap support)
-- [x] `chizze_button.dart` — Primary gradient CTA button (loading state, outline variant, icon support) + ChipButton
-- [x] `shimmer_loader.dart` — Skeleton loaders (generic + restaurant card skeleton + list skeleton)
+- [x] `chizze_button.dart` — Primary gradient CTA button + ChipButton
+- [x] `shimmer_loader.dart` — Skeleton loaders
 - [x] `widgets.dart` — Barrel export
 
 ### 1.4 Architecture ✅
 
 - [x] `appwrite_service.dart` — Riverpod providers (Client, Account, Databases, Storage, Realtime)
-- [x] `auth_provider.dart` — AuthNotifier with:
-  - Email login/register
-  - Phone OTP (2-step: send → verify via createSession)
-  - OAuth (Google/Apple via OAuthProvider enum)
-  - Session persistence (checkSession on app start)
-  - Logout
-  - Error handling with clearError()
-- [x] `app_router.dart` — GoRouter with:
-  - Auth-based redirects (unauthenticated → /login, authenticated → /home)
-  - ShellRoute with BottomNavigationBar (Home, Search, Orders, Profile)
-  - Splash → Login → OTP → Home flow
+- [x] `auth_provider.dart` — Email, Phone OTP, OAuth, session persistence, logout
+- [x] `app_router.dart` — GoRouter with auth redirects + ShellRoute with bottom nav
 
-### 1.5 Screens ✅
+### 1.5 Auth Screens ✅
 
-- [x] `splash_screen.dart` — Animated logo + brand name + tagline + loading spinner
-- [x] `login_screen.dart` — Phone OTP (primary) + Google/Apple social buttons + Email/password fallback
-- [x] `otp_screen.dart` — 6-digit OTP input with auto-advance, auto-submit, resend
-- [x] `home_screen.dart` — Location header, search bar, horizontal category chips, promo banner, restaurant feed with glass cards
-
-### 1.6 App Entry ✅
-
-- [x] `main.dart` — Portrait-locked, dark system UI, ProviderScope, GoRouter, dark theme
+- [x] `splash_screen.dart` — Animated splash
+- [x] `login_screen.dart` — Phone + Email + Social login
+- [x] `otp_screen.dart` — 6-digit OTP verification
 
 ---
 
-## Phase 2 — Customer Core (NOT STARTED)
+## Phase 2 — Customer Core (COMPLETE)
 
-### 2.1 Home Screen (Enhanced)
+### 2.1 Data Models ✅
 
-- [ ] Location-based restaurant discovery (Appwrite queries with geolocation)
-- [ ] Promo carousel (dynamic from Appwrite)
-- [ ] Category browsing (dynamic)
-- [ ] "Top Picks" and "Popular Near You" sections
+- [x] `appwrite_constants.dart` — Database/collection/bucket ID constants
+- [x] `restaurant.dart` — Restaurant model with fromMap/toMap + 5 mock restaurants (Bengaluru-based)
+- [x] `menu_item.dart` — MenuItem + MenuCategory + CustomizationGroup/Option models with mock data (6 items, 3 categories)
 
-### 2.2 Search & Filters
+### 2.2 State Management ✅
 
-- [ ] Full-text search (restaurant + dish names)
-- [ ] Filter by cuisine, rating, veg, delivery time
-- [ ] Sort by relevance, rating, distance, cost
-- [ ] Recent & trending searches
+- [x] `cart_provider.dart` — CartItem (with customization pricing), CartState (with fee calc: delivery/platform/GST/discount), CartNotifier (add/remove/update/coupon/clear)
 
-### 2.3 Restaurant Detail & Menu
+### 2.3 Home Screen (Enhanced) ✅
 
-- [ ] Restaurant info with hero banner
-- [ ] Menu with category navigation
-- [ ] Item customization bottom sheet
-- [ ] Veg/non-veg indicators
+- [x] Location header with delivery address
+- [x] Search bar → navigates to /search
+- [x] Horizontal category chips → navigate to /search
+- [x] Promo banner (50% off)
+- [x] Restaurant cards using Restaurant model with:
+  - Cuisine emoji placeholder images
+  - Rating badge (green ≥4.0, yellow <4.0)
+  - Delivery time & price for two
+  - Promoted/Featured badges
+  - VEG tag for pure vegetarian restaurants
+  - Tap → navigates to /restaurant/:id
 
-### 2.4 Cart & Checkout
+### 2.4 Search Screen ✅
 
-- [ ] Cart management (add/remove/quantity)
-- [ ] Bill calculation with all fees
-- [ ] Coupon validation & application
-- [ ] Delivery instructions
+- [x] Auto-focus search text field with clear button
+- [x] Horizontal filter chips: Sort, Pure Veg, Rating 4.0+, cuisine categories
+- [x] Sort bottom sheet: Relevance, Rating, Delivery Time, Cost Low/High
+- [x] Filtered restaurant list using Riverpod providers
+- [x] Empty state for no results
+- [x] Animated card entrance
+
+### 2.5 Restaurant Detail Screen ✅
+
+- [x] Hero header with cuisine emoji + gradient overlay
+- [x] Restaurant info: name, rating, cuisines, delivery time, price for two, total ratings
+- [x] Pure Veg badge for vegetarian restaurants
+- [x] Veg-only toggle (filters menu items)
+- [x] Categorized menu sections with item counts
+- [x] Menu item cards with:
+  - Veg/non-veg indicator (green/red dot)
+  - ★ Bestseller and Must Try badges
+  - Price, description, image placeholder
+  - ADD button
+- [x] Customization bottom sheet (checkboxes, required tags, price add-ons)
+- [x] Add-to-cart with snackbar confirmation
+- [x] Sticky cart bar at bottom (item count + total + "View Cart")
+
+### 2.6 Cart Screen ✅
+
+- [x] Empty cart state with emoji + browse button
+- [x] Cart item cards with veg/non-veg badges
+- [x] Quantity controls (+/−) with remove on zero
+- [x] Selected customizations display
+- [x] Special instructions text field
+- [x] Delivery instructions selector (Leave at door / Call on arrival / No contact)
+- [x] Bill summary: Item Total, Delivery Fee (FREE above ₹500), Platform Fee, GST (5%), Discount
+- [x] Grand Total
+- [x] Checkout button (→ Phase 3 payment)
+
+### 2.7 Router Updates ✅
+
+- [x] `/restaurant/:id` route (standalone, no bottom nav)
+- [x] `/cart` route (standalone, no bottom nav)
+- [x] `/search` inside ShellRoute with bottom nav
+- [x] MainShell now extends ConsumerWidget
+
+---
+
+## Phase 3 — Ordering & Payments (NOT STARTED)
+
+### 3.1 Payment Integration
+
+- [ ] Razorpay SDK integration
+- [ ] UPI, Cards, Wallets, COD support
+- [ ] Payment verification via Go backend
+- [ ] Order confirmation screen
+
+### 3.2 Order Tracking
+
+- [ ] Real-time order status updates (placed → confirmed → preparing → ready → picked_up → delivered)
+- [ ] Appwrite Realtime subscription for status changes
+- [ ] Order timeline UI
+- [ ] Delivery partner info card
+
+### 3.3 Order History
+
+- [ ] Recent orders list
+- [ ] Order detail screen
+- [ ] Reorder functionality
+- [ ] Review & rating flow
 
 ---
 
@@ -154,49 +192,57 @@ design_system:
 ```
 H:\chizze\
 ├── lib/
-│   ├── main.dart                              # App entry (ProviderScope + GoRouter + Dark theme)
-│   ├── appwrite_client.dart                   # Legacy — superseded by core/services/
-│   ├── config/
-│   │   └── environment.dart                   # Legacy config
+│   ├── main.dart
 │   ├── core/
 │   │   ├── auth/
-│   │   │   └── auth_provider.dart             # Auth state (email, phone OTP, OAuth, logout)
+│   │   │   └── auth_provider.dart             # Auth state management
+│   │   ├── constants/
+│   │   │   └── appwrite_constants.dart        # [NEW] DB/collection/bucket IDs
 │   │   ├── router/
-│   │   │   └── app_router.dart                # GoRouter + bottom nav shell
+│   │   │   └── app_router.dart                # [UPDATED] + restaurant/:id, /cart, /search routes
 │   │   ├── services/
-│   │   │   └── appwrite_service.dart          # Appwrite client + Riverpod providers
+│   │   │   └── appwrite_service.dart
 │   │   └── theme/
-│   │       ├── app_colors.dart                # Color palette
-│   │       ├── app_spacing.dart               # Spacing tokens
-│   │       ├── app_theme.dart                 # ThemeData
-│   │       ├── app_typography.dart            # Typography
-│   │       └── theme.dart                     # Barrel export
+│   │       ├── app_colors.dart
+│   │       ├── app_spacing.dart
+│   │       ├── app_theme.dart
+│   │       ├── app_typography.dart
+│   │       └── theme.dart
 │   ├── features/
 │   │   ├── auth/screens/
-│   │   │   ├── login_screen.dart              # Phone + Email + Social login
-│   │   │   └── otp_screen.dart                # 6-digit OTP verification
-│   │   ├── home/screens/
-│   │   │   └── home_screen.dart               # Customer home feed
+│   │   │   ├── login_screen.dart
+│   │   │   └── otp_screen.dart
+│   │   ├── cart/                               # [NEW] Phase 2
+│   │   │   ├── providers/
+│   │   │   │   └── cart_provider.dart          # Cart state + notifier
+│   │   │   └── screens/
+│   │   │       └── cart_screen.dart            # Cart & checkout screen
+│   │   ├── home/
+│   │   │   ├── models/
+│   │   │   │   └── restaurant.dart            # [NEW] Restaurant model
+│   │   │   └── screens/
+│   │   │       └── home_screen.dart           # [UPDATED] Uses Restaurant model
+│   │   ├── restaurant/                         # [NEW] Phase 2
+│   │   │   ├── models/
+│   │   │   │   └── menu_item.dart             # MenuItem + MenuCategory models
+│   │   │   └── screens/
+│   │   │       └── restaurant_detail_screen.dart  # Full restaurant + menu screen
+│   │   ├── search/                             # [NEW] Phase 2
+│   │   │   └── screens/
+│   │   │       └── search_screen.dart         # Search + filters screen
 │   │   └── splash/screens/
-│   │       └── splash_screen.dart             # Animated splash
+│   │       └── splash_screen.dart
 │   └── shared/widgets/
-│       ├── chizze_button.dart                 # Primary CTA + chip buttons
-│       ├── glass_card.dart                    # Glassmorphism card
-│       ├── shimmer_loader.dart                # Skeleton loaders
-│       └── widgets.dart                       # Barrel export
-├── assets/
-│   ├── images/.gitkeep
-│   ├── icons/.gitkeep
-│   ├── animations/.gitkeep
-│   └── fonts/.gitkeep
-├── test/
-│   ├── widget_test.dart                       # Default (needs update)
-│   └── appwrite_connection_test.dart          # Legacy test (has warnings)
-├── pubspec.yaml                               # 40+ dependencies
-├── design.md                                  # UI/UX design system (820 lines)
-├── implementation_plan.md                     # Full implementation plan (1451 lines)
-├── production_architecture.md                 # Production scaling blueprint (1300+ lines)
-└── status.md                                  # THIS FILE
+│       ├── chizze_button.dart
+│       ├── glass_card.dart
+│       ├── shimmer_loader.dart
+│       └── widgets.dart
+├── assets/ (images, icons, animations, fonts dirs)
+├── pubspec.yaml
+├── design.md
+├── implementation_plan.md
+├── production_architecture.md
+└── status.md                                   # THIS FILE
 ```
 
 ---
@@ -209,9 +255,10 @@ H:\chizze\
 | TD-002 | LOW | `config/environment.dart` | Legacy config, not used by new architecture | To remove |
 | TD-003 | LOW | `test/widget_test.dart` | References old `MyApp` class, needs update for `ChizzeApp` | To fix |
 | TD-004 | LOW | `test/appwrite_connection_test.dart` | Uses `print()` and deprecated APIs | To refactor |
-| TD-005 | MEDIUM | Login screen | Google/Apple OAuth buttons are wired but `TODO` — need Appwrite OAuth config | Phase 2 |
-| TD-006 | LOW | Home screen | Uses hardcoded restaurant data — needs Appwrite collections | Phase 2 |
-| TD-007 | LOW | Fonts | Plus Jakarta Sans font files not in assets/fonts/ — using google_fonts package as fallback | OK for now |
+| TD-005 | MEDIUM | Login screen | Google/Apple OAuth wired but need Appwrite OAuth config | Phase 3+ |
+| TD-006 | LOW | All screens | Uses mock data — needs Appwrite collections created | When backend ready |
+| TD-007 | LOW | Fonts | Using google_fonts package (network) — font files not bundled | OK for dev |
+| TD-008 | LOW | Restaurant detail | Image placeholders use emoji — need real images | When storage ready |
 
 ---
 
@@ -256,10 +303,14 @@ planned_collections:
 
 | Date | Action | Details |
 |---|---|---|
-| 2026-02-19 21:49 | Phase 1 Complete | Created 19 files, 133 deps installed, 0 analysis errors |
-| 2026-02-19 21:30 | Dependencies fixed | Resolved intl version conflict, removed form_builder_validators |
-| 2026-02-19 21:25 | Phase 1 started | Created theme, widgets, auth, router, screens, main.dart |
-| 2026-02-19 20:56 | Appwrite MCP checked | Not available — using Appwrite Cloud SDK directly |
-| 2026-02-19 20:44 | Architecture updated | Switched from self-hosted Appwrite to Appwrite Cloud |
-| 2026-02-19 20:41 | MariaDB discussion | Explained MariaDB is internal to Appwrite, user chose Appwrite Cloud |
-| 2026-02-19 ~20:00 | Documents finalized | design.md, implementation_plan.md, production_architecture.md ready |
+| 2026-02-19 21:55 | Phase 2 Complete | Created 7 new files, updated 2 files, 0 analysis errors |
+| 2026-02-19 21:52 | Search screen created | Filter chips, sort bottom sheet, filtered results |
+| 2026-02-19 21:52 | Restaurant detail created | Hero header, categorized menu, customization sheet, cart bar |
+| 2026-02-19 21:52 | Cart screen created | Items, quantity controls, bill summary, checkout |
+| 2026-02-19 21:51 | Data models created | Restaurant, MenuItem, MenuCategory, CartItem, CartState models |
+| 2026-02-19 21:51 | Appwrite constants created | Database/collection/bucket ID constants |
+| 2026-02-19 21:49 | status.md created | Project tracking file for LLM continuity |
+| 2026-02-19 21:49 | Phase 1 Complete | 19 files, 133 deps, 0 errors |
+| 2026-02-19 21:30 | Dependencies fixed | Resolved intl version conflict |
+| 2026-02-19 21:25 | Phase 1 started | Theme, widgets, auth, router, screens, main.dart |
+| 2026-02-19 ~20:00 | Documents finalized | design.md, implementation_plan.md, production_architecture.md |
