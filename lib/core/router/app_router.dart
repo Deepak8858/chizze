@@ -22,6 +22,10 @@ import '../../features/delivery/screens/delivery_dashboard_screen.dart';
 import '../../features/delivery/screens/active_delivery_screen.dart';
 import '../../features/delivery/screens/earnings_screen.dart';
 import '../../features/delivery/screens/delivery_profile_screen.dart';
+import '../../features/profile/screens/profile_screen.dart';
+import '../../features/profile/screens/address_management_screen.dart';
+import '../../features/notifications/screens/notifications_screen.dart';
+import '../../features/coupons/screens/coupons_screen.dart';
 
 /// GoRouter provider with auth + role-based redirects
 final routerProvider = Provider<GoRouter>((ref) {
@@ -100,6 +104,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const PaymentScreen(),
       ),
 
+      // ─── Addresses ───
+      GoRoute(
+        path: '/addresses',
+        builder: (context, state) => const AddressManagementScreen(),
+      ),
+
+      // ─── Notifications ───
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+
+      // ─── Coupons ───
+      GoRoute(
+        path: '/coupons',
+        builder: (context, state) => const CouponsScreen(),
+      ),
+
       // ─── Order Confirmation ───
       GoRoute(
         path: '/order-confirmation/:id',
@@ -151,11 +173,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/profile',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: Scaffold(
-                body: Center(child: Text('Profile — Coming Soon')),
-              ),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ProfileScreen()),
           ),
         ],
       ),
