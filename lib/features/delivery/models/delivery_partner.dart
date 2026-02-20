@@ -77,7 +77,11 @@ class DeliveryRequest {
   final Order order;
   final String restaurantName;
   final String restaurantAddress;
+  final double restaurantLatitude;
+  final double restaurantLongitude;
   final String customerAddress;
+  final double customerLatitude;
+  final double customerLongitude;
   final double distanceKm;
   final double estimatedEarning;
   final DateTime expiresAt; // countdown deadline
@@ -87,7 +91,11 @@ class DeliveryRequest {
     required this.order,
     required this.restaurantName,
     this.restaurantAddress = '',
+    this.restaurantLatitude = 17.4486,
+    this.restaurantLongitude = 78.3810,
     this.customerAddress = '',
+    this.customerLatitude = 17.4401,
+    this.customerLongitude = 78.3911,
     this.distanceKm = 0,
     this.estimatedEarning = 0,
     required this.expiresAt,
@@ -141,7 +149,11 @@ class DeliveryRequest {
       ),
       restaurantName: 'Biryani Blues',
       restaurantAddress: '12, Jubilee Hills, Hyderabad',
+      restaurantLatitude: 17.4486,
+      restaurantLongitude: 78.3810,
       customerAddress: '45, Madhapur, Hyderabad',
+      customerLatitude: 17.4401,
+      customerLongitude: 78.3911,
       distanceKm: 4.2,
       estimatedEarning: 65,
       expiresAt: now.add(const Duration(seconds: 30)),

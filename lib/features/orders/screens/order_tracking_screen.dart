@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
+import '../../../shared/widgets/delivery_map.dart';
 import '../models/order.dart';
 import '../providers/orders_provider.dart';
+import '../providers/rider_location_provider.dart';
 
 /// Real-time order tracking screen
 class OrderTrackingScreen extends ConsumerStatefulWidget {
@@ -21,12 +23,15 @@ class OrderTrackingScreen extends ConsumerStatefulWidget {
 
 class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   Timer? _demoTimer;
+  bool _trackingStarted = false;
 
   @override
   void initState() {
     super.initState();
-    // Demo: simulate order status progression
     _startDemoProgression();
+    // Start rider tracking for the live map
+    ref.read(riderLocationProvider.notifier).trackRider('mock_rider');
+    _trackingStarted = true;
   }
 
   void _startDemoProgression() {
@@ -55,6 +60,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   @override
   void dispose() {
     _demoTimer?.cancel();
+    if (_trackingStarted) {
+      // Use a post-frame callback to safely read the provider
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(riderLocationProvider.notifier).stopTracking();
+        }
+      });
+    }
     super.dispose();
   }
 
@@ -93,6 +106,42 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ─── Live Map ───
+            if (order.status.index >= OrderStatus.pickedUp.index &&
+                order.status != OrderStatus.cancelled)
+              Builder(
+                builder: (context) {
+                  final riderLocation = ref.watch(riderLocationProvider);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                    child: DeliveryMap(
+                      height: 220,
+                      trackRider: true,
+                      markers: [
+                        const MapMarker(
+                          type: MapMarkerType.restaurant,
+                          latitude: 17.4486,
+                          longitude: 78.3810,
+                          label: 'Restaurant',
+                        ),
+                        MapMarker(
+                          type: MapMarkerType.rider,
+                          latitude: riderLocation?.latitude ?? 17.4440,
+                          longitude: riderLocation?.longitude ?? 78.3860,
+                          label: order.deliveryPartnerName ?? 'Rider',
+                        ),
+                        const MapMarker(
+                          type: MapMarkerType.customer,
+                          latitude: 17.4401,
+                          longitude: 78.3911,
+                          label: 'You',
+                        ),
+                      ],
+                    ).animate().fadeIn(duration: 400.ms),
+                  );
+                },
+              ),
+
             // ─── Status Header ───
             _buildStatusHeader(order),
 

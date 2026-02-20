@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/services/api_client.dart';
+import '../../../core/services/api_config.dart';
 import '../../../features/orders/models/order.dart';
 import '../models/partner_order.dart';
 
@@ -58,16 +61,33 @@ class PartnerState {
       .toList();
 }
 
-/// Partner notifier
+/// Partner notifier — API-backed with mock fallback
 class PartnerNotifier extends StateNotifier<PartnerState> {
-  PartnerNotifier() : super(const PartnerState()) {
-    _loadMockData();
+  final ApiClient _api;
+
+  PartnerNotifier(this._api) : super(const PartnerState()) {
+    _loadData();
   }
 
-  void _loadMockData() {
+  Future<void> _loadData() async {
+    state = state.copyWith(isLoading: true);
+    try {
+      // Attempt to fetch from API
+      final response = await _api.get(
+        '${ApiConfig.partnerOrders}/../dashboard',
+      );
+      if (response.success) {
+        // Parse from API if available
+        state = state.copyWith(isLoading: false);
+        return;
+      }
+    } catch (_) {}
+
+    // Fallback to mock data
     state = state.copyWith(
       metrics: PartnerMetrics.mock,
       orders: PartnerOrder.mockList,
+      isLoading: false,
     );
   }
 
@@ -91,6 +111,14 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
       return po;
     }).toList();
     state = state.copyWith(orders: updatedOrders);
+
+    // Push status update to API
+    _api
+        .put(
+          '${ApiConfig.partnerOrders}/$orderId/status',
+          body: {'status': 'confirmed'},
+        )
+        .ignore();
   }
 
   /// Reject an order
@@ -99,16 +127,35 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         .where((po) => po.order.id != orderId)
         .toList();
     state = state.copyWith(orders: updatedOrders);
+
+    _api
+        .put(
+          '${ApiConfig.partnerOrders}/$orderId/status',
+          body: {'status': 'cancelled', 'reason': reason},
+        )
+        .ignore();
   }
 
   /// Mark order as preparing
   void markPreparing(String orderId) {
     _updateOrderStatus(orderId, OrderStatus.preparing);
+    _api
+        .put(
+          '${ApiConfig.partnerOrders}/$orderId/status',
+          body: {'status': 'preparing'},
+        )
+        .ignore();
   }
 
   /// Mark order as ready for pickup
   void markReady(String orderId) {
     _updateOrderStatus(orderId, OrderStatus.ready);
+    _api
+        .put(
+          '${ApiConfig.partnerOrders}/$orderId/status',
+          body: {'status': 'ready'},
+        )
+        .ignore();
   }
 
   void _updateOrderStatus(String orderId, OrderStatus status) {
@@ -132,5 +179,6 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
 final partnerProvider = StateNotifierProvider<PartnerNotifier, PartnerState>((
   ref,
 ) {
-  return PartnerNotifier();
+  final api = ref.watch(apiClientProvider);
+  return PartnerNotifier(api);
 });

@@ -1,4 +1,9 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/models/api_response.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/api_config.dart';
+import '../../../core/services/realtime_service.dart';
 import '../models/order.dart';
 
 /// Orders state
@@ -28,14 +33,100 @@ class OrdersState {
       orders.where((o) => !o.status.isActive).toList();
 }
 
-/// Orders notifier
+/// Orders notifier — fetches from API with mock fallback + Realtime updates
 class OrdersNotifier extends StateNotifier<OrdersState> {
-  OrdersNotifier() : super(const OrdersState()) {
-    _loadMockOrders();
+  final ApiClient _api;
+  final RealtimeService _realtime;
+  StreamSubscription? _realtimeSub;
+
+  OrdersNotifier(this._api, this._realtime) : super(const OrdersState()) {
+    fetchOrders();
+    _subscribeToRealtimeUpdates();
   }
 
-  void _loadMockOrders() {
-    state = state.copyWith(orders: Order.mockList);
+  /// Listen for real-time order status changes from Appwrite
+  void _subscribeToRealtimeUpdates() {
+    try {
+      final channel = RealtimeChannels.allOrdersChannel();
+      _realtimeSub = _realtime.subscribe(channel).listen((event) {
+        if (event.type == RealtimeEventType.update) {
+          final data = event.data;
+          final orderId = event.documentId;
+          final newStatus = OrderStatus.fromString(data['status'] ?? 'placed');
+          updateOrderStatus(orderId, newStatus);
+        } else if (event.type == RealtimeEventType.create) {
+          // New order placed — refresh list
+          fetchOrders();
+        }
+      });
+    } catch (_) {
+      // Realtime not available — rely on polling/manual refresh
+    }
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
+  }
+
+  /// Fetch orders from API, fallback to mock data
+  Future<void> fetchOrders() async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final response = await _api.get(ApiConfig.orders);
+      if (response.success && response.data != null) {
+        // Parse orders from API response
+        final ordersData = response.data as List<dynamic>;
+        final orders = ordersData.map((d) {
+          final m = d as Map<String, dynamic>;
+          return Order(
+            id: m['\$id'] ?? '',
+            orderNumber: m['order_number'] ?? '',
+            customerId: m['customer_id'] ?? '',
+            restaurantId: m['restaurant_id'] ?? '',
+            restaurantName: m['restaurant_name'] ?? '',
+            deliveryAddressId: m['delivery_address_id'] ?? '',
+            items: ((m['items'] ?? []) as List).map((i) {
+              final item = i as Map<String, dynamic>;
+              return OrderItem(
+                id: item['id'] ?? '',
+                name: item['name'] ?? '',
+                quantity: item['quantity'] ?? 1,
+                price: (item['price'] ?? 0).toDouble(),
+                isVeg: item['is_veg'] ?? false,
+              );
+            }).toList(),
+            itemTotal: (m['item_total'] ?? 0).toDouble(),
+            deliveryFee: (m['delivery_fee'] ?? 0).toDouble(),
+            platformFee: (m['platform_fee'] ?? 0).toDouble(),
+            gst: (m['gst'] ?? 0).toDouble(),
+            discount: (m['discount'] ?? 0).toDouble(),
+            couponCode: m['coupon_code'],
+            grandTotal: (m['grand_total'] ?? 0).toDouble(),
+            paymentMethod: m['payment_method'] ?? 'razorpay',
+            paymentStatus: m['payment_status'] ?? 'pending',
+            paymentId: m['payment_id'],
+            status: OrderStatus.fromString(m['status'] ?? 'placed'),
+            specialInstructions: m['special_instructions'] ?? '',
+            deliveryInstructions: m['delivery_instructions'] ?? '',
+            estimatedDeliveryMin: m['estimated_delivery_min'] ?? 35,
+            placedAt: DateTime.tryParse(m['placed_at'] ?? '') ?? DateTime.now(),
+          );
+        }).toList();
+        state = state.copyWith(orders: orders, isLoading: false);
+      } else {
+        state = state.copyWith(isLoading: false, error: response.error);
+      }
+    } on ApiException catch (e) {
+      // Fallback to mock data in development
+      state = state.copyWith(orders: Order.mockList, isLoading: false);
+      if (e.statusCode != 0) {
+        state = state.copyWith(error: e.message);
+      }
+    } catch (_) {
+      state = state.copyWith(orders: Order.mockList, isLoading: false);
+    }
   }
 
   /// Add a new order (after payment success)
@@ -79,5 +170,7 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
 final ordersProvider = StateNotifierProvider<OrdersNotifier, OrdersState>((
   ref,
 ) {
-  return OrdersNotifier();
+  final api = ref.watch(apiClientProvider);
+  final realtime = ref.watch(realtimeServiceProvider);
+  return OrdersNotifier(api, realtime);
 });

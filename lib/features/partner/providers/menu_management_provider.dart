@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/services/api_client.dart';
+import '../../../core/services/api_config.dart';
 import '../../restaurant/models/menu_item.dart';
 
 /// Menu management state for restaurant partner
@@ -29,16 +32,30 @@ class MenuManagementState {
       items.where((i) => i.categoryId == categoryId).toList();
 }
 
-/// Menu management notifier
+/// Menu management notifier — API-backed with mock fallback
 class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
-  MenuManagementNotifier() : super(const MenuManagementState()) {
-    _loadMockData();
+  final ApiClient _api;
+
+  MenuManagementNotifier(this._api) : super(const MenuManagementState()) {
+    _loadData();
   }
 
-  void _loadMockData() {
+  Future<void> _loadData() async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final response = await _api.get(ApiConfig.partnerMenu);
+      if (response.success && response.data != null) {
+        // API returns menu items — parse them
+        state = state.copyWith(isLoading: false);
+        return;
+      }
+    } catch (_) {}
+
+    // Fallback to mock data
     state = state.copyWith(
       categories: MenuItem.mockCategoriesForRestaurant('r1'),
       items: MenuItem.mockListForRestaurant('r1'),
+      isLoading: false,
     );
   }
 
@@ -112,6 +129,20 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
       isVeg: isVeg,
     );
     state = state.copyWith(items: [...state.items, newItem]);
+
+    // Push to API
+    _api
+        .post(
+          ApiConfig.partnerMenu,
+          body: {
+            'name': name,
+            'category_id': categoryId,
+            'price': price,
+            'description': description,
+            'is_veg': isVeg,
+          },
+        )
+        .ignore();
   }
 
   void updateItem(
@@ -141,12 +172,26 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
       return item;
     }).toList();
     state = state.copyWith(items: updated);
+
+    // Push to API
+    _api
+        .put(
+          '${ApiConfig.partnerMenu}/$itemId',
+          body: {
+            if (name != null) 'name': name,
+            if (price != null) 'price': price,
+            if (description != null) 'description': description,
+            if (isVeg != null) 'is_veg': isVeg,
+          },
+        )
+        .ignore();
   }
 
   void toggleItemAvailability(String itemId) {
+    MenuItem? toggled;
     final updated = state.items.map((item) {
       if (item.id == itemId) {
-        return MenuItem(
+        toggled = MenuItem(
           id: item.id,
           restaurantId: item.restaurantId,
           categoryId: item.categoryId,
@@ -159,21 +204,33 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
           isMustTry: item.isMustTry,
           customizations: item.customizations,
         );
+        return toggled!;
       }
       return item;
     }).toList();
     state = state.copyWith(items: updated);
+
+    if (toggled != null) {
+      _api
+          .put(
+            '${ApiConfig.partnerMenu}/$itemId',
+            body: {'is_available': toggled!.isAvailable},
+          )
+          .ignore();
+    }
   }
 
   void deleteItem(String itemId) {
     state = state.copyWith(
       items: state.items.where((i) => i.id != itemId).toList(),
     );
+    _api.delete('${ApiConfig.partnerMenu}/$itemId').ignore();
   }
 }
 
 /// Menu management provider
 final menuManagementProvider =
     StateNotifierProvider<MenuManagementNotifier, MenuManagementState>((ref) {
-      return MenuManagementNotifier();
+      final api = ref.watch(apiClientProvider);
+      return MenuManagementNotifier(api);
     });

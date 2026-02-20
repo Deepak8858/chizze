@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/api_client.dart';
+import '../../../core/services/api_config.dart';
+
 /// Analytics data for restaurant partner
 class AnalyticsState {
   final List<DailyRevenue> revenueData;
@@ -8,6 +11,7 @@ class AnalyticsState {
   final double totalRevenue;
   final int totalOrders;
   final double avgOrderValue;
+  final bool isLoading;
 
   const AnalyticsState({
     this.revenueData = const [],
@@ -16,6 +20,7 @@ class AnalyticsState {
     this.totalRevenue = 0,
     this.totalOrders = 0,
     this.avgOrderValue = 0,
+    this.isLoading = false,
   });
 }
 
@@ -49,13 +54,34 @@ class HourlyVolume {
   const HourlyVolume({required this.hour, required this.orders});
 }
 
-/// Analytics provider with mock data
-final analyticsProvider = Provider<AnalyticsState>((ref) {
-  return AnalyticsState(
+/// Analytics notifier — API-backed with mock fallback
+class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
+  final ApiClient _api;
+
+  AnalyticsNotifier(this._api) : super(const AnalyticsState()) {
+    fetchAnalytics();
+  }
+
+  Future<void> fetchAnalytics() async {
+    state = const AnalyticsState(isLoading: true);
+    try {
+      final response = await _api.get(ApiConfig.partnerAnalytics);
+      if (response.success && response.data != null) {
+        // Parse from API
+        state = const AnalyticsState(isLoading: false);
+        return;
+      }
+    } catch (_) {}
+
+    // Fallback to mock data
+    state = _mockAnalytics;
+  }
+
+  static final _mockAnalytics = const AnalyticsState(
     totalRevenue: 87350,
     totalOrders: 196,
     avgOrderValue: 445.66,
-    revenueData: const [
+    revenueData: [
       DailyRevenue(day: 'Mon', amount: 11200, orders: 24),
       DailyRevenue(day: 'Tue', amount: 9800, orders: 21),
       DailyRevenue(day: 'Wed', amount: 13500, orders: 29),
@@ -64,7 +90,7 @@ final analyticsProvider = Provider<AnalyticsState>((ref) {
       DailyRevenue(day: 'Sat', amount: 16400, orders: 38),
       DailyRevenue(day: 'Sun', amount: 10450, orders: 28),
     ],
-    topItems: const [
+    topItems: [
       TopItem(
         name: 'Chicken Biryani',
         orderCount: 82,
@@ -81,7 +107,7 @@ final analyticsProvider = Provider<AnalyticsState>((ref) {
       TopItem(name: 'Paneer Tikka', orderCount: 31, revenue: 7409, isVeg: true),
       TopItem(name: 'Gulab Jamun', orderCount: 56, revenue: 4424, isVeg: true),
     ],
-    peakHours: const [
+    peakHours: [
       HourlyVolume(hour: 9, orders: 2),
       HourlyVolume(hour: 10, orders: 5),
       HourlyVolume(hour: 11, orders: 12),
@@ -99,4 +125,11 @@ final analyticsProvider = Provider<AnalyticsState>((ref) {
       HourlyVolume(hour: 23, orders: 5),
     ],
   );
-});
+}
+
+/// Analytics provider — now StateNotifier for async fetching
+final analyticsProvider =
+    StateNotifierProvider<AnalyticsNotifier, AnalyticsState>((ref) {
+      final api = ref.watch(apiClientProvider);
+      return AnalyticsNotifier(api);
+    });

@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/models/api_response.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/api_config.dart';
 
 /// User profile model
 class UserProfile {
@@ -61,19 +64,60 @@ class UserProfile {
   );
 }
 
-/// Profile state notifier
+/// Profile state notifier — fetches from API with mock fallback
 class UserProfileNotifier extends StateNotifier<UserProfile> {
-  UserProfileNotifier() : super(UserProfile.mock);
+  final ApiClient _api;
 
-  void updateName(String name) => state = state.copyWith(name: name);
-  void updateEmail(String email) => state = state.copyWith(email: email);
-  void toggleVeg() => state = state.copyWith(isVeg: !state.isVeg);
+  UserProfileNotifier(this._api) : super(UserProfile.mock) {
+    fetchProfile();
+  }
+
+  /// Fetch profile from API
+  Future<void> fetchProfile() async {
+    try {
+      final response = await _api.get(ApiConfig.profile);
+      if (response.success && response.data != null) {
+        final d = response.data as Map<String, dynamic>;
+        state = UserProfile(
+          id: d['\$id'] ?? state.id,
+          name: d['name'] ?? state.name,
+          phone: d['phone'] ?? state.phone,
+          email: d['email'] ?? state.email,
+          avatarUrl: d['avatar_url'],
+          isVeg: d['dietary_preferences']?.contains('veg') ?? false,
+          darkMode: state.darkMode,
+          defaultAddressId: state.defaultAddressId,
+        );
+      }
+    } on ApiException {
+      // Keep mock data as fallback
+    } catch (_) {
+      // Keep mock data
+    }
+  }
+
+  void updateName(String name) {
+    state = state.copyWith(name: name);
+    _api.put(ApiConfig.profile, body: {'name': name}).ignore();
+  }
+
+  void updateEmail(String email) {
+    state = state.copyWith(email: email);
+    _api.put(ApiConfig.profile, body: {'email': email}).ignore();
+  }
+
+  void toggleVeg() {
+    state = state.copyWith(isVeg: !state.isVeg);
+  }
+
   void toggleDarkMode() => state = state.copyWith(darkMode: !state.darkMode);
+
   void setDefaultAddress(String id) =>
       state = state.copyWith(defaultAddressId: id);
 }
 
 final userProfileProvider =
     StateNotifierProvider<UserProfileNotifier, UserProfile>((ref) {
-      return UserProfileNotifier();
+      final api = ref.watch(apiClientProvider);
+      return UserProfileNotifier(api);
     });

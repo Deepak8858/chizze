@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
+import '../../../shared/widgets/delivery_map.dart';
 import '../models/delivery_partner.dart';
 import '../providers/delivery_provider.dart';
 
@@ -68,6 +69,33 @@ class ActiveDeliveryScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ─── Live Map ───
+                  DeliveryMap(
+                    height: 200,
+                    trackRider: true,
+                    markers: [
+                      MapMarker(
+                        type: MapMarkerType.restaurant,
+                        latitude: request.restaurantLatitude,
+                        longitude: request.restaurantLongitude,
+                        label: request.restaurantName,
+                      ),
+                      MapMarker(
+                        type: MapMarkerType.customer,
+                        latitude: request.customerLatitude,
+                        longitude: request.customerLongitude,
+                        label: 'Customer',
+                      ),
+                      MapMarker(
+                        type: MapMarkerType.rider,
+                        latitude: dState.partner.currentLatitude,
+                        longitude: dState.partner.currentLongitude,
+                        label: 'You',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+
                   // ─── Step Progress ───
                   _buildStepProgress(step),
                   const SizedBox(height: AppSpacing.xxl),

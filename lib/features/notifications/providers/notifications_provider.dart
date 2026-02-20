@@ -1,4 +1,9 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/models/api_response.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/api_config.dart';
+import '../../../core/services/realtime_service.dart';
 
 /// Notification types
 enum NotificationType {
@@ -44,18 +49,100 @@ class AppNotification {
   }
 }
 
-/// Notifications notifier
+/// Notifications notifier — API-backed with mock fallback + Realtime
 class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
-  NotificationsNotifier() : super(_mockNotifications);
+  final ApiClient _api;
+  final RealtimeService _realtime;
+  StreamSubscription? _realtimeSub;
+
+  NotificationsNotifier(this._api, this._realtime) : super(_mockNotifications) {
+    fetchNotifications();
+    _subscribeToRealtime();
+  }
+
+  /// Listen for new notifications in real-time
+  void _subscribeToRealtime() {
+    try {
+      final channel = RealtimeChannels.notificationsChannel();
+      _realtimeSub = _realtime.subscribe(channel).listen((event) {
+        if (event.type == RealtimeEventType.create) {
+          final m = event.data;
+          final notification = AppNotification(
+            id: m['\$id'] ?? '',
+            title: m['title'] ?? '',
+            body: m['body'] ?? '',
+            type: _parseType(m['type']),
+            isRead: false,
+            createdAt:
+                DateTime.tryParse(m['created_at'] ?? '') ?? DateTime.now(),
+            actionRoute: m['data'] != null ? _extractRoute(m['data']) : null,
+          );
+          // Add to top of list
+          state = [notification, ...state];
+        }
+      });
+    } catch (_) {} // Realtime not available
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
+  }
+
+  /// Fetch from API
+  Future<void> fetchNotifications() async {
+    try {
+      final response = await _api.get(ApiConfig.notifications);
+      if (response.success && response.data != null) {
+        final list = response.data as List<dynamic>;
+        state = list.map((d) {
+          final m = d as Map<String, dynamic>;
+          return AppNotification(
+            id: m['\$id'] ?? '',
+            title: m['title'] ?? '',
+            body: m['body'] ?? '',
+            type: _parseType(m['type']),
+            isRead: m['is_read'] ?? false,
+            createdAt:
+                DateTime.tryParse(m['created_at'] ?? '') ?? DateTime.now(),
+            actionRoute: m['data'] != null ? _extractRoute(m['data']) : null,
+          );
+        }).toList();
+      }
+    } on ApiException {
+      // Keep mock data
+    } catch (_) {}
+  }
+
+  NotificationType _parseType(String? type) {
+    switch (type) {
+      case 'order_update':
+        return NotificationType.order;
+      case 'promo':
+        return NotificationType.promo;
+      default:
+        return NotificationType.system;
+    }
+  }
+
+  String? _extractRoute(dynamic data) {
+    if (data is Map && data['order_id'] != null) {
+      return '/order-detail/${data['order_id']}';
+    }
+    return null;
+  }
 
   void markRead(String id) {
     state = state
         .map((n) => n.id == id ? n.copyWith(isRead: true) : n)
         .toList();
+    _api.put('${ApiConfig.notifications}/$id/read').ignore();
   }
 
   void markAllRead() {
     state = state.map((n) => n.copyWith(isRead: true)).toList();
+    _api.put('${ApiConfig.notifications}/read-all').ignore();
   }
 
   void clear() => state = [];
@@ -119,5 +206,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
 
 final notificationsProvider =
     StateNotifierProvider<NotificationsNotifier, List<AppNotification>>((ref) {
-      return NotificationsNotifier();
+      final api = ref.watch(apiClientProvider);
+      final realtime = ref.watch(realtimeServiceProvider);
+      return NotificationsNotifier(api, realtime);
     });

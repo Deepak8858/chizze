@@ -42,6 +42,7 @@ dependencies:
   # Maps & Location
   geolocator: ^13.0.2
   geocoding: ^3.0.0
+  mapbox_maps_flutter: ^2.18.0
 
   # Utilities
   intl: any
