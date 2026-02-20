@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTypography {
   AppTypography._();
 
-  static String get _fontFamily => 'PlusJakartaSans';
+  static String get _fontFamily => GoogleFonts.plusJakartaSans().fontFamily!;
 
   // ─── Headings ───
   static TextStyle get h1 => TextStyle(

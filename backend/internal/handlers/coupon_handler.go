@@ -1,10 +1,9 @@
 package handlers
 
 import (
-	"fmt"
-
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
+	"github.com/chizze/backend/pkg/appwrite"
 	"github.com/chizze/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -23,7 +22,7 @@ func NewCouponHandler(aw *services.AppwriteService) *CouponHandler {
 // GET /api/v1/coupons
 func (h *CouponHandler) ListAvailable(c *gin.Context) {
 	result, err := h.appwrite.ListCoupons([]string{
-		`equal("is_active", [true])`,
+		appwrite.QueryEqual("is_active", true),
 	})
 	if err != nil {
 		utils.InternalError(c, "Failed to fetch coupons")
@@ -43,7 +42,7 @@ func (h *CouponHandler) Validate(c *gin.Context) {
 
 	// Find coupon by code
 	result, err := h.appwrite.ListCoupons([]string{
-		fmt.Sprintf(`equal("code", ["%s"])`, req.Code),
+		appwrite.QueryEqual("code", req.Code),
 	})
 	if err != nil || result.Total == 0 {
 		utils.NotFound(c, "Coupon not found")

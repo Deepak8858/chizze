@@ -2,8 +2,9 @@
 class ApiConfig {
   /// Base URL for the Go backend API
   /// Change to your deployed URL in production
-  static const String baseUrl =
-      'http://10.0.2.2:8080/api/v1'; // Android emulator → localhost
+  // For real Android device on same WiFi network:
+  static const String baseUrl = 'http://10.163.246.51:8080/api/v1';
+  // static const String baseUrl = 'http://10.0.2.2:8080/api/v1'; // Android emulator
   // static const String baseUrl = 'http://localhost:8080/api/v1'; // iOS / Web
 
   /// Request timeout in seconds

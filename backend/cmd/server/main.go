@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -22,6 +23,15 @@ func main() {
 	// ─── Load Config ───
 	cfg := config.Load()
 	gin.SetMode(cfg.GinMode)
+
+	// ─── Startup Info ───
+	log.Printf("═══════════════════════════════════════")
+	log.Printf("  Chizze API Server v1.0.0")
+	log.Printf("  Mode: %s | Port: %s", cfg.GinMode, cfg.Port)
+	log.Printf("  GOMAXPROCS: %d | CPUs: %d", runtime.GOMAXPROCS(0), runtime.NumCPU())
+	log.Printf("  Appwrite: %s", cfg.AppwriteEndpoint)
+	log.Printf("  Timeout: %v | MaxConns: %d", cfg.RequestTimeout, cfg.MaxConnections)
+	log.Printf("═══════════════════════════════════════")
 
 	// ─── Initialize Clients ───
 	awClient := appwrite.NewClient(cfg)
@@ -46,25 +56,31 @@ func main() {
 
 	// ─── Create Router ───
 	r := gin.New()
-	r.Use(middleware.Logger())
-	r.Use(gin.Recovery())
-	r.Use(middleware.CORS(cfg))
-	r.Use(middleware.RateLimit(100, 200)) // 100 req/s, burst 200
 
-	// Health check
+	// Global middleware — order matters
+	r.Use(middleware.Security())          // Request ID + security headers (first)
+	r.Use(middleware.Logger())            // Structured logging with request ID
+	r.Use(gin.Recovery())                 // Panic recovery
+	r.Use(middleware.CORS(cfg))           // CORS
+	r.Use(middleware.Gzip())              // Response compression
+	r.Use(middleware.RateLimit(200, 500)) // 200 req/s, burst 500
+
+	// Health check (no auth, no rate limit)
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
 			"service": "chizze-api",
 			"version": "1.0.0",
+			"uptime":  time.Since(startTime).String(),
 		})
 	})
 
 	// ─── API v1 Routes ───
 	v1 := r.Group("/api/v1")
 
-	// Auth (public)
+	// Auth (public) — stricter rate limit
 	auth := v1.Group("/auth")
+	auth.Use(middleware.RateLimit(10, 20)) // 10 req/s for auth
 	{
 		auth.POST("/send-otp", authHandler.SendOTP)
 		auth.POST("/verify-otp", authHandler.VerifyOTP)
@@ -157,17 +173,19 @@ func main() {
 	// Webhooks (no auth — validated by signature)
 	v1.POST("/payments/webhook", paymentHandler.Webhook)
 
-	// ─── Start Server ───
+	// ─── Start Server with Production Settings ───
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              ":" + cfg.Port,
+		Handler:           r,
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second, // Prevent slowloris
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1MB max headers
 	}
 
 	go func() {
-		log.Printf("🚀 Chizze API starting on port %s", cfg.Port)
+		log.Printf("🚀 Chizze API listening on :%s", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v", err)
 		}
@@ -179,10 +197,12 @@ func main() {
 	<-quit
 
 	fmt.Println("\n🛑 Shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced shutdown:", err)
 	}
 	fmt.Println("✅ Server stopped gracefully")
 }
+
+var startTime = time.Now()

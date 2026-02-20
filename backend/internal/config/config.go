@@ -3,6 +3,8 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -32,6 +34,15 @@ type Config struct {
 
 	// Environment
 	GinMode string
+
+	// Performance
+	RequestTimeout time.Duration
+	MaxConnections int
+}
+
+// IsProduction returns true if running in release mode
+func (c *Config) IsProduction() bool {
+	return c.GinMode == "release"
 }
 
 // Load reads configuration from environment variables
@@ -40,6 +51,9 @@ func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using system environment variables")
 	}
+
+	timeout, _ := strconv.Atoi(getEnv("REQUEST_TIMEOUT_SECONDS", "15"))
+	maxConns, _ := strconv.Atoi(getEnv("MAX_CONNECTIONS", "200"))
 
 	cfg := &Config{
 		Port:               getEnv("PORT", "8080"),
@@ -53,11 +67,20 @@ func Load() *Config {
 		JWTSecret:          getEnv("JWT_SECRET", "chizze-dev-secret"),
 		AllowedOrigins:     getEnv("ALLOWED_ORIGINS", "*"),
 		GinMode:            getEnv("GIN_MODE", "debug"),
+		RequestTimeout:     time.Duration(timeout) * time.Second,
+		MaxConnections:     maxConns,
 	}
 
 	// Validate required keys
 	if cfg.AppwriteAPIKey == "" {
+		if cfg.IsProduction() {
+			log.Fatal("FATAL: APPWRITE_API_KEY not set in production mode")
+		}
 		log.Println("WARNING: APPWRITE_API_KEY not set — Appwrite calls will fail")
+	}
+
+	if cfg.IsProduction() && cfg.JWTSecret == "chizze-dev-secret" {
+		log.Fatal("FATAL: JWT_SECRET must be changed from default in production mode")
 	}
 
 	return cfg

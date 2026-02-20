@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 import 'app_typography.dart';
 import 'app_spacing.dart';
@@ -29,7 +30,7 @@ class AppTheme {
 
       // ─── Typography ───
       textTheme: AppTypography.textTheme,
-      fontFamily: 'PlusJakartaSans',
+      fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
 
       // ─── AppBar ───
       appBarTheme: AppBarTheme(

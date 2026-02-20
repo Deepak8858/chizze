@@ -2,9 +2,12 @@ package appwrite
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -12,7 +15,7 @@ import (
 	"github.com/chizze/backend/internal/config"
 )
 
-// Client wraps Appwrite REST API calls
+// Client wraps Appwrite REST API calls with production-grade HTTP settings
 type Client struct {
 	endpoint   string
 	projectID  string
@@ -21,14 +24,37 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// NewClient creates an Appwrite client
+// NewClient creates an Appwrite client with optimized connection pooling
 func NewClient(cfg *config.Config) *Client {
+	transport := &http.Transport{
+		// Connection pooling for high concurrency
+		MaxIdleConns:        200,
+		MaxIdleConnsPerHost: 100,
+		MaxConnsPerHost:     200,
+		IdleConnTimeout:     90 * time.Second,
+
+		// Timeouts to prevent hanging connections
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+
+		// Enable HTTP/2
+		ForceAttemptHTTP2: true,
+	}
+
 	return &Client{
 		endpoint:   cfg.AppwriteEndpoint,
 		projectID:  cfg.AppwriteProjectID,
 		apiKey:     cfg.AppwriteAPIKey,
 		databaseID: cfg.AppwriteDatabaseID,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{
+			Transport: transport,
+			Timeout:   cfg.RequestTimeout,
+		},
 	}
 }
 
@@ -38,8 +64,38 @@ type DocumentList struct {
 	Documents []map[string]interface{} `json:"documents"`
 }
 
-// request makes an authenticated HTTP request to Appwrite
-func (c *Client) request(method, path string, body interface{}) ([]byte, error) {
+// request makes an authenticated HTTP request to Appwrite with retry
+func (c *Client) request(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+	var lastErr error
+
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff with jitter: 100ms, 300ms
+			backoff := time.Duration(100*(1<<attempt)) * time.Millisecond
+			jitter := time.Duration(rand.Intn(50)) * time.Millisecond
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff + jitter):
+			}
+		}
+
+		data, err := c.doRequest(ctx, method, path, body)
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+
+		// Only retry on transient errors (5xx, timeout, connection reset)
+		if !isRetryable(err) {
+			return nil, err
+		}
+	}
+
+	return nil, fmt.Errorf("after 3 retries: %w", lastErr)
+}
+
+func (c *Client) doRequest(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		jsonBytes, err := json.Marshal(body)
@@ -50,7 +106,7 @@ func (c *Client) request(method, path string, body interface{}) ([]byte, error) 
 	}
 
 	reqURL := fmt.Sprintf("%s%s", c.endpoint, path)
-	req, err := http.NewRequest(method, reqURL, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -70,6 +126,13 @@ func (c *Client) request(method, path string, body interface{}) ([]byte, error) 
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	if resp.StatusCode >= 500 {
+		return nil, &retryableError{
+			statusCode: resp.StatusCode,
+			body:       string(respBody),
+		}
+	}
+
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("appwrite error %d: %s", resp.StatusCode, string(respBody))
 	}
@@ -81,6 +144,11 @@ func (c *Client) request(method, path string, body interface{}) ([]byte, error) 
 
 // ListDocuments lists documents in a collection with optional queries
 func (c *Client) ListDocuments(collectionID string, queries []string) (*DocumentList, error) {
+	return c.ListDocumentsCtx(context.Background(), collectionID, queries)
+}
+
+// ListDocumentsCtx lists documents with context support
+func (c *Client) ListDocumentsCtx(ctx context.Context, collectionID string, queries []string) (*DocumentList, error) {
 	path := fmt.Sprintf("/databases/%s/collections/%s/documents", c.databaseID, collectionID)
 
 	if len(queries) > 0 {
@@ -91,7 +159,7 @@ func (c *Client) ListDocuments(collectionID string, queries []string) (*Document
 		path += "?" + params.Encode()
 	}
 
-	data, err := c.request("GET", path, nil)
+	data, err := c.request(ctx, "GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -105,10 +173,15 @@ func (c *Client) ListDocuments(collectionID string, queries []string) (*Document
 
 // GetDocument retrieves a single document
 func (c *Client) GetDocument(collectionID, documentID string) (map[string]interface{}, error) {
+	return c.GetDocumentCtx(context.Background(), collectionID, documentID)
+}
+
+// GetDocumentCtx retrieves a single document with context support
+func (c *Client) GetDocumentCtx(ctx context.Context, collectionID, documentID string) (map[string]interface{}, error) {
 	path := fmt.Sprintf("/databases/%s/collections/%s/documents/%s",
 		c.databaseID, collectionID, documentID)
 
-	data, err := c.request("GET", path, nil)
+	data, err := c.request(ctx, "GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +195,11 @@ func (c *Client) GetDocument(collectionID, documentID string) (map[string]interf
 
 // CreateDocument creates a new document
 func (c *Client) CreateDocument(collectionID, documentID string, body map[string]interface{}) (map[string]interface{}, error) {
+	return c.CreateDocumentCtx(context.Background(), collectionID, documentID, body)
+}
+
+// CreateDocumentCtx creates a new document with context support
+func (c *Client) CreateDocumentCtx(ctx context.Context, collectionID, documentID string, body map[string]interface{}) (map[string]interface{}, error) {
 	path := fmt.Sprintf("/databases/%s/collections/%s/documents",
 		c.databaseID, collectionID)
 
@@ -130,7 +208,7 @@ func (c *Client) CreateDocument(collectionID, documentID string, body map[string
 		"data":       body,
 	}
 
-	data, err := c.request("POST", path, payload)
+	data, err := c.request(ctx, "POST", path, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +222,11 @@ func (c *Client) CreateDocument(collectionID, documentID string, body map[string
 
 // UpdateDocument updates an existing document
 func (c *Client) UpdateDocument(collectionID, documentID string, body map[string]interface{}) (map[string]interface{}, error) {
+	return c.UpdateDocumentCtx(context.Background(), collectionID, documentID, body)
+}
+
+// UpdateDocumentCtx updates an existing document with context support
+func (c *Client) UpdateDocumentCtx(ctx context.Context, collectionID, documentID string, body map[string]interface{}) (map[string]interface{}, error) {
 	path := fmt.Sprintf("/databases/%s/collections/%s/documents/%s",
 		c.databaseID, collectionID, documentID)
 
@@ -151,7 +234,7 @@ func (c *Client) UpdateDocument(collectionID, documentID string, body map[string
 		"data": body,
 	}
 
-	data, err := c.request("PATCH", path, payload)
+	data, err := c.request(ctx, "PATCH", path, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -165,8 +248,35 @@ func (c *Client) UpdateDocument(collectionID, documentID string, body map[string
 
 // DeleteDocument deletes a document
 func (c *Client) DeleteDocument(collectionID, documentID string) error {
+	return c.DeleteDocumentCtx(context.Background(), collectionID, documentID)
+}
+
+// DeleteDocumentCtx deletes a document with context support
+func (c *Client) DeleteDocumentCtx(ctx context.Context, collectionID, documentID string) error {
 	path := fmt.Sprintf("/databases/%s/collections/%s/documents/%s",
 		c.databaseID, collectionID, documentID)
-	_, err := c.request("DELETE", path, nil)
+	_, err := c.request(ctx, "DELETE", path, nil)
 	return err
+}
+
+// ─── Error helpers ───
+
+type retryableError struct {
+	statusCode int
+	body       string
+}
+
+func (e *retryableError) Error() string {
+	return fmt.Sprintf("appwrite error %d: %s", e.statusCode, e.body)
+}
+
+func isRetryable(err error) bool {
+	if _, ok := err.(*retryableError); ok {
+		return true
+	}
+	// Also retry on network errors (connection reset, timeout)
+	if netErr, ok := err.(net.Error); ok {
+		return netErr.Timeout()
+	}
+	return false
 }

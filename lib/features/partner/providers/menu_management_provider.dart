@@ -178,10 +178,10 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
         .put(
           '${ApiConfig.partnerMenu}/$itemId',
           body: {
-            if (name != null) 'name': name,
-            if (price != null) 'price': price,
-            if (description != null) 'description': description,
-            if (isVeg != null) 'is_veg': isVeg,
+            'name': ?name,
+            'price': ?price,
+            'description': ?description,
+            'is_veg': ?isVeg,
           },
         )
         .ignore();

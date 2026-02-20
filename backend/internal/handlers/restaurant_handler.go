@@ -1,9 +1,8 @@
 package handlers
 
 import (
-	"fmt"
-
 	"github.com/chizze/backend/internal/services"
+	"github.com/chizze/backend/pkg/appwrite"
 	"github.com/chizze/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -22,14 +21,14 @@ func NewRestaurantHandler(aw *services.AppwriteService, geo *services.GeoService
 // List returns restaurants with search/filter
 // GET /api/v1/restaurants
 func (h *RestaurantHandler) List(c *gin.Context) {
-	queries := []string{`equal("is_online", [true])`}
+	queries := []string{appwrite.QueryEqual("is_online", true)}
 
 	if cuisine := c.Query("cuisine"); cuisine != "" {
-		queries = append(queries, fmt.Sprintf(`search("cuisines", "%s")`, cuisine))
+		queries = append(queries, appwrite.QuerySearch("cuisines", cuisine))
 	}
 
 	if c.Query("veg_only") == "true" {
-		queries = append(queries, `equal("is_veg_only", [true])`)
+		queries = append(queries, appwrite.QueryEqual("is_veg_only", true))
 	}
 
 	result, err := h.appwrite.ListRestaurants(queries)

@@ -1,12 +1,12 @@
 package handlers
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
+	"github.com/chizze/backend/pkg/appwrite"
 	"github.com/chizze/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -39,31 +39,31 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		itemTotal += item.Price * float64(item.Quantity)
 	}
 	deliveryFee, platformFee, gst := h.orders.CalculateFees(itemTotal, 5.0) // 5km default
-	grandTotal := itemTotal + deliveryFee + platformFee + gst - 0 + req.Tip  // discount = 0 for now
+	grandTotal := itemTotal + deliveryFee + platformFee + gst - 0 + req.Tip // discount = 0 for now
 
 	orderNumber := h.orders.GenerateOrderNumber()
 
 	orderData := map[string]interface{}{
-		"order_number":          orderNumber,
-		"customer_id":           userID,
-		"restaurant_id":         req.RestaurantID,
-		"delivery_address_id":   req.DeliveryAddressID,
-		"items":                 req.Items,
-		"item_total":            itemTotal,
-		"delivery_fee":          deliveryFee,
-		"platform_fee":          platformFee,
-		"gst":                   gst,
-		"discount":              0,
-		"coupon_code":           req.CouponCode,
-		"tip":                   req.Tip,
-		"grand_total":           grandTotal,
-		"payment_method":        req.PaymentMethod,
-		"payment_status":        models.PaymentPending,
-		"status":                models.OrderStatusPlaced,
-		"special_instructions":  req.SpecialInstructions,
-		"delivery_instructions": req.DeliveryInstructions,
+		"order_number":           orderNumber,
+		"customer_id":            userID,
+		"restaurant_id":          req.RestaurantID,
+		"delivery_address_id":    req.DeliveryAddressID,
+		"items":                  req.Items,
+		"item_total":             itemTotal,
+		"delivery_fee":           deliveryFee,
+		"platform_fee":           platformFee,
+		"gst":                    gst,
+		"discount":               0,
+		"coupon_code":            req.CouponCode,
+		"tip":                    req.Tip,
+		"grand_total":            grandTotal,
+		"payment_method":         req.PaymentMethod,
+		"payment_status":         models.PaymentPending,
+		"status":                 models.OrderStatusPlaced,
+		"special_instructions":   req.SpecialInstructions,
+		"delivery_instructions":  req.DeliveryInstructions,
 		"estimated_delivery_min": 30,
-		"placed_at":             time.Now().Format(time.RFC3339),
+		"placed_at":              time.Now().Format(time.RFC3339),
 	}
 
 	doc, err := h.appwrite.CreateOrder("unique()", orderData)
@@ -92,8 +92,8 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 func (h *OrderHandler) ListOrders(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	result, err := h.appwrite.ListOrders([]string{
-		fmt.Sprintf(`equal("customer_id", ["%s"])`, userID),
-		`orderDesc("placed_at")`,
+		appwrite.QueryEqual("customer_id", userID),
+		appwrite.QueryOrderDesc("placed_at"),
 	})
 	if err != nil {
 		utils.InternalError(c, "Failed to fetch orders")
