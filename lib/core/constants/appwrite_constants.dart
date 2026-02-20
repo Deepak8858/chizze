@@ -14,11 +14,10 @@ class AppwriteConstants {
   static const String ordersCollection = 'orders';
   static const String reviewsCollection = 'reviews';
   static const String couponsCollection = 'coupons';
-  static const String favoritesCollection = 'favorites';
   static const String notificationsCollection = 'notifications';
-  static const String deliveryPartnersCollection = 'delivery_partners';
-  static const String deliveryLocationsCollection = 'delivery_locations';
-  static const String payoutsCollection = 'payouts';
+  static const String deliveryRequestsCollection = 'delivery_requests';
+  static const String riderLocationsCollection = 'rider_locations';
+  static const String paymentsCollection = 'payments';
 
   // Storage Buckets
   static const String restaurantImagesBucket = 'restaurant-images';

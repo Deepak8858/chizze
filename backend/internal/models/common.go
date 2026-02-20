@@ -24,11 +24,11 @@ const (
 	CollectionMenuCategories   = "menu_categories"
 	CollectionMenuItems        = "menu_items"
 	CollectionOrders           = "orders"
-	CollectionDeliveryPartners = "delivery_partners"
-	CollectionDeliveryLocations = "delivery_locations"
+	CollectionDeliveryRequests = "delivery_requests"
+	CollectionRiderLocations   = "rider_locations"
 	CollectionReviews          = "reviews"
 	CollectionCoupons          = "coupons"
-	CollectionPayouts          = "payouts"
+	CollectionPayments         = "payments"
 	CollectionNotifications    = "notifications"
 )
 

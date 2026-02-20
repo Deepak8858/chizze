@@ -1,8 +1,6 @@
 package services
 
 import (
-	"fmt"
-
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/pkg/appwrite"
 )
@@ -31,7 +29,7 @@ func (s *AppwriteService) UpdateUser(userID string, data map[string]interface{})
 
 func (s *AppwriteService) ListAddresses(userID string) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionAddresses, []string{
-		fmt.Sprintf(`equal("user_id", ["%s"])`, userID),
+		appwrite.QueryEqual("user_id", userID),
 	})
 }
 
@@ -65,7 +63,7 @@ func (s *AppwriteService) UpdateRestaurant(id string, data map[string]interface{
 
 func (s *AppwriteService) ListMenuItems(restaurantID string) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionMenuItems, []string{
-		fmt.Sprintf(`equal("restaurant_id", ["%s"])`, restaurantID),
+		appwrite.QueryEqual("restaurant_id", restaurantID),
 	})
 }
 
@@ -107,7 +105,7 @@ func (s *AppwriteService) CreateReview(id string, data map[string]interface{}) (
 
 func (s *AppwriteService) ListReviews(restaurantID string) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionReviews, []string{
-		fmt.Sprintf(`equal("restaurant_id", ["%s"])`, restaurantID),
+		appwrite.QueryEqual("restaurant_id", restaurantID),
 	})
 }
 
@@ -129,8 +127,8 @@ func (s *AppwriteService) GetCoupon(id string) (map[string]interface{}, error) {
 
 func (s *AppwriteService) ListNotifications(userID string) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionNotifications, []string{
-		fmt.Sprintf(`equal("user_id", ["%s"])`, userID),
-		`orderDesc("created_at")`,
+		appwrite.QueryEqual("user_id", userID),
+		appwrite.QueryOrderDesc("created_at"),
 	})
 }
 
@@ -141,11 +139,11 @@ func (s *AppwriteService) UpdateNotification(id string, data map[string]interfac
 // ─── Delivery Partners ───
 
 func (s *AppwriteService) GetDeliveryPartner(userID string) (*appwrite.DocumentList, error) {
-	return s.client.ListDocuments(models.CollectionDeliveryPartners, []string{
-		fmt.Sprintf(`equal("user_id", ["%s"])`, userID),
+	return s.client.ListDocuments(models.CollectionDeliveryRequests, []string{
+		appwrite.QueryEqual("user_id", userID),
 	})
 }
 
 func (s *AppwriteService) UpdateDeliveryPartner(id string, data map[string]interface{}) (map[string]interface{}, error) {
-	return s.client.UpdateDocument(models.CollectionDeliveryPartners, id, data)
+	return s.client.UpdateDocument(models.CollectionDeliveryRequests, id, data)
 }
