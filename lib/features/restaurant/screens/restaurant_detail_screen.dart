@@ -245,7 +245,7 @@ class _RestaurantDetailScreenState
           Switch(
             value: _vegFilter,
             onChanged: (v) => setState(() => _vegFilter = v),
-            activeColor: AppColors.veg,
+            activeThumbColor: AppColors.veg,
           ),
         ],
       ),

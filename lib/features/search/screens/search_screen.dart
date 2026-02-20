@@ -4,7 +4,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
-import '../../../shared/widgets/chizze_button.dart';
 import '../../home/models/restaurant.dart';
 
 /// Search state

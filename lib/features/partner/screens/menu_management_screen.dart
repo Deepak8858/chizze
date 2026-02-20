@@ -118,7 +118,7 @@ class MenuManagementScreen extends ConsumerWidget {
                   onChanged: (_) => ref
                       .read(menuManagementProvider.notifier)
                       .toggleCategoryActive(category.id),
-                  activeColor: AppColors.primary,
+                  activeThumbColor: AppColors.primary,
                 ),
                 // Edit
                 IconButton(
@@ -273,7 +273,7 @@ class MenuManagementScreen extends ConsumerWidget {
               onChanged: (_) => ref
                   .read(menuManagementProvider.notifier)
                   .toggleItemAvailability(item.id),
-              activeColor: AppColors.success,
+              activeThumbColor: AppColors.success,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
 
@@ -459,7 +459,7 @@ class MenuManagementScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               DropdownButtonFormField<String>(
-                value: selectedCategoryId,
+                initialValue: selectedCategoryId,
                 dropdownColor: AppColors.surfaceElevated,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: categories
@@ -489,7 +489,7 @@ class MenuManagementScreen extends ConsumerWidget {
                   Switch(
                     value: isVeg,
                     onChanged: (val) => setSheetState(() => isVeg = val),
-                    activeColor: AppColors.veg,
+                    activeThumbColor: AppColors.veg,
                   ),
                   const Spacer(),
                   Container(
