@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/api_client.dart';
+import '../../../core/services/api_config.dart';
 
 /// A single completed trip
 class TripEarning {
@@ -88,13 +89,58 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
     fetchEarnings();
   }
 
-  Future<void> fetchEarnings() async {
+  Future<void> fetchEarnings({String period = 'week'}) async {
     state = const EarningsState(isLoading: true);
     try {
       // Attempt API fetch
-      final response = await _api.get('/delivery/earnings');
+      final response = await _api.get(
+        ApiConfig.deliveryEarnings,
+        queryParams: {'period': period},
+      );
       if (response.success && response.data != null) {
-        state = const EarningsState(isLoading: false);
+        final data = response.data as Map<String, dynamic>;
+
+        // Parse weekly data
+        final weeklyRaw = data['weekly_data'] as List<dynamic>? ?? [];
+        final weeklyData = weeklyRaw
+            .map(
+              (d) => DailyEarning(
+                day: d['day'] as String? ?? '',
+                amount: (d['amount'] as num?)?.toDouble() ?? 0,
+                trips: (d['trips'] as num?)?.toInt() ?? 0,
+              ),
+            )
+            .toList();
+
+        // Parse recent trips
+        final tripsRaw = data['recent_trips'] as List<dynamic>? ?? [];
+        final recentTrips = tripsRaw
+            .map(
+              (t) => TripEarning(
+                orderId: t['order_id'] as String? ?? '',
+                orderNumber: t['order_number'] as String? ?? '',
+                restaurantName: t['restaurant_id'] as String? ?? '',
+                amount: (t['amount'] as num?)?.toDouble() ?? 0,
+                distanceKm: (t['distance_km'] as num?)?.toDouble() ?? 0,
+                durationMin: (t['duration_min'] as num?)?.toInt() ?? 0,
+                completedAt: DateTime.tryParse(
+                      t['completed_at'] as String? ?? '',
+                    ) ??
+                    DateTime.now(),
+                tipAmount: (t['tip'] as num?)?.toDouble() ?? 0,
+              ),
+            )
+            .toList();
+
+        state = EarningsState(
+          weeklyTotal: (data['weekly_total'] as num?)?.toDouble() ?? 0,
+          monthlyTotal: (data['monthly_total'] as num?)?.toDouble() ?? 0,
+          incentiveEarned: 0,
+          surgeEarned: 0,
+          weeklyData: weeklyData,
+          recentTrips: recentTrips,
+          payouts: const [], // Payouts handled separately when payout system is built
+        );
         return;
       }
     } catch (_) {}

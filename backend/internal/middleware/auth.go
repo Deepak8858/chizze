@@ -1,10 +1,13 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/chizze/backend/internal/config"
+	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -22,8 +25,13 @@ const (
 	ContextRole   = "role"
 )
 
-// Auth middleware validates JWT token and injects user context
-func Auth(cfg *config.Config) gin.HandlerFunc {
+// Auth middleware validates JWT token, checks blacklist, and injects user context
+func Auth(cfg *config.Config, redisClient ...*redispkg.Client) gin.HandlerFunc {
+	var redis *redispkg.Client
+	if len(redisClient) > 0 {
+		redis = redisClient[0]
+	}
+
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -46,11 +54,11 @@ func Auth(cfg *config.Config) gin.HandlerFunc {
 
 		tokenStr := parts[1]
 
-		// Parse and validate JWT
+		// Parse and validate JWT with algorithm pinning (prevent 'none' algorithm attack)
 		claims := &AuthClaims{}
 		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 			return []byte(cfg.JWTSecret), nil
-		})
+		}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("chizze-api"))
 
 		if err != nil || !token.Valid {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
@@ -58,6 +66,20 @@ func Auth(cfg *config.Config) gin.HandlerFunc {
 				"error":   "Invalid or expired token",
 			})
 			return
+		}
+
+		// Check token blacklist (logout invalidation)
+		if redis != nil && claims.UserID != "" {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+			defer cancel()
+			blacklisted, _ := redis.Exists(ctx, "token_blacklist:"+claims.UserID)
+			if blacklisted {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"success": false,
+					"error":   "Token has been revoked",
+				})
+				return
+			}
 		}
 
 		// Inject user context

@@ -20,8 +20,9 @@ type Config struct {
 	AppwriteDatabaseID string
 
 	// Razorpay
-	RazorpayKeyID     string
-	RazorpayKeySecret string
+	RazorpayKeyID        string
+	RazorpayKeySecret    string
+	RazorpayWebhookSecret string
 
 	// Redis
 	RedisURL string
@@ -58,12 +59,13 @@ func Load() *Config {
 	cfg := &Config{
 		Port:               getEnv("PORT", "8080"),
 		AppwriteEndpoint:   getEnv("APPWRITE_ENDPOINT", "https://sgp.cloud.appwrite.io/v1"),
-		AppwriteProjectID:  getEnv("APPWRITE_PROJECT_ID", "6993347c0006ead7404d"),
-		AppwriteAPIKey:     getEnv("APPWRITE_API_KEY", ""),
-		AppwriteDatabaseID: getEnv("APPWRITE_DATABASE_ID", "chizze_db"),
-		RazorpayKeyID:      getEnv("RAZORPAY_KEY_ID", ""),
-		RazorpayKeySecret:  getEnv("RAZORPAY_KEY_SECRET", ""),
-		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
+		AppwriteProjectID:    getEnv("APPWRITE_PROJECT_ID", ""),
+		AppwriteAPIKey:       getEnv("APPWRITE_API_KEY", ""),
+		AppwriteDatabaseID:   getEnv("APPWRITE_DATABASE_ID", "chizze_db"),
+		RazorpayKeyID:        getEnv("RAZORPAY_KEY_ID", ""),
+		RazorpayKeySecret:    getEnv("RAZORPAY_KEY_SECRET", ""),
+		RazorpayWebhookSecret: getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
+		RedisURL:           getEnv("REDIS_URL", "redis://:Dream%408858@165.232.177.81:6379"),
 		JWTSecret:          getEnv("JWT_SECRET", "chizze-dev-secret"),
 		AllowedOrigins:     getEnv("ALLOWED_ORIGINS", "*"),
 		GinMode:            getEnv("GIN_MODE", "debug"),

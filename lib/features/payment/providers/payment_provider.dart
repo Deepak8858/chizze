@@ -10,8 +10,12 @@ import '../../orders/models/order.dart' as app;
 
 /// Razorpay configuration
 class RazorpayConfig {
-  static const String keyId =
-      'rzp_test_XXXXXXXXXXXXXXX'; // Replace with real key
+  // Fallback test key — only used in dev when backend doesn't provide one
+  // In production the backend always returns the live key in the order response
+  static const String keyId = String.fromEnvironment(
+    'RAZORPAY_KEY',
+    defaultValue: 'rzp_test_SIjgJ176oKm8mn',
+  );
   static const String keySecret =
       ''; // Keep empty in client — verify on Go backend
 }
@@ -68,8 +72,82 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
   }
 
+  /// Place order on Go backend (POST /orders) — returns the created order document
+  /// Used by both COD and Razorpay flows to create the real order first
+  Future<Map<String, dynamic>?> placeBackendOrder({
+    required CartState cartState,
+    required String paymentMethod,
+    required String deliveryAddressId,
+    double tip = 0,
+    String? idempotencyKey,
+  }) async {
+    state = state.copyWith(isProcessing: true, error: null);
+    try {
+      final items = cartState.items
+          .map((ci) => {
+                'item_id': ci.menuItem.id,
+                'name': ci.menuItem.name,
+                'quantity': ci.quantity,
+                'price': ci.menuItem.price,
+              })
+          .toList();
+
+      final body = <String, dynamic>{
+        'restaurant_id': cartState.restaurantId ?? '',
+        'delivery_address_id': deliveryAddressId,
+        'items': items,
+        'payment_method': paymentMethod,
+        'tip': tip,
+        'special_instructions': cartState.specialInstructions,
+        'delivery_instructions': cartState.deliveryInstructions,
+      };
+      if (cartState.couponCode != null) {
+        body['coupon_code'] = cartState.couponCode;
+      }
+
+      final Map<String, String> headers = {};
+      if (idempotencyKey != null) {
+        headers['X-Idempotency-Key'] = idempotencyKey;
+      }
+
+      final response = await _api.post(
+        ApiConfig.orders,
+        body: body,
+      );
+
+      if (response.success && response.data != null) {
+        final data = response.data as Map<String, dynamic>;
+        final orderId = data['\$id'] as String? ?? '';
+        state = state.copyWith(orderId: orderId, isProcessing: false);
+        return data;
+      } else {
+        state = state.copyWith(
+          isProcessing: false,
+          error: response.error ?? 'Failed to create order',
+        );
+        return null;
+      }
+    } on ApiException catch (e) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: 'Order failed: ${e.message}',
+      );
+      return null;
+    } catch (e) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: 'Failed to place order: $e',
+      );
+      return null;
+    }
+  }
+
   /// Start payment — initiate via Go backend, then open Razorpay
+  ///
+  /// Flow: POST /payments/initiate (with order_id) → get razorpay_order_id
+  ///       → open Razorpay checkout → on success → POST /payments/verify
   Future<void> startPayment({
+    required String orderId,
     required double amount,
     required String customerEmail,
     required String customerPhone,
@@ -78,32 +156,39 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     VoidCallback? onSuccess,
   }) async {
     _onSuccess = onSuccess;
-    state = state.copyWith(isProcessing: true, error: null);
+    state = state.copyWith(isProcessing: true, error: null, orderId: orderId);
 
     try {
       // Step 1: Create Razorpay order via Go backend
       final response = await _api.post(
         ApiConfig.paymentInitiate,
-        body: {
-          'amount': amount,
-          'receipt': 'chz_${DateTime.now().millisecondsSinceEpoch}',
-        },
+        body: {'order_id': orderId},
       );
 
       String razorpayOrderId = '';
+      String razorpayKeyId = RazorpayConfig.keyId;
+      int amountPaise = (amount * 100).toInt();
+
       if (response.success && response.data != null) {
         final data = response.data as Map<String, dynamic>;
         razorpayOrderId = data['razorpay_order_id'] ?? '';
+        razorpayKeyId = data['razorpay_key_id'] ?? RazorpayConfig.keyId;
+        amountPaise = data['amount'] ?? amountPaise;
+        state = state.copyWith(razorpayOrderId: razorpayOrderId);
+      }
+
+      if (razorpayOrderId.isEmpty) {
         state = state.copyWith(
-          orderId: data['order_id'],
-          razorpayOrderId: razorpayOrderId,
+          isProcessing: false,
+          error: 'Failed to create payment order',
         );
+        return;
       }
 
       // Step 2: Open Razorpay checkout
       final options = {
-        'key': RazorpayConfig.keyId,
-        'amount': (amount * 100).toInt(),
+        'key': razorpayKeyId,
+        'amount': amountPaise,
         'name': 'Chizze',
         'description': description ?? 'Food Delivery Order',
         'order_id': razorpayOrderId,
@@ -123,27 +208,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         error: 'Payment initiation failed: ${e.message}',
       );
     } catch (e) {
-      // Fallback: open without backend order ID (for dev)
-      final options = {
-        'key': RazorpayConfig.keyId,
-        'amount': (amount * 100).toInt(),
-        'name': 'Chizze',
-        'description': description ?? 'Food Delivery Order',
-        'prefill': {
-          'contact': customerPhone,
-          'email': customerEmail,
-          'name': customerName,
-        },
-        'theme': {'color': '#F49D25'},
-      };
-      try {
-        _razorpay.open(options);
-      } catch (e2) {
-        state = state.copyWith(
-          isProcessing: false,
-          error: 'Failed to open payment: $e2',
-        );
-      }
+      state = state.copyWith(
+        isProcessing: false,
+        error: 'Failed to start payment: $e',
+      );
     }
   }
 
@@ -158,15 +226,16 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           'razorpay_signature': response.signature,
         },
       );
-    } catch (_) {
-      // Verification failed — log but don't block UX
+    } catch (e) {
+      debugPrint('[Payment] Backend verification failed: $e');
+      // Non-fatal — webhook will catch it server-side
     }
 
     state = PaymentState(
       isProcessing: false,
       isSuccess: true,
       paymentId: response.paymentId,
-      orderId: response.orderId,
+      orderId: state.orderId,
     );
 
     // Clear cart after successful payment

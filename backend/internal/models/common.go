@@ -1,5 +1,11 @@
 package models
 
+import (
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+)
+
 // Pagination holds page/limit query params
 type Pagination struct {
 	Page    int `json:"page"`
@@ -14,6 +20,18 @@ func DefaultPagination() Pagination {
 // Offset calculates the offset for DB queries
 func (p Pagination) Offset() int {
 	return (p.Page - 1) * p.PerPage
+}
+
+// ParsePagination extracts pagination from query parameters
+func ParsePagination(c *gin.Context) Pagination {
+	p := DefaultPagination()
+	if page, err := strconv.Atoi(c.Query("page")); err == nil && page > 0 {
+		p.Page = page
+	}
+	if perPage, err := strconv.Atoi(c.Query("per_page")); err == nil && perPage > 0 && perPage <= 100 {
+		p.PerPage = perPage
+	}
+	return p
 }
 
 // CollectionIDs are Appwrite collection identifiers

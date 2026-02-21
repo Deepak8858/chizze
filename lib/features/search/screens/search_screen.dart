@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../home/models/restaurant.dart';
+import '../../home/providers/restaurant_provider.dart';
 
 /// Search state
 final searchQueryProvider = StateProvider<String>((ref) => '');
@@ -44,7 +45,7 @@ class SearchFilters {
 final filteredRestaurantsProvider = Provider<List<Restaurant>>((ref) {
   final query = ref.watch(searchQueryProvider).toLowerCase();
   final filters = ref.watch(searchFilterProvider);
-  var restaurants = Restaurant.mockList;
+  var restaurants = ref.watch(restaurantProvider).restaurants;
 
   // Text search
   if (query.isNotEmpty) {

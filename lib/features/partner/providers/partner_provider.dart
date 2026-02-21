@@ -1,7 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
+import '../../../core/services/realtime_service.dart';
 import '../../../features/orders/models/order.dart';
 import '../models/partner_order.dart';
 
@@ -11,12 +14,14 @@ class PartnerState {
   final PartnerMetrics metrics;
   final List<PartnerOrder> orders;
   final bool isLoading;
+  final String? restaurantName;
 
   const PartnerState({
     this.isOnline = true,
     this.metrics = const PartnerMetrics(),
     this.orders = const [],
     this.isLoading = false,
+    this.restaurantName,
   });
 
   PartnerState copyWith({
@@ -24,12 +29,14 @@ class PartnerState {
     PartnerMetrics? metrics,
     List<PartnerOrder>? orders,
     bool? isLoading,
+    String? restaurantName,
   }) {
     return PartnerState(
       isOnline: isOnline ?? this.isOnline,
       metrics: metrics ?? this.metrics,
       orders: orders ?? this.orders,
       isLoading: isLoading ?? this.isLoading,
+      restaurantName: restaurantName ?? this.restaurantName,
     );
   }
 
@@ -61,24 +68,73 @@ class PartnerState {
       .toList();
 }
 
-/// Partner notifier — API-backed with mock fallback
+/// Partner notifier — API-backed with mock fallback + Realtime
 class PartnerNotifier extends StateNotifier<PartnerState> {
   final ApiClient _api;
+  final RealtimeService _realtime;
+  StreamSubscription? _realtimeSub;
 
-  PartnerNotifier(this._api) : super(const PartnerState()) {
+  PartnerNotifier(this._api, this._realtime) : super(const PartnerState()) {
     _loadData();
+    _subscribeToRealtime();
+  }
+
+  /// Listen for new/updated orders in real-time
+  void _subscribeToRealtime() {
+    try {
+      final channel = RealtimeChannels.allOrdersChannel();
+      _realtimeSub = _realtime.subscribe(channel).listen((event) {
+        if (event.type == RealtimeEventType.create ||
+            event.type == RealtimeEventType.update) {
+          // Refresh orders when any order changes
+          refresh();
+        }
+      });
+    } catch (_) {} // Realtime not available
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
     state = state.copyWith(isLoading: true);
     try {
-      // Attempt to fetch from API
-      final response = await _api.get(
-        '${ApiConfig.partnerOrders}/../dashboard',
-      );
-      if (response.success) {
-        // Parse from API if available
-        state = state.copyWith(isLoading: false);
+      // Fetch dashboard metrics + active orders in parallel
+      final results = await Future.wait([
+        _api.get(ApiConfig.partnerDashboard),
+        _api.get(ApiConfig.partnerOrders, queryParams: {'per_page': 50}),
+      ]);
+
+      final dashboardResponse = results[0];
+      final ordersResponse = results[1];
+
+      if (dashboardResponse.success && dashboardResponse.data != null) {
+        final d = dashboardResponse.data as Map<String, dynamic>;
+        final metrics = PartnerMetrics(
+          todayRevenue: (d['today_revenue'] ?? 0).toDouble(),
+          todayOrders: d['today_orders'] ?? 0,
+          avgRating: (d['avg_rating'] ?? 0).toDouble(),
+          pendingOrders: d['pending_orders'] ?? 0,
+        );
+
+        final isOnline = d['is_online'] ?? true;
+        final restaurantName = d['restaurant_name'] as String?;
+
+        List<PartnerOrder> orders = [];
+        if (ordersResponse.success && ordersResponse.data != null) {
+          orders = _parseOrders(ordersResponse.data);
+        }
+
+        state = state.copyWith(
+          metrics: metrics,
+          orders: orders,
+          isOnline: isOnline,
+          restaurantName: restaurantName,
+          isLoading: false,
+        );
         return;
       }
     } catch (_) {}
@@ -91,9 +147,52 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     );
   }
 
+  /// Parse orders from API response
+  List<PartnerOrder> _parseOrders(dynamic data) {
+    if (data is! List) return [];
+    return data.map<PartnerOrder>((item) {
+      final map = item as Map<String, dynamic>;
+
+      // Parse items JSON if stored as string
+      if (map['items'] is String) {
+        try {
+          map['items'] = jsonDecode(map['items'] as String);
+        } catch (_) {
+          map['items'] = [];
+        }
+      }
+
+      final order = Order.fromMap(map);
+      final isNew = map['is_new'] == true;
+      final deadlineStr = map['accept_deadline'] as String?;
+      DateTime? deadline;
+      if (deadlineStr != null) {
+        deadline = DateTime.tryParse(deadlineStr);
+      }
+      return PartnerOrder(
+        order: order,
+        acceptDeadline: deadline,
+        isNew: isNew,
+      );
+    }).toList();
+  }
+
+  /// Refresh data from API
+  Future<void> refresh() => _loadData();
+
   /// Toggle restaurant online/offline
-  void toggleOnline() {
-    state = state.copyWith(isOnline: !state.isOnline);
+  Future<void> toggleOnline() async {
+    final newState = !state.isOnline;
+    state = state.copyWith(isOnline: newState);
+    try {
+      await _api.put(
+        ApiConfig.partnerRestaurantStatus,
+        body: {'is_online': newState},
+      );
+    } catch (_) {
+      // Revert on failure
+      state = state.copyWith(isOnline: !newState);
+    }
   }
 
   /// Accept an order
@@ -180,5 +279,6 @@ final partnerProvider = StateNotifierProvider<PartnerNotifier, PartnerState>((
   ref,
 ) {
   final api = ref.watch(apiClientProvider);
-  return PartnerNotifier(api);
+  final realtime = ref.watch(realtimeServiceProvider);
+  return PartnerNotifier(api, realtime);
 });

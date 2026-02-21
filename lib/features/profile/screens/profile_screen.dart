@@ -79,7 +79,7 @@ class ProfileScreen extends ConsumerWidget {
                     value: profile.isVeg,
                     onChanged: (_) =>
                         ref.read(userProfileProvider.notifier).toggleVeg(),
-                    activeColor: AppColors.veg,
+                    activeTrackColor: AppColors.veg,
                   ),
                 ),
                 _SettingsTile(
@@ -89,7 +89,7 @@ class ProfileScreen extends ConsumerWidget {
                     value: profile.darkMode,
                     onChanged: (_) =>
                         ref.read(userProfileProvider.notifier).toggleDarkMode(),
-                    activeColor: AppColors.primary,
+                    activeTrackColor: AppColors.primary,
                   ),
                 ),
               ]),

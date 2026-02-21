@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../auth/auth_provider.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
+import '../../features/auth/screens/role_selection_screen.dart';
+import '../../features/auth/screens/onboarding_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/splash/screens/splash_screen.dart';
 import '../../features/search/screens/search_screen.dart';
@@ -27,36 +29,97 @@ import '../../features/profile/screens/address_management_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/coupons/screens/coupons_screen.dart';
 
-/// GoRouter provider with auth + role-based redirects
+/// Notifier that bridges Riverpod auth state → GoRouter refreshListenable.
+/// Only notifies when auth STATUS changes (not isLoading), so that in-progress
+/// navigations (like push to OTP screen) aren't destroyed.
+class _RouterNotifier extends ChangeNotifier {
+  AuthState _authState = const AuthState();
+
+  AuthState get authState => _authState;
+
+  void update(AuthState newState) {
+    // Notify GoRouter when auth status, role, or onboarding state changes.
+    // NOT when isLoading toggles — that was destroying navigation state.
+    final statusChanged = newState.status != _authState.status;
+    final roleChanged = newState.userRole != _authState.userRole;
+    final newUserChanged = newState.isNewUser != _authState.isNewUser;
+    _authState = newState;
+    if (statusChanged || roleChanged || newUserChanged) {
+      debugPrint('[Router] Auth state changed → status=${newState.status}, role=${newState.userRole}, isNew=${newState.isNewUser}');
+      notifyListeners();
+    }
+  }
+}
+
+/// Persistent router notifier — lives for the app lifetime.
+final _routerNotifierProvider = Provider<_RouterNotifier>((ref) {
+  final notifier = _RouterNotifier();
+  ref.listen<AuthState>(authProvider, (_, next) {
+    notifier.update(next);
+  });
+  // Seed with current value
+  notifier.update(ref.read(authProvider));
+  return notifier;
+});
+
+/// GoRouter provider — creates the router ONCE with refreshListenable.
+/// Navigation state is preserved across auth loading changes.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  final notifier = ref.watch(_routerNotifierProvider);
 
   return GoRouter(
     initialLocation: '/',
     debugLogDiagnostics: true,
+    refreshListenable: notifier,
     redirect: (context, state) {
+      final authState = notifier.authState;
       final isAuth = authState.isAuthenticated;
+      final isSplash = state.uri.path == '/';
       final isAuthRoute =
           state.uri.path == '/login' ||
           state.uri.path == '/otp' ||
-          state.uri.path == '/';
+          state.uri.path == '/role-select';
+      final isOnboarding = state.uri.path == '/onboarding';
       final isPartnerRoute = state.uri.path.startsWith('/partner');
 
-      // Still loading initial auth check
-      if (authState.status == AuthStatus.initial) return '/';
+      debugPrint('[Router] redirect: path=${state.uri.path}, status=${authState.status}, isAuth=$isAuth, isNew=${authState.isNewUser}');
 
-      // Not authenticated → redirect to login
-      if (!isAuth && !isAuthRoute) return '/login';
+      // Still loading initial auth check — stay on splash
+      if (authState.status == AuthStatus.initial) return isSplash ? null : '/';
 
-      // Authenticated → redirect away from auth routes
+      // Auth resolved — redirect away from splash
+      if (isSplash) {
+        if (isAuth) {
+          // New user needs onboarding (name + location)
+          if (authState.needsOnboarding) return '/onboarding';
+          if (authState.isPartner) return '/partner/dashboard';
+          if (authState.isDeliveryPartner) return '/delivery/dashboard';
+          return '/home';
+        }
+        return '/role-select';
+      }
+
+      // Not authenticated → redirect to role selection (but allow auth routes)
+      if (!isAuth && !isAuthRoute) return '/role-select';
+
+      // Authenticated user on auth routes → redirect to proper home
       if (isAuth && isAuthRoute) {
+        // New user needs onboarding first
+        if (authState.needsOnboarding) return '/onboarding';
+        if (authState.isPartner) return '/partner/dashboard';
+        if (authState.isDeliveryPartner) return '/delivery/dashboard';
+        return '/home';
+      }
+
+      // Authenticated user on onboarding — allow if still new, redirect if already onboarded
+      if (isAuth && isOnboarding && !authState.needsOnboarding) {
         if (authState.isPartner) return '/partner/dashboard';
         if (authState.isDeliveryPartner) return '/delivery/dashboard';
         return '/home';
       }
 
       // Partner trying to access customer routes (and vice versa)
-      if (isAuth && authState.isPartner && !isPartnerRoute && !isAuthRoute) {
+      if (isAuth && authState.isPartner && !isPartnerRoute && !isAuthRoute && !isOnboarding) {
         // Allow some shared routes
         if (state.uri.path == '/cart' ||
             state.uri.path == '/payment' ||
@@ -74,8 +137,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ─── Splash ───
       GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
 
+      // ─── Role Selection ───
+      GoRoute(path: '/role-select', builder: (context, state) => const RoleSelectionScreen()),
+
       // ─── Auth ───
-      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
       GoRoute(
         path: '/otp',
         builder: (context, state) {
@@ -86,6 +155,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
+
+      // ─── Onboarding (new user: name + location) ───
+      GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingScreen()),
 
       // ─── Restaurant Detail (standalone) ───
       GoRoute(

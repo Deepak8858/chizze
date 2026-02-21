@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
@@ -24,6 +25,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     (_) => TextEditingController(),
   );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  bool _isVerifying = false;
 
   @override
   void dispose() {
@@ -47,29 +49,56 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     }
 
     // Auto-submit when all 6 digits are entered
-    if (_otp.length == 6) {
+    if (_otp.length == 6 && !_isVerifying) {
       _verifyOTP();
     }
   }
 
   void _verifyOTP() {
+    if (_isVerifying) return;
+    setState(() => _isVerifying = true);
+    debugPrint('[OTP] Verifying OTP for userId=${widget.userId}');
     ref.read(authProvider.notifier).verifyPhoneOTP(widget.userId, _otp);
+  }
+
+  void _clearOtp() {
+    for (final c in _controllers) {
+      c.clear();
+    }
+    _focusNodes[0].requestFocus();
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
 
-    // Listen for errors
+    // Listen for auth state changes
     ref.listen<AuthState>(authProvider, (prev, next) {
+      // Auth success → router redirect will handle navigation based on role + onboarding
+      if (prev?.status != AuthStatus.authenticated &&
+          next.status == AuthStatus.authenticated) {
+        debugPrint('[OTP] Auth success! Router redirect will navigate.');
+        // Trigger GoRouter redirect by navigating to root
+        if (mounted) context.go('/');
+        return;
+      }
+      // Error → show snackbar, reset verify flag, clear OTP
       if (next.error != null) {
+        debugPrint('[OTP] Error: ${next.error}');
+        setState(() => _isVerifying = false);
+        _clearOtp();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.error!),
             backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
           ),
         );
         ref.read(authProvider.notifier).clearError();
+      }
+      // Loading finished without success → reset flag
+      if (prev?.isLoading == true && !next.isLoading && next.status != AuthStatus.authenticated) {
+        setState(() => _isVerifying = false);
       }
     });
 
@@ -79,7 +108,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         backgroundColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -167,8 +196,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               // ─── Verify Button ───
               ChizzeButton(
                 label: 'Verify OTP',
-                isLoading: authState.isLoading,
-                onPressed: _otp.length == 6 ? _verifyOTP : null,
+                isLoading: authState.isLoading || _isVerifying,
+                onPressed: _otp.length == 6 && !_isVerifying ? _verifyOTP : null,
               ).animate(delay: 300.ms).fadeIn(),
 
               const SizedBox(height: AppSpacing.xl),
@@ -179,11 +208,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                   onPressed: authState.isLoading
                       ? null
                       : () async {
+                          final messenger = ScaffoldMessenger.of(context);
                           await ref
                               .read(authProvider.notifier)
                               .sendPhoneOTP(widget.phone);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               const SnackBar(content: Text('OTP resent!')),
                             );
                           }

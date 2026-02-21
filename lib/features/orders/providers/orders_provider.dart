@@ -119,13 +119,18 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
         state = state.copyWith(isLoading: false, error: response.error);
       }
     } on ApiException catch (e) {
-      // Fallback to mock data in development
-      state = state.copyWith(orders: Order.mockList, isLoading: false);
-      if (e.statusCode != 0) {
-        state = state.copyWith(error: e.message);
-      }
-    } catch (_) {
-      state = state.copyWith(orders: Order.mockList, isLoading: false);
+      // No mock fallback — show the real error to the user
+      state = state.copyWith(
+        orders: [],
+        isLoading: false,
+        error: e.statusCode != 0 ? e.message : 'Unable to connect to server',
+      );
+    } catch (e) {
+      state = state.copyWith(
+        orders: [],
+        isLoading: false,
+        error: 'Failed to load orders',
+      );
     }
   }
 

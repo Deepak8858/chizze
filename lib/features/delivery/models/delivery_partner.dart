@@ -55,6 +55,25 @@ class DeliveryPartner {
     );
   }
 
+  /// Parse from dashboard API response
+  factory DeliveryPartner.fromDashboard(Map<String, dynamic> json) {
+    return DeliveryPartner(
+      id: json['\$id'] as String? ?? '',
+      userId: json['user_id'] as String? ?? '',
+      name: json['name'] as String? ?? 'Driver',
+      phone: json['phone'] as String? ?? '',
+      vehicleType: json['vehicle_type'] as String? ?? 'bike',
+      vehicleNumber: json['vehicle_number'] as String? ?? '',
+      isOnline: json['is_online'] as bool? ?? false,
+      isOnDelivery: json['is_on_delivery'] as bool? ?? false,
+      rating: (json['rating'] as num?)?.toDouble() ?? 4.5,
+      totalDeliveries: (json['total_deliveries'] as num?)?.toInt() ?? 0,
+      totalEarnings: (json['total_earnings'] as num?)?.toDouble() ?? 0,
+      currentLatitude: (json['current_latitude'] as num?)?.toDouble() ?? 0,
+      currentLongitude: (json['current_longitude'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
   static const mock = DeliveryPartner(
     id: 'dp1',
     userId: 'u_dp1',
@@ -179,6 +198,17 @@ class DeliveryMetrics {
 
   double get weeklyProgress =>
       weeklyGoal > 0 ? (weeklyCompleted / weeklyGoal).clamp(0.0, 1.0) : 0;
+
+  /// Parse from dashboard API response
+  factory DeliveryMetrics.fromDashboard(Map<String, dynamic> json) {
+    return DeliveryMetrics(
+      todayEarnings: (json['today_earnings'] as num?)?.toDouble() ?? 0,
+      todayDeliveries: (json['today_deliveries'] as num?)?.toInt() ?? 0,
+      todayDistanceKm: (json['today_distance_km'] as num?)?.toDouble() ?? 0,
+      weeklyGoal: (json['weekly_goal'] as num?)?.toInt() ?? 50,
+      weeklyCompleted: (json['weekly_completed'] as num?)?.toInt() ?? 0,
+    );
+  }
 
   static const mock = DeliveryMetrics(
     todayEarnings: 850,

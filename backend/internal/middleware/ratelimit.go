@@ -1,11 +1,13 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
+	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/gin-gonic/gin"
 )
 
@@ -94,6 +96,38 @@ func RateLimit(ratePerSec float64, burst int) gin.HandlerFunc {
 
 		if !allowed {
 			c.Header("Retry-After", "1")
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"success": false,
+				"error":   "Rate limit exceeded. Please try again later.",
+			})
+			return
+		}
+		c.Next()
+	}
+}
+
+// RedisRateLimit returns a Gin middleware that uses Redis for distributed
+// rate limiting via a sliding-window counter. Falls back to allow on Redis errors.
+func RedisRateLimit(redisClient *redispkg.Client, ratePerSec float64, burst int) gin.HandlerFunc {
+	window := time.Second
+	limit := int64(burst)
+
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		key := fmt.Sprintf("rl:%s", ip)
+
+		allowed, remaining, retryAfter := redisClient.RateLimitCheck(c.Request.Context(), key, limit, window)
+
+		// Set rate limit headers
+		c.Header("X-RateLimit-Limit", strconv.Itoa(burst))
+		c.Header("X-RateLimit-Remaining", strconv.FormatInt(remaining, 10))
+
+		if !allowed {
+			retrySeconds := int(retryAfter.Seconds())
+			if retrySeconds < 1 {
+				retrySeconds = 1
+			}
+			c.Header("Retry-After", strconv.Itoa(retrySeconds))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"success": false,
 				"error":   "Rate limit exceeded. Please try again later.",

@@ -46,6 +46,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     ];
 
     _demoTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       if (step < statuses.length) {
         ref
             .read(ordersProvider.notifier)

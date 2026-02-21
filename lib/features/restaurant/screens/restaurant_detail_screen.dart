@@ -6,6 +6,7 @@ import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../../home/models/restaurant.dart';
+import '../../home/providers/restaurant_provider.dart';
 import '../models/menu_item.dart';
 import '../../cart/providers/cart_provider.dart';
 
@@ -22,19 +23,28 @@ class RestaurantDetailScreen extends ConsumerStatefulWidget {
 
 class _RestaurantDetailScreenState
     extends ConsumerState<RestaurantDetailScreen> {
-  late final Restaurant restaurant;
+  Restaurant? _restaurant;
   late final List<MenuCategory> categories;
   late final List<MenuItem> menuItems;
   bool _vegFilter = false;
+  bool _initialized = false;
 
-  @override
-  void initState() {
-    super.initState();
-    // Load mock data (will be replaced with Appwrite queries)
-    restaurant = Restaurant.mockList.firstWhere(
-      (r) => r.id == widget.restaurantId,
+  Restaurant get restaurant => _restaurant!;
+
+  void _initData() {
+    if (_initialized) return;
+    _initialized = true;
+    // Look up restaurant from the provider (API-backed) first, fallback to mock
+    final restaurants = ref.read(restaurantProvider).restaurants;
+    _restaurant = restaurants.cast<Restaurant?>().firstWhere(
+      (r) => r?.id == widget.restaurantId,
+      orElse: () => null,
+    );
+    _restaurant ??= Restaurant.mockList.cast<Restaurant?>().firstWhere(
+      (r) => r?.id == widget.restaurantId,
       orElse: () => Restaurant.mockList.first,
     );
+    // Menu items still from mock until menu API is implemented
     categories = MenuItem.mockCategoriesForRestaurant(widget.restaurantId);
     menuItems = MenuItem.mockListForRestaurant(widget.restaurantId);
   }
@@ -46,6 +56,7 @@ class _RestaurantDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    _initData();
     final cartState = ref.watch(cartProvider);
 
     return Scaffold(

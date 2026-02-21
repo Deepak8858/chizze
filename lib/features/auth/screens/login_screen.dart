@@ -20,6 +20,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _showEmailLogin = false;
+  bool _roleSet = false;
 
   @override
   void dispose() {
@@ -29,17 +30,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  /// Get the selected role from route extra (passed from role selection screen)
+  String _getSelectedRole(BuildContext context) {
+    try {
+      final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+      return extra?['role'] as String? ?? 'customer';
+    } catch (_) {
+      return 'customer';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+    final selectedRole = _getSelectedRole(context);
 
-    // Listen for errors
+    // Set the selected role in auth provider once (not on every rebuild)
+    if (!_roleSet) {
+      _roleSet = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(authProvider.notifier).setSelectedRole(selectedRole);
+      });
+    }
+
+    final roleLabel_ = switch (selectedRole) {
+      'restaurant_owner' => 'Restaurant Partner',
+      'delivery_partner' => 'Delivery Partner',
+      _ => '',
+    };
+
+    // Listen for auth state changes
     ref.listen<AuthState>(authProvider, (prev, next) {
+      // Auth success → router redirect will handle navigation based on role + onboarding
+      if (prev?.status != AuthStatus.authenticated &&
+          next.status == AuthStatus.authenticated) {
+        debugPrint('[Login] Auth success! Router redirect will navigate.');
+        return;
+      }
+      // Error → show snackbar
       if (next.error != null) {
+        debugPrint('[Login] Error: ${next.error}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.error!),
             backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
           ),
         );
         ref.read(authProvider.notifier).clearError();
@@ -57,7 +92,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: AppSpacing.massive),
 
               // ─── Brand Header ───
-              _buildBrandHeader(),
+              _buildBrandHeader(roleLabel_),
 
               const SizedBox(height: AppSpacing.huge),
 
@@ -85,7 +120,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildBrandHeader() {
+  Widget _buildBrandHeader(String roleLabel) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -119,7 +154,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const SizedBox(height: AppSpacing.sm),
 
         Text(
-          'Sign in to order your favorite food',
+          roleLabel.isNotEmpty
+              ? 'Sign in as $roleLabel'
+              : 'Sign in to order your favorite food',
           style: AppTypography.body2,
         ).animate(delay: 400.ms).fadeIn(),
       ],

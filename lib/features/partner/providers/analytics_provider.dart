@@ -62,13 +62,54 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
     fetchAnalytics();
   }
 
-  Future<void> fetchAnalytics() async {
+  Future<void> fetchAnalytics({String period = 'week'}) async {
     state = const AnalyticsState(isLoading: true);
     try {
-      final response = await _api.get(ApiConfig.partnerAnalytics);
+      final response = await _api.get(
+        ApiConfig.partnerAnalytics,
+        queryParams: {'period': period},
+      );
       if (response.success && response.data != null) {
-        // Parse from API
-        state = const AnalyticsState(isLoading: false);
+        final d = response.data as Map<String, dynamic>;
+
+        // Parse revenue data
+        final revenueList = (d['revenue_data'] as List?)?.map((r) {
+          final m = r as Map<String, dynamic>;
+          return DailyRevenue(
+            day: m['day'] ?? '',
+            amount: (m['amount'] ?? 0).toDouble(),
+            orders: m['orders'] ?? 0,
+          );
+        }).toList() ?? [];
+
+        // Parse top items
+        final topItemsList = (d['top_items'] as List?)?.map((t) {
+          final m = t as Map<String, dynamic>;
+          return TopItem(
+            name: m['name'] ?? '',
+            orderCount: m['order_count'] ?? m['Count'] ?? 0,
+            revenue: (m['revenue'] ?? m['Rev'] ?? 0).toDouble(),
+            isVeg: m['is_veg'] ?? m['IsVeg'] ?? false,
+          );
+        }).toList() ?? [];
+
+        // Parse peak hours
+        final peakHoursList = (d['peak_hours'] as List?)?.map((h) {
+          final m = h as Map<String, dynamic>;
+          return HourlyVolume(
+            hour: m['hour'] ?? 0,
+            orders: m['orders'] ?? 0,
+          );
+        }).toList() ?? [];
+
+        state = AnalyticsState(
+          totalRevenue: (d['total_revenue'] ?? 0).toDouble(),
+          totalOrders: d['total_orders'] ?? 0,
+          avgOrderValue: (d['avg_order_value'] ?? 0).toDouble(),
+          revenueData: revenueList,
+          topItems: topItemsList,
+          peakHours: peakHoursList,
+        );
         return;
       }
     } catch (_) {}

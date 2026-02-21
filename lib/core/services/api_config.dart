@@ -1,11 +1,9 @@
+import '../../config/environment.dart';
+
 /// API configuration constants for the Go backend
 class ApiConfig {
-  /// Base URL for the Go backend API
-  /// Change to your deployed URL in production
-  // For real Android device on same WiFi network:
-  static const String baseUrl = 'http://10.163.246.51:8080/api/v1';
-  // static const String baseUrl = 'http://10.0.2.2:8080/api/v1'; // Android emulator
-  // static const String baseUrl = 'http://localhost:8080/api/v1'; // iOS / Web
+  /// Base URL for the Go backend API — sourced from Environment config
+  static String get baseUrl => Environment.apiBaseUrl;
 
   /// Request timeout in seconds
   static const int timeoutSeconds = 30;
@@ -41,11 +39,18 @@ class ApiConfig {
   static const String notifications = '/notifications';
 
   // Partner
+  static const String partnerDashboard = '/partner/dashboard';
   static const String partnerMenu = '/partner/menu';
   static const String partnerOrders = '/partner/orders';
   static const String partnerAnalytics = '/partner/analytics';
+  static const String partnerCategories = '/partner/categories';
+  static const String partnerRestaurantStatus = '/partner/restaurant/status';
+  static const String partnerPerformance = '/partner/performance';
 
   // Delivery
+  static const String deliveryDashboard = '/delivery/dashboard';
+  static const String deliveryEarnings = '/delivery/earnings';
+  static const String deliveryPerformance = '/delivery/performance';
   static const String deliveryStatus = '/delivery/status';
   static const String deliveryLocation = '/delivery/location';
   static const String deliveryOrders = '/delivery/orders';

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../providers/restaurant_provider.dart';
 import '../models/restaurant.dart';
 
 /// Customer home screen — restaurant discovery feed
@@ -15,7 +16,8 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     final userName = authState.user?.name ?? 'Foodie';
-    final restaurants = Restaurant.mockList;
+    final restaurantState = ref.watch(restaurantProvider);
+    final restaurants = restaurantState.restaurants;
 
     return Scaffold(
       backgroundColor: AppColors.background,

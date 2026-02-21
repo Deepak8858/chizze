@@ -69,7 +69,7 @@ class PartnerDashboardScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Biryani Blues',
+                partnerState.restaurantName ?? 'Restaurant Dashboard',
                 style: AppTypography.h2.copyWith(fontSize: 20),
               ),
               Text('Restaurant Dashboard', style: AppTypography.caption),
@@ -394,6 +394,8 @@ class _QuickOrderCard extends StatelessWidget {
                           style: TextButton.styleFrom(
                             foregroundColor: AppColors.error,
                             padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: const Size(0, 30),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                           child: const Text(
                             'Reject',
@@ -410,6 +412,8 @@ class _QuickOrderCard extends StatelessWidget {
                             backgroundColor: AppColors.success,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 12),
+                            minimumSize: const Size(0, 30),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                           child: const Text(
                             'Accept',

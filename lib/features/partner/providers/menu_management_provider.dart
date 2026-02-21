@@ -43,10 +43,56 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
   Future<void> _loadData() async {
     state = state.copyWith(isLoading: true);
     try {
-      final response = await _api.get(ApiConfig.partnerMenu);
-      if (response.success && response.data != null) {
-        // API returns menu items — parse them
-        state = state.copyWith(isLoading: false);
+      // Fetch menu items and categories in parallel
+      final results = await Future.wait([
+        _api.get(ApiConfig.partnerMenu),
+        _api.get(ApiConfig.partnerCategories),
+      ]);
+
+      final menuResponse = results[0];
+      final catResponse = results[1];
+
+      List<MenuItem> items = [];
+      List<MenuCategory> categories = [];
+
+      if (menuResponse.success && menuResponse.data != null) {
+        final data = menuResponse.data;
+        if (data is Map<String, dynamic>) {
+          final itemsList = data['items'] ?? data['documents'] ?? [];
+          if (itemsList is List) {
+            items = itemsList
+                .map((i) => MenuItem.fromMap(i as Map<String, dynamic>))
+                .toList();
+          }
+        } else if (data is List) {
+          items = data
+              .map((i) => MenuItem.fromMap(i as Map<String, dynamic>))
+              .toList();
+        }
+      }
+
+      if (catResponse.success && catResponse.data != null) {
+        final data = catResponse.data;
+        if (data is Map<String, dynamic>) {
+          final catsList = data['categories'] ?? data['documents'] ?? [];
+          if (catsList is List) {
+            categories = catsList
+                .map((c) => MenuCategory.fromMap(c as Map<String, dynamic>))
+                .toList();
+          }
+        } else if (data is List) {
+          categories = data
+              .map((c) => MenuCategory.fromMap(c as Map<String, dynamic>))
+              .toList();
+        }
+      }
+
+      if (items.isNotEmpty || categories.isNotEmpty) {
+        state = state.copyWith(
+          items: items,
+          categories: categories,
+          isLoading: false,
+        );
         return;
       }
     } catch (_) {}
@@ -59,19 +105,39 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     );
   }
 
+  /// Refresh data from API
+  Future<void> refresh() => _loadData();
+
   // ─── Category Operations ───
 
-  void addCategory(String name) {
-    final newCategory = MenuCategory(
+  Future<void> addCategory(String name) async {
+    final tempCategory = MenuCategory(
       id: 'cat_${DateTime.now().millisecondsSinceEpoch}',
-      restaurantId: 'r1',
+      restaurantId: '',
       name: name,
       sortOrder: state.categories.length,
     );
-    state = state.copyWith(categories: [...state.categories, newCategory]);
+    state = state.copyWith(categories: [...state.categories, tempCategory]);
+
+    try {
+      final response = await _api.post(
+        ApiConfig.partnerCategories,
+        body: {'name': name, 'sort_order': state.categories.length - 1},
+      );
+      if (response.success && response.data != null) {
+        final created = MenuCategory.fromMap(
+          response.data as Map<String, dynamic>,
+        );
+        // Replace temp with real category
+        final updated = state.categories.map((c) {
+          return c.id == tempCategory.id ? created : c;
+        }).toList();
+        state = state.copyWith(categories: updated);
+      }
+    } catch (_) {}
   }
 
-  void updateCategory(String categoryId, String newName) {
+  Future<void> updateCategory(String categoryId, String newName) async {
     final updated = state.categories.map((c) {
       if (c.id == categoryId) {
         return MenuCategory(
@@ -85,29 +151,45 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
       return c;
     }).toList();
     state = state.copyWith(categories: updated);
+
+    _api
+        .put('${ApiConfig.partnerCategories}/$categoryId', body: {'name': newName})
+        .ignore();
   }
 
-  void toggleCategoryActive(String categoryId) {
+  Future<void> toggleCategoryActive(String categoryId) async {
+    MenuCategory? toggled;
     final updated = state.categories.map((c) {
       if (c.id == categoryId) {
-        return MenuCategory(
+        toggled = MenuCategory(
           id: c.id,
           restaurantId: c.restaurantId,
           name: c.name,
           sortOrder: c.sortOrder,
           isActive: !c.isActive,
         );
+        return toggled!;
       }
       return c;
     }).toList();
     state = state.copyWith(categories: updated);
+
+    if (toggled != null) {
+      _api
+          .put(
+            '${ApiConfig.partnerCategories}/$categoryId',
+            body: {'is_active': toggled!.isActive},
+          )
+          .ignore();
+    }
   }
 
-  void deleteCategory(String categoryId) {
+  Future<void> deleteCategory(String categoryId) async {
     state = state.copyWith(
       categories: state.categories.where((c) => c.id != categoryId).toList(),
       items: state.items.where((i) => i.categoryId != categoryId).toList(),
     );
+    _api.delete('${ApiConfig.partnerCategories}/$categoryId').ignore();
   }
 
   // ─── Item Operations ───
@@ -121,7 +203,7 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
   }) {
     final newItem = MenuItem(
       id: 'item_${DateTime.now().millisecondsSinceEpoch}',
-      restaurantId: 'r1',
+      restaurantId: '',
       categoryId: categoryId,
       name: name,
       description: description,
@@ -142,7 +224,17 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
             'is_veg': isVeg,
           },
         )
-        .ignore();
+        .then((response) {
+      if (response.success && response.data != null) {
+        final created = MenuItem.fromMap(
+          response.data as Map<String, dynamic>,
+        );
+        final updated = state.items.map((i) {
+          return i.id == newItem.id ? created : i;
+        }).toList();
+        state = state.copyWith(items: updated);
+      }
+    }).ignore();
   }
 
   void updateItem(
@@ -173,18 +265,17 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     }).toList();
     state = state.copyWith(items: updated);
 
-    // Push to API
-    _api
-        .put(
-          '${ApiConfig.partnerMenu}/$itemId',
-          body: {
-            'name': ?name,
-            'price': ?price,
-            'description': ?description,
-            'is_veg': ?isVeg,
-          },
-        )
-        .ignore();
+    // Build body with only provided fields
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (price != null) body['price'] = price;
+    if (description != null) body['description'] = description;
+    if (isVeg != null) body['is_veg'] = isVeg;
+    if (categoryId != null) body['category_id'] = categoryId;
+
+    if (body.isNotEmpty) {
+      _api.put('${ApiConfig.partnerMenu}/$itemId', body: body).ignore();
+    }
   }
 
   void toggleItemAvailability(String itemId) {

@@ -16,6 +16,7 @@ import (
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/pkg/appwrite"
+	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/gin-gonic/gin"
 )
 
@@ -36,6 +37,13 @@ func main() {
 	// ─── Initialize Clients ───
 	awClient := appwrite.NewClient(cfg)
 
+	// ─── Initialize Redis ───
+	redisClient, err := redispkg.NewClient(cfg.RedisURL)
+	if err != nil {
+		log.Fatalf("FATAL: Redis connection failed: %v", err)
+	}
+	defer redisClient.Close()
+
 	// ─── Initialize Services ───
 	awService := services.NewAppwriteService(awClient)
 	orderService := services.NewOrderService(awService)
@@ -43,16 +51,17 @@ func main() {
 	geoService := services.NewGeoService()
 
 	// ─── Initialize Handlers ───
-	authHandler := handlers.NewAuthHandler(awService)
+	authHandler := handlers.NewAuthHandler(awService, redisClient, cfg)
 	userHandler := handlers.NewUserHandler(awService)
 	restaurantHandler := handlers.NewRestaurantHandler(awService, geoService)
 	menuHandler := handlers.NewMenuHandler(awService)
-	orderHandler := handlers.NewOrderHandler(awService, orderService)
+	orderHandler := handlers.NewOrderHandler(awService, orderService, geoService, redisClient)
 	paymentHandler := handlers.NewPaymentHandler(awService, paymentService)
-	deliveryHandler := handlers.NewDeliveryHandler(awService, geoService)
+	deliveryHandler := handlers.NewDeliveryHandler(awService, geoService, redisClient)
 	reviewHandler := handlers.NewReviewHandler(awService)
 	couponHandler := handlers.NewCouponHandler(awService)
 	notifHandler := handlers.NewNotificationHandler(awService)
+	partnerHandler := handlers.NewPartnerHandler(awService)
 
 	// ─── Create Router ───
 	r := gin.New()
@@ -62,16 +71,22 @@ func main() {
 	r.Use(middleware.Logger())            // Structured logging with request ID
 	r.Use(gin.Recovery())                 // Panic recovery
 	r.Use(middleware.CORS(cfg))           // CORS
-	r.Use(middleware.Gzip())              // Response compression
-	r.Use(middleware.RateLimit(200, 500)) // 200 req/s, burst 500
+	r.Use(middleware.MaxBodySize(2 << 20)) // 2MB max request body
+	r.Use(middleware.Gzip())                                // Response compression
+	r.Use(middleware.RedisRateLimit(redisClient, 200, 500)) // 200 req/s, burst 500 (Redis-backed)
 
 	// Health check (no auth, no rate limit)
 	r.GET("/health", func(c *gin.Context) {
+		redisStatus := "ok"
+		if err := redisClient.Ping(c.Request.Context()); err != nil {
+			redisStatus = "error: " + err.Error()
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
 			"service": "chizze-api",
 			"version": "1.0.0",
 			"uptime":  time.Since(startTime).String(),
+			"redis":   redisStatus,
 		})
 	})
 
@@ -80,12 +95,11 @@ func main() {
 
 	// Auth (public) — stricter rate limit
 	auth := v1.Group("/auth")
-	auth.Use(middleware.RateLimit(10, 20)) // 10 req/s for auth
+	auth.Use(middleware.RedisRateLimit(redisClient, 10, 20)) // 10 req/s for auth (Redis-backed)
 	{
 		auth.POST("/send-otp", authHandler.SendOTP)
 		auth.POST("/verify-otp", authHandler.VerifyOTP)
-		auth.POST("/refresh", authHandler.Refresh)
-		auth.DELETE("/logout", authHandler.Logout)
+		auth.POST("/exchange", authHandler.Exchange)
 	}
 
 	// Restaurants (public)
@@ -103,8 +117,12 @@ func main() {
 
 	// ─── Authenticated Routes ───
 	authenticated := v1.Group("")
-	authenticated.Use(middleware.Auth(cfg))
+	authenticated.Use(middleware.Auth(cfg, redisClient))
 	{
+		// Auth (authenticated)
+		authenticated.POST("/auth/refresh", authHandler.Refresh)
+		authenticated.DELETE("/auth/logout", authHandler.Logout)
+
 		// Users
 		users := authenticated.Group("/users")
 		{
@@ -147,27 +165,50 @@ func main() {
 
 	// ─── Partner Routes (restaurant_owner) ───
 	partner := v1.Group("/partner")
-	partner.Use(middleware.Auth(cfg))
+	partner.Use(middleware.Auth(cfg, redisClient))
 	partner.Use(middleware.RequireRole("restaurant_owner"))
 	{
+		// Dashboard & Analytics
+		partner.GET("/dashboard", partnerHandler.Dashboard)
+		partner.GET("/analytics", partnerHandler.Analytics)
+		partner.GET("/performance", partnerHandler.Performance)
+
+		// Restaurant status
+		partner.PUT("/restaurant/status", partnerHandler.ToggleOnline)
+
+		// Orders
+		partner.GET("/orders", partnerHandler.ListOrders)
+		partner.PUT("/orders/:id/status", orderHandler.UpdateStatus)
+
+		// Menu items
 		partner.GET("/menu", menuHandler.ListItems)
 		partner.POST("/menu", menuHandler.CreateItem)
 		partner.PUT("/menu/:id", menuHandler.UpdateItem)
 		partner.DELETE("/menu/:id", menuHandler.DeleteItem)
 
-		partner.PUT("/orders/:id/status", orderHandler.UpdateStatus)
+		// Menu categories
+		partner.GET("/categories", partnerHandler.ListCategories)
+		partner.POST("/categories", partnerHandler.CreateCategory)
+		partner.PUT("/categories/:id", partnerHandler.UpdateCategory)
+		partner.DELETE("/categories/:id", partnerHandler.DeleteCategory)
+
+		// Reviews
 		partner.POST("/reviews/:id/reply", reviewHandler.ReplyToReview)
 	}
 
 	// ─── Delivery Routes (delivery_partner) ───
 	delivery := v1.Group("/delivery")
-	delivery.Use(middleware.Auth(cfg))
+	delivery.Use(middleware.Auth(cfg, redisClient))
 	delivery.Use(middleware.RequireRole("delivery_partner"))
 	{
+		delivery.GET("/dashboard", deliveryHandler.Dashboard)
+		delivery.GET("/earnings", deliveryHandler.Earnings)
+		delivery.GET("/performance", deliveryHandler.Performance)
 		delivery.PUT("/status", deliveryHandler.ToggleOnline)
 		delivery.PUT("/location", deliveryHandler.UpdateLocation)
 		delivery.PUT("/orders/:id/accept", deliveryHandler.AcceptOrder)
 		delivery.PUT("/orders/:id/status", orderHandler.UpdateStatus)
+		delivery.GET("/orders", deliveryHandler.ActiveOrders)
 	}
 
 	// Webhooks (no auth — validated by signature)
@@ -201,6 +242,9 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced shutdown:", err)
+	}
+	if err := redisClient.Close(); err != nil {
+		log.Printf("Redis close error: %v", err)
 	}
 	fmt.Println("✅ Server stopped gracefully")
 }

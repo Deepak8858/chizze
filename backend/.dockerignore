@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Go module cache (built in container)
+.gomod/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Environment (injected at runtime)
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+bin/
+tmp/
+
+# Tests & tools
+tools/
+**/*_test.go
+coverage.out
+
+# Docker
+docker-compose*.yml
+Dockerfile

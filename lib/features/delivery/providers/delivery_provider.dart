@@ -86,10 +86,18 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
 
   Future<void> _loadData() async {
     try {
-      // Attempt API fetch for delivery partner status
-      final response = await _api.get(ApiConfig.deliveryStatus);
-      if (response.success) {
-        // Parse data if available
+      // Fetch dashboard data (partner profile + today metrics + weekly progress)
+      final response = await _api.get(ApiConfig.deliveryDashboard);
+      if (response.success && response.data != null) {
+        final data = response.data as Map<String, dynamic>;
+        final partner = DeliveryPartner.fromDashboard(data);
+        final metrics = DeliveryMetrics.fromDashboard(data);
+
+        state = state.copyWith(
+          partner: partner,
+          metrics: metrics,
+        );
+        return;
       }
     } catch (_) {}
 
@@ -152,11 +160,32 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       state = state.copyWith(
         activeDelivery: state.activeDelivery!.copyWith(currentStep: next),
       );
+
+      // Map step to order status and push to API
+      final orderId = state.activeDelivery!.request.order.id;
+      String? apiStatus;
+      switch (next) {
+        case DeliveryStep.pickUp:
+          apiStatus = 'picked_up';
+        case DeliveryStep.goToCustomer:
+          apiStatus = 'out_for_delivery';
+        default:
+          break;
+      }
+      if (apiStatus != null) {
+        _api
+            .put(
+              '${ApiConfig.deliveryOrders}/$orderId/status',
+              body: {'status': apiStatus},
+            )
+            .ignore();
+      }
     }
   }
 
   /// Complete delivery
   void completeDelivery() {
+    final orderId = state.activeDelivery?.request.order.id;
     state = state.copyWith(
       clearDelivery: true,
       partner: state.partner.copyWith(isOnDelivery: false),
@@ -172,6 +201,16 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         weeklyCompleted: state.metrics.weeklyCompleted + 1,
       ),
     );
+
+    // Push delivered status to API
+    if (orderId != null) {
+      _api
+          .put(
+            '${ApiConfig.deliveryOrders}/$orderId/status',
+            body: {'status': 'delivered'},
+          )
+          .ignore();
+    }
   }
 
   /// Simulate a new incoming request

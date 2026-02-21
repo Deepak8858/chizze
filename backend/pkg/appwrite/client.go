@@ -259,6 +259,58 @@ func (c *Client) DeleteDocumentCtx(ctx context.Context, collectionID, documentID
 	return err
 }
 
+// ─── JWT Verification ───
+
+// VerifyJWT validates an Appwrite client JWT by calling GET /account
+// Returns the user account data if valid
+func (c *Client) VerifyJWT(jwtToken string) (map[string]interface{}, error) {
+	return c.VerifyJWTCtx(context.Background(), jwtToken)
+}
+
+// VerifyJWTCtx validates an Appwrite JWT with context
+func (c *Client) VerifyJWTCtx(ctx context.Context, jwtToken string) (map[string]interface{}, error) {
+	reqURL := fmt.Sprintf("%s/account", c.endpoint)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Appwrite-Project", c.projectID)
+	req.Header.Set("X-Appwrite-JWT", jwtToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("JWT verification failed (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var account map[string]interface{}
+	if err := json.Unmarshal(body, &account); err != nil {
+		return nil, fmt.Errorf("unmarshal account: %w", err)
+	}
+	return account, nil
+}
+
+// GetEndpoint returns the Appwrite endpoint URL
+func (c *Client) GetEndpoint() string {
+	return c.endpoint
+}
+
+// GetProjectID returns the Appwrite project ID
+func (c *Client) GetProjectID() string {
+	return c.projectID
+}
+
 // ─── Error helpers ───
 
 type retryableError struct {

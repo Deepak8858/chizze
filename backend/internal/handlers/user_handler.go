@@ -7,6 +7,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Allowed fields for profile update
+var allowedProfileFields = map[string]bool{
+	"name":          true,
+	"email":         true,
+	"phone":         true,
+	"profile_image": true,
+	"role":          true,
+	"address":       true,
+	"latitude":      true,
+	"longitude":     true,
+}
+
 // UserHandler handles user profile and address endpoints
 type UserHandler struct {
 	appwrite *services.AppwriteService
@@ -29,7 +41,7 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 	utils.Success(c, user)
 }
 
-// UpdateProfile updates current user profile
+// UpdateProfile updates current user profile with field whitelist
 // PUT /api/v1/users/me
 func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	userID := middleware.GetUserID(c)
@@ -40,7 +52,19 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.appwrite.UpdateUser(userID, req)
+	// Filter to only allowed fields
+	filtered := make(map[string]interface{})
+	for k, v := range req {
+		if allowedProfileFields[k] {
+			filtered[k] = v
+		}
+	}
+	if len(filtered) == 0 {
+		utils.BadRequest(c, "No valid fields to update")
+		return
+	}
+
+	updated, err := h.appwrite.UpdateUser(userID, filtered)
 	if err != nil {
 		utils.InternalError(c, "Failed to update profile")
 		return
@@ -80,15 +104,31 @@ func (h *UserHandler) CreateAddress(c *gin.Context) {
 	utils.Created(c, doc)
 }
 
-// UpdateAddress updates an existing address
+// UpdateAddress updates an existing address with ownership check
 // PUT /api/v1/users/me/addresses/:id
 func (h *UserHandler) UpdateAddress(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 	addrID := c.Param("id")
+
+	// Verify ownership
+	addr, err := h.appwrite.GetAddress(addrID)
+	if err != nil {
+		utils.NotFound(c, "Address not found")
+		return
+	}
+	ownerID, _ := addr["user_id"].(string)
+	if ownerID != userID {
+		utils.Forbidden(c, "Access denied")
+		return
+	}
+
 	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, "Invalid address data")
 		return
 	}
+	// Prevent changing user_id
+	delete(req, "user_id")
 
 	doc, err := h.appwrite.UpdateAddress(addrID, req)
 	if err != nil {
@@ -98,10 +138,24 @@ func (h *UserHandler) UpdateAddress(c *gin.Context) {
 	utils.Success(c, doc)
 }
 
-// DeleteAddress removes an address
+// DeleteAddress removes an address with ownership check
 // DELETE /api/v1/users/me/addresses/:id
 func (h *UserHandler) DeleteAddress(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 	addrID := c.Param("id")
+
+	// Verify ownership
+	addr, err := h.appwrite.GetAddress(addrID)
+	if err != nil {
+		utils.NotFound(c, "Address not found")
+		return
+	}
+	ownerID, _ := addr["user_id"].(string)
+	if ownerID != userID {
+		utils.Forbidden(c, "Access denied")
+		return
+	}
+
 	if err := h.appwrite.DeleteAddress(addrID); err != nil {
 		utils.InternalError(c, "Failed to delete address")
 		return

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../../cart/providers/cart_provider.dart';
+import '../../profile/providers/address_provider.dart';
 import '../providers/payment_provider.dart';
 import '../../orders/providers/orders_provider.dart';
 
@@ -28,11 +30,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     // Listen for payment success → navigate to confirmation
     ref.listen<PaymentState>(paymentProvider, (prev, next) {
       if (next.isSuccess && !(prev?.isSuccess ?? false)) {
-        final order = ref
-            .read(paymentProvider.notifier)
-            .createOrderFromCart(cartState);
-        ref.read(ordersProvider.notifier).addOrder(order);
-        context.go('/order-confirmation/${order.id}');
+        final orderId = next.orderId ?? '';
+        ref.read(cartProvider.notifier).clearCart();
+        ref.read(ordersProvider.notifier).fetchOrders();
+        context.go('/order-confirmation/$orderId');
       }
     });
 
@@ -315,24 +316,59 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
   }
 
-  void _handlePayment(CartState cartState, double total) {
+  void _handlePayment(CartState cartState, double total) async {
+    final authState = ref.read(authProvider);
+    final userName = authState.user?.name ?? 'Chizze Customer';
+    final userEmail = authState.user?.email ?? '';
+    final userPhone = authState.user?.phone ?? '';
+
+    // Get default delivery address
+    final addresses = ref.read(addressProvider);
+    final defaultAddress = addresses.isNotEmpty
+        ? addresses.firstWhere(
+            (a) => a.isDefault,
+            orElse: () => addresses.first,
+          )
+        : null;
+
+    if (defaultAddress == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add a delivery address first')),
+      );
+      return;
+    }
+
+    final paymentMethod = _selectedMethod == 'cod' ? 'cod' : 'razorpay';
+
+    // Step 1: Create order on backend
+    final orderDoc = await ref.read(paymentProvider.notifier).placeBackendOrder(
+          cartState: cartState,
+          paymentMethod: paymentMethod,
+          deliveryAddressId: defaultAddress.id,
+          tip: _tip,
+          idempotencyKey:
+              'order_${DateTime.now().millisecondsSinceEpoch}_${cartState.restaurantId}',
+        );
+
+    if (orderDoc == null) return; // error already set in state
+
+    final orderId = orderDoc['\$id'] as String? ?? '';
+
+    if (!mounted) return;
+
     if (_selectedMethod == 'cod') {
-      // COD — create order directly
-      final order = ref
-          .read(paymentProvider.notifier)
-          .createOrderFromCart(cartState);
-      ref.read(ordersProvider.notifier).addOrder(order);
+      // COD — order already placed, go to confirmation
       ref.read(cartProvider.notifier).clearCart();
-      context.go('/order-confirmation/${order.id}');
+      ref.read(ordersProvider.notifier).fetchOrders();
+      context.go('/order-confirmation/$orderId');
     } else {
-      // Razorpay — open payment gateway
-      ref
-          .read(paymentProvider.notifier)
-          .startPayment(
+      // Razorpay — initiate payment with the backend order ID
+      ref.read(paymentProvider.notifier).startPayment(
+            orderId: orderId,
             amount: total,
-            customerEmail: 'customer@chizze.in',
-            customerPhone: '+919876543210',
-            customerName: 'Chizze Customer',
+            customerEmail: userEmail,
+            customerPhone: userPhone,
+            customerName: userName,
             description: 'Order from ${cartState.restaurantName}',
             onSuccess: () {
               // handled in ref.listen above
@@ -433,11 +469,28 @@ class _PaymentMethodCard extends StatelessWidget {
                 ],
               ),
             ),
-            Radio<bool>(
-              value: true,
-              groupValue: isSelected,
-              onChanged: (_) => onTap(),
-              activeColor: AppColors.primary,
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? Center(
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    )
+                  : null,
             ),
           ],
         ),

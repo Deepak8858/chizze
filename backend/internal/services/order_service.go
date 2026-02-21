@@ -1,6 +1,8 @@
 package services
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"time"
@@ -18,9 +20,12 @@ func NewOrderService(aw *AppwriteService) *OrderService {
 	return &OrderService{appwrite: aw}
 }
 
-// GenerateOrderNumber creates a unique order number
+// GenerateOrderNumber creates a unique order number using timestamp + random bytes
 func (s *OrderService) GenerateOrderNumber() string {
-	return fmt.Sprintf("CHZ-%d", time.Now().UnixMilli()%1000000)
+	b := make([]byte, 3)
+	rand.Read(b)
+	suffix := hex.EncodeToString(b) // 6 hex chars
+	return fmt.Sprintf("CHZ-%d-%s", time.Now().UnixMilli()%1000000, suffix)
 }
 
 // CalculateFees computes delivery fee, platform fee, and GST

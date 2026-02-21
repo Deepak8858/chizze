@@ -50,6 +50,61 @@ func QueryOrderAsc(attribute string) string {
 	return string(b)
 }
 
+// GreaterThanEqual creates a >= filter query
+func QueryGreaterThanEqual(attribute string, value interface{}) string {
+	q := map[string]interface{}{
+		"method":    "greaterThanEqual",
+		"attribute": attribute,
+		"values":    []interface{}{value},
+	}
+	b, _ := json.Marshal(q)
+	return string(b)
+}
+
+// LessThanEqual creates a <= filter query
+func QueryLessThanEqual(attribute string, value interface{}) string {
+	q := map[string]interface{}{
+		"method":    "lessThanEqual",
+		"attribute": attribute,
+		"values":    []interface{}{value},
+	}
+	b, _ := json.Marshal(q)
+	return string(b)
+}
+
+// GreaterThan creates a > filter query
+func QueryGreaterThan(attribute string, value interface{}) string {
+	q := map[string]interface{}{
+		"method":    "greaterThan",
+		"attribute": attribute,
+		"values":    []interface{}{value},
+	}
+	b, _ := json.Marshal(q)
+	return string(b)
+}
+
+// LessThan creates a < filter query
+func QueryLessThan(attribute string, value interface{}) string {
+	q := map[string]interface{}{
+		"method":    "lessThan",
+		"attribute": attribute,
+		"values":    []interface{}{value},
+	}
+	b, _ := json.Marshal(q)
+	return string(b)
+}
+
+// NotEqual creates a != filter query
+func QueryNotEqual(attribute string, values ...interface{}) string {
+	q := map[string]interface{}{
+		"method":    "notEqual",
+		"attribute": attribute,
+		"values":    values,
+	}
+	b, _ := json.Marshal(q)
+	return string(b)
+}
+
 // Limit creates a limit query
 func QueryLimit(limit int) string {
 	return fmt.Sprintf(`{"method":"limit","values":[%d]}`, limit)

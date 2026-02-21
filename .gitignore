@@ -46,8 +46,30 @@ app.*.map.json
 
 # Environment variables (secrets)
 .env
+*.env
+backend/.env
 !.env.example
+!backend/.env.example
+local.properties
+appwrite.config.json
 
+# Build & analysis output files
+analyze_output.txt
+analyze_result.txt
+build_output.txt
+
+# Backend build artifacts
+backend/tmp/
+backend/.gomod/
+backend/bin/
+
+# Docker override
+backend/docker-compose.override.yml
+
+# APK / IPA / bundle outputs
+*.apk
+*.aab
+*.ipa
 # Go backend binary
 backend/server.exe
 backend/server
