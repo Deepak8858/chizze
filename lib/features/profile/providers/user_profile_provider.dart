@@ -53,14 +53,14 @@ class UserProfile {
     return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
-  static const mock = UserProfile(
-    id: 'u1',
-    name: 'Arjun Reddy',
-    phone: '+919876543210',
-    email: 'arjun@example.com',
+  static const empty = UserProfile(
+    id: '',
+    name: '',
+    phone: '',
+    email: '',
     isVeg: false,
     darkMode: true,
-    defaultAddressId: 'addr1',
+    defaultAddressId: '',
   );
 }
 
@@ -68,7 +68,7 @@ class UserProfile {
 class UserProfileNotifier extends StateNotifier<UserProfile> {
   final ApiClient _api;
 
-  UserProfileNotifier(this._api) : super(UserProfile.mock) {
+  UserProfileNotifier(this._api) : super(UserProfile.empty) {
     fetchProfile();
   }
 
@@ -90,9 +90,9 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
         );
       }
     } on ApiException {
-      // Keep mock data as fallback
+      // Keep current state
     } catch (_) {
-      // Keep mock data
+      // Keep current state
     }
   }
 

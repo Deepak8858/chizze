@@ -55,7 +55,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   final RealtimeService _realtime;
   StreamSubscription? _realtimeSub;
 
-  NotificationsNotifier(this._api, this._realtime) : super(_mockNotifications) {
+  NotificationsNotifier(this._api, this._realtime) : super(const []) {
     fetchNotifications();
     _subscribeToRealtime();
   }
@@ -111,7 +111,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
         }).toList();
       }
     } on ApiException {
-      // Keep mock data
+      // Keep current state
     } catch (_) {}
   }
 
@@ -148,60 +148,6 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   void clear() => state = [];
 
   int get unreadCount => state.where((n) => !n.isRead).length;
-
-  static final _mockNotifications = [
-    AppNotification(
-      id: 'n1',
-      title: 'Order Delivered! 🎉',
-      body: 'Your order CHZ-240001 from Biryani Blues has been delivered.',
-      type: NotificationType.order,
-      createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
-      actionRoute: '/order-detail/o1',
-    ),
-    AppNotification(
-      id: 'n2',
-      title: 'Flat 40% OFF!',
-      body:
-          'Use code CHIZZE40 to get 40% off on your next order. Valid till midnight!',
-      type: NotificationType.promo,
-      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-    ),
-    AppNotification(
-      id: 'n3',
-      title: 'Order Confirmed',
-      body: 'Your order CHZ-240002 from Pizza Paradise has been confirmed.',
-      type: NotificationType.order,
-      isRead: true,
-      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-      actionRoute: '/order-detail/o2',
-    ),
-    AppNotification(
-      id: 'n4',
-      title: 'Weekend Special 🍕',
-      body: 'Free delivery on all orders above ₹299 this weekend!',
-      type: NotificationType.promo,
-      isRead: true,
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-    ),
-    AppNotification(
-      id: 'n5',
-      title: 'App Update Available',
-      body:
-          'A new version of Chizze is available with bug fixes and performance improvements.',
-      type: NotificationType.system,
-      isRead: true,
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-    ),
-    AppNotification(
-      id: 'n6',
-      title: 'Rate your last order',
-      body:
-          'How was your Chicken Biryani from Biryani Blues? Share your feedback!',
-      type: NotificationType.order,
-      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 3)),
-      actionRoute: '/review/o1',
-    ),
-  ];
 }
 
 final notificationsProvider =

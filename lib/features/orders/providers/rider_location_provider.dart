@@ -31,33 +31,12 @@ class RiderLocation {
     );
   }
 
-  /// Mock location that simulates movement (for dev without backend)
-  static RiderLocation mock({int step = 0}) {
-    // Simulate rider moving from restaurant to customer in Hyderabad
-    const startLat = 17.4486;
-    const startLng = 78.3810;
-    const endLat = 17.4401;
-    const endLng = 78.3911;
-
-    final progress = (step % 20) / 20.0; // loop every 20 steps
-    return RiderLocation(
-      riderId: 'mock_rider',
-      latitude: startLat + (endLat - startLat) * progress,
-      longitude: startLng + (endLng - startLng) * progress,
-      heading: 135, // southeast
-      speed: 20 + (progress * 10),
-      updatedAt: DateTime.now(),
-    );
-  }
 }
 
 /// Rider location notifier — real-time updates from Appwrite
-/// Falls back to simulated movement for development
 class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
   final RealtimeService _realtime;
   StreamSubscription? _realtimeSubscription;
-  Timer? _mockTimer;
-  int _mockStep = 0;
 
   RiderLocationNotifier(this._realtime) : super(null);
 
@@ -78,30 +57,12 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
               }
             },
             onError: (_) {
-              // Fallback to mock simulation on error
-              _startMockSimulation();
+              // No mock fallback — location stays null until real data arrives
             },
           );
-
-      // Start mock simulation as fallback
-      // If real data comes in, the mock won't interfere
-      // (realtime updates will override mock state)
-      _startMockSimulation();
     } catch (_) {
-      _startMockSimulation();
+      // Realtime not available — location stays null
     }
-  }
-
-  /// Start mock simulation for development
-  void _startMockSimulation() {
-    _mockTimer?.cancel();
-    _mockStep = 0;
-    state = RiderLocation.mock(step: _mockStep);
-
-    _mockTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      _mockStep++;
-      state = RiderLocation.mock(step: _mockStep);
-    });
   }
 
   /// Stop tracking

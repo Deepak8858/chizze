@@ -139,10 +139,10 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
       }
     } catch (_) {}
 
-    // Fallback to mock data
+    // No mock fallback — show empty state with error
     state = state.copyWith(
-      metrics: PartnerMetrics.mock,
-      orders: PartnerOrder.mockList,
+      metrics: const PartnerMetrics(),
+      orders: const [],
       isLoading: false,
     );
   }

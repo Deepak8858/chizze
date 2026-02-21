@@ -69,7 +69,7 @@ enum IconLabel {
 class AddressNotifier extends StateNotifier<List<SavedAddress>> {
   final ApiClient _api;
 
-  AddressNotifier(this._api) : super(_mockAddresses) {
+  AddressNotifier(this._api) : super(const []) {
     fetchAddresses();
   }
 
@@ -93,7 +93,7 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
         }).toList();
       }
     } on ApiException {
-      // Keep mock data
+      // Keep current state
     } catch (_) {}
   }
 
@@ -137,33 +137,7 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
     state = state.map((a) => a.copyWith(isDefault: a.id == id)).toList();
   }
 
-  static final _mockAddresses = [
-    const SavedAddress(
-      id: 'addr1',
-      label: 'Home',
-      fullAddress: '45, Lake View Colony, Madhapur, Hyderabad 500081',
-      landmark: 'Near Inorbit Mall',
-      latitude: 17.4401,
-      longitude: 78.3911,
-      isDefault: true,
-    ),
-    const SavedAddress(
-      id: 'addr2',
-      label: 'Work',
-      fullAddress: '12A, Tech Park, HITEC City, Hyderabad 500032',
-      landmark: 'Opposite Mindspace',
-      latitude: 17.4486,
-      longitude: 78.3810,
-    ),
-    const SavedAddress(
-      id: 'addr3',
-      label: 'Other',
-      fullAddress: '8, Jubilee Hills Rd No.36, Hyderabad 500033',
-      landmark: 'Near GVK One Mall',
-      latitude: 17.4312,
-      longitude: 78.4079,
-    ),
-  ];
+  // Mock addresses removed — using real data from API only
 }
 
 final addressProvider =

@@ -74,19 +74,19 @@ class DeliveryPartner {
     );
   }
 
-  static const mock = DeliveryPartner(
-    id: 'dp1',
-    userId: 'u_dp1',
-    name: 'Ravi Kumar',
-    phone: '+919876543210',
+  static const empty = DeliveryPartner(
+    id: '',
+    userId: '',
+    name: '',
+    phone: '',
     vehicleType: 'bike',
-    vehicleNumber: 'TS 09 AB 1234',
-    isOnline: true,
-    rating: 4.7,
-    totalDeliveries: 342,
-    totalEarnings: 68400,
-    currentLatitude: 17.385,
-    currentLongitude: 78.4867,
+    vehicleNumber: '',
+    isOnline: false,
+    rating: 0,
+    totalDeliveries: 0,
+    totalEarnings: 0,
+    currentLatitude: 0,
+    currentLongitude: 0,
   );
 }
 

@@ -34,19 +34,15 @@ class _RestaurantDetailScreenState
   void _initData() {
     if (_initialized) return;
     _initialized = true;
-    // Look up restaurant from the provider (API-backed) first, fallback to mock
+    // Look up restaurant from the provider (API-backed)
     final restaurants = ref.read(restaurantProvider).restaurants;
     _restaurant = restaurants.cast<Restaurant?>().firstWhere(
       (r) => r?.id == widget.restaurantId,
       orElse: () => null,
     );
-    _restaurant ??= Restaurant.mockList.cast<Restaurant?>().firstWhere(
-      (r) => r?.id == widget.restaurantId,
-      orElse: () => Restaurant.mockList.first,
-    );
-    // Menu items still from mock until menu API is implemented
-    categories = MenuItem.mockCategoriesForRestaurant(widget.restaurantId);
-    menuItems = MenuItem.mockListForRestaurant(widget.restaurantId);
+    // Menu items from API — empty until data is available
+    categories = const [];
+    menuItems = const [];
   }
 
   List<MenuItem> get filteredItems {
@@ -58,6 +54,22 @@ class _RestaurantDetailScreenState
   Widget build(BuildContext context) {
     _initData();
     final cartState = ref.watch(cartProvider);
+
+    if (_restaurant == null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: AppColors.background,
+          title: const Text('Restaurant'),
+        ),
+        body: const Center(
+          child: Text(
+            'Restaurant not found',
+            style: TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,

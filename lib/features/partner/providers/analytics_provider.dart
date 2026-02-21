@@ -114,58 +114,9 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
       }
     } catch (_) {}
 
-    // Fallback to mock data
-    state = _mockAnalytics;
+    // No mock fallback — show empty state
+    state = const AnalyticsState();
   }
-
-  static final _mockAnalytics = const AnalyticsState(
-    totalRevenue: 87350,
-    totalOrders: 196,
-    avgOrderValue: 445.66,
-    revenueData: [
-      DailyRevenue(day: 'Mon', amount: 11200, orders: 24),
-      DailyRevenue(day: 'Tue', amount: 9800, orders: 21),
-      DailyRevenue(day: 'Wed', amount: 13500, orders: 29),
-      DailyRevenue(day: 'Thu', amount: 10200, orders: 22),
-      DailyRevenue(day: 'Fri', amount: 15800, orders: 34),
-      DailyRevenue(day: 'Sat', amount: 16400, orders: 38),
-      DailyRevenue(day: 'Sun', amount: 10450, orders: 28),
-    ],
-    topItems: [
-      TopItem(
-        name: 'Chicken Biryani',
-        orderCount: 82,
-        revenue: 24518,
-        isVeg: false,
-      ),
-      TopItem(
-        name: 'Mutton Biryani',
-        orderCount: 45,
-        revenue: 17955,
-        isVeg: false,
-      ),
-      TopItem(name: 'Dal Makhani', orderCount: 38, revenue: 8322, isVeg: true),
-      TopItem(name: 'Paneer Tikka', orderCount: 31, revenue: 7409, isVeg: true),
-      TopItem(name: 'Gulab Jamun', orderCount: 56, revenue: 4424, isVeg: true),
-    ],
-    peakHours: [
-      HourlyVolume(hour: 9, orders: 2),
-      HourlyVolume(hour: 10, orders: 5),
-      HourlyVolume(hour: 11, orders: 12),
-      HourlyVolume(hour: 12, orders: 28),
-      HourlyVolume(hour: 13, orders: 32),
-      HourlyVolume(hour: 14, orders: 18),
-      HourlyVolume(hour: 15, orders: 8),
-      HourlyVolume(hour: 16, orders: 6),
-      HourlyVolume(hour: 17, orders: 10),
-      HourlyVolume(hour: 18, orders: 22),
-      HourlyVolume(hour: 19, orders: 35),
-      HourlyVolume(hour: 20, orders: 38),
-      HourlyVolume(hour: 21, orders: 30),
-      HourlyVolume(hour: 22, orders: 15),
-      HourlyVolume(hour: 23, orders: 5),
-    ],
-  );
 }
 
 /// Analytics provider — now StateNotifier for async fetching

@@ -56,7 +56,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   StreamSubscription? _realtimeSub;
 
   DeliveryNotifier(this._api, this._realtime)
-    : super(DeliveryState(partner: DeliveryPartner.mock)) {
+    : super(DeliveryState(partner: DeliveryPartner.empty)) {
     _loadData();
     _subscribeToRealtime();
   }
@@ -67,12 +67,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       final channel = RealtimeChannels.deliveryRequestsChannel();
       _realtimeSub = _realtime.subscribe(channel).listen((event) {
         if (event.type == RealtimeEventType.create) {
-          // New delivery request assigned to this rider
-          // In production, parse the event data into a DeliveryRequest
-          // For now, use mock data as placeholder
-          if (state.partner.isOnline && !state.hasActiveDelivery) {
-            state = state.copyWith(incomingRequest: DeliveryRequest.mock());
-          }
+          // Parse real delivery request from event data
+          // TODO: implement DeliveryRequest.fromMap(event.data)
         }
       });
     } catch (_) {} // Realtime not available
@@ -101,10 +97,9 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       }
     } catch (_) {}
 
-    // Fallback to mock data
+    // No mock fallback — show empty state
     state = state.copyWith(
-      metrics: DeliveryMetrics.mock,
-      incomingRequest: DeliveryRequest.mock(),
+      metrics: const DeliveryMetrics(),
     );
   }
 
@@ -213,9 +208,9 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     }
   }
 
-  /// Simulate a new incoming request
+  /// Simulate a new incoming request (removed — no mock data)
   void simulateNewRequest() {
-    state = state.copyWith(incomingRequest: DeliveryRequest.mock());
+    // No-op: removed mock simulation
   }
 }
 

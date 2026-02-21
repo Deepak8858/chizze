@@ -97,10 +97,10 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
       }
     } catch (_) {}
 
-    // Fallback to mock data
+    // No mock fallback — show empty state
     state = state.copyWith(
-      categories: MenuItem.mockCategoriesForRestaurant('r1'),
-      items: MenuItem.mockListForRestaurant('r1'),
+      categories: const [],
+      items: const [],
       isLoading: false,
     );
   }

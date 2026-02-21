@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -22,48 +21,29 @@ class OrderTrackingScreen extends ConsumerStatefulWidget {
 }
 
 class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
-  Timer? _demoTimer;
   bool _trackingStarted = false;
 
   @override
   void initState() {
     super.initState();
-    _startDemoProgression();
-    // Start rider tracking for the live map
-    ref.read(riderLocationProvider.notifier).trackRider('mock_rider');
-    _trackingStarted = true;
+    // Start rider tracking using the order's actual rider ID
+    _startTracking();
   }
 
-  void _startDemoProgression() {
-    int step = 0;
-    final statuses = [
-      OrderStatus.confirmed,
-      OrderStatus.preparing,
-      OrderStatus.ready,
-      OrderStatus.pickedUp,
-      OrderStatus.outForDelivery,
-      OrderStatus.delivered,
-    ];
-
-    _demoTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (step < statuses.length) {
-        ref
-            .read(ordersProvider.notifier)
-            .updateOrderStatus(widget.orderId, statuses[step]);
-        step++;
-      } else {
-        timer.cancel();
-      }
-    });
+  void _startTracking() {
+    final ordersState = ref.read(ordersProvider);
+    final order = ordersState.orders
+        .where((o) => o.id == widget.orderId)
+        .firstOrNull;
+    final riderId = order?.deliveryPartnerId;
+    if (riderId != null && riderId.isNotEmpty) {
+      ref.read(riderLocationProvider.notifier).trackRider(riderId);
+      _trackingStarted = true;
+    }
   }
 
   @override
   void dispose() {
-    _demoTimer?.cancel();
     if (_trackingStarted) {
       // Use a post-frame callback to safely read the provider
       WidgetsBinding.instance.addPostFrameCallback((_) {

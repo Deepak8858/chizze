@@ -57,10 +57,10 @@ class RestaurantNotifier extends StateNotifier<RestaurantListState> {
             docs.map((d) => Restaurant.fromMap(d as Map<String, dynamic>)).toList();
         state = state.copyWith(restaurants: restaurants, isLoading: false);
       } else {
-        // API returned error — fall back to mock in dev
+        // API returned error — show empty state
         debugPrint('[Restaurants] API error: ${response.error}');
         state = state.copyWith(
-          restaurants: Restaurant.mockList,
+          restaurants: const [],
           isLoading: false,
           error: response.error,
         );
@@ -68,14 +68,14 @@ class RestaurantNotifier extends StateNotifier<RestaurantListState> {
     } on ApiException catch (e) {
       debugPrint('[Restaurants] ApiException: ${e.message}');
       state = state.copyWith(
-        restaurants: Restaurant.mockList,
+        restaurants: const [],
         isLoading: false,
         error: e.message,
       );
     } catch (e) {
       debugPrint('[Restaurants] Unexpected error: $e');
       state = state.copyWith(
-        restaurants: Restaurant.mockList,
+        restaurants: const [],
         isLoading: false,
         error: e.toString(),
       );
