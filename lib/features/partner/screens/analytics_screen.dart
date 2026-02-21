@@ -219,6 +219,17 @@ class _RevenueChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (data.isEmpty) {
+      return GlassCard(
+        child: SizedBox(
+          height: 180,
+          child: Center(
+            child: Text('No revenue data yet', style: AppTypography.body2.copyWith(color: AppColors.textSecondary)),
+          ),
+        ),
+      );
+    }
+
     final maxAmount = data.map((d) => d.amount).reduce(max);
 
     return GlassCard(

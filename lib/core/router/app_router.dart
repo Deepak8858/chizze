@@ -111,6 +111,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/home';
       }
 
+      // Authenticated user who needs onboarding → force onboarding (from any non-auth page)
+      if (isAuth && authState.needsOnboarding && !isOnboarding && !isAuthRoute) {
+        return '/onboarding';
+      }
+
       // Authenticated user on onboarding — allow if still new, redirect if already onboarded
       if (isAuth && isOnboarding && !authState.needsOnboarding) {
         if (authState.isPartner) return '/partner/dashboard';
