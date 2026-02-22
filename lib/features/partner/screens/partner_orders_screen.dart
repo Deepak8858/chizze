@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../features/orders/models/order.dart';
 import '../models/partner_order.dart';
 import '../providers/partner_provider.dart';
@@ -125,21 +126,10 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
     String emptySubtitle,
   ) {
     if (orders.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('📭', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: AppSpacing.xl),
-            Text(emptyTitle, style: AppTypography.h3),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              emptySubtitle,
-              style: AppTypography.body2,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+      return EmptyStateWidget(
+        icon: Icons.inbox_outlined,
+        title: emptyTitle,
+        subtitle: emptySubtitle,
       );
     }
 

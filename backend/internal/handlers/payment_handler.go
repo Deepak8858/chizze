@@ -26,7 +26,20 @@ func NewPaymentHandler(aw *services.AppwriteService, ps *services.PaymentService
 }
 
 // Initiate creates a Razorpay order and stores payment record
-// POST /api/v1/payments/initiate
+// @Summary Initiate a payment
+// @Description Creates a Razorpay order for the given order and stores a payment record
+// @Tags Payments
+// @Accept json
+// @Produce json
+// @Param request body object{order_id=string} true "Order ID to pay for"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/payments/initiate [post]
 func (h *PaymentHandler) Initiate(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
@@ -90,7 +103,19 @@ func (h *PaymentHandler) Initiate(c *gin.Context) {
 }
 
 // Verify validates Razorpay payment callback and updates order
-// POST /api/v1/payments/verify
+// @Summary Verify a payment
+// @Description Validates Razorpay payment signature and updates order payment status to paid
+// @Tags Payments
+// @Accept json
+// @Produce json
+// @Param request body services.VerifyPaymentRequest true "Razorpay payment verification data"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/payments/verify [post]
 func (h *PaymentHandler) Verify(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
@@ -145,7 +170,16 @@ func (h *PaymentHandler) Verify(c *gin.Context) {
 }
 
 // Webhook handles Razorpay webhook events
-// POST /api/v1/payments/webhook
+// @Summary Razorpay webhook
+// @Description Handles Razorpay webhook events for payment.captured, payment.failed, and refund.processed
+// @Tags Payments
+// @Accept json
+// @Produce json
+// @Param X-Razorpay-Signature header string true "Razorpay webhook signature"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /api/v1/payments/webhook [post]
 func (h *PaymentHandler) Webhook(c *gin.Context) {
 	// Read raw body for signature verification
 	body, err := io.ReadAll(c.Request.Body)

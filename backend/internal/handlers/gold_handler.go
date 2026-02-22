@@ -20,14 +20,28 @@ func NewGoldHandler(aw *services.AppwriteService) *GoldHandler {
 }
 
 // GetPlans returns available Gold membership plans
-// GET /api/v1/gold/plans
+// @Summary      Get Gold membership plans
+// @Description  Returns all available Chizze Gold membership plans
+// @Tags         Gold
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   models.GoldPlan
+// @Security     BearerAuth
+// @Router       /api/v1/gold/plans [get]
 func (h *GoldHandler) GetPlans(c *gin.Context) {
 	plans := models.GoldPlans()
 	utils.Success(c, plans)
 }
 
 // GetStatus returns the user's current Gold membership status
-// GET /api/v1/gold/status
+// @Summary      Get Gold membership status
+// @Description  Returns the authenticated user's current Gold membership status and subscription details
+// @Tags         Gold
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/gold/status [get]
 func (h *GoldHandler) GetStatus(c *gin.Context) {
 	userID := c.GetString("user_id")
 
@@ -47,7 +61,17 @@ func (h *GoldHandler) GetStatus(c *gin.Context) {
 }
 
 // Subscribe creates a new Gold membership subscription
-// POST /api/v1/gold/subscribe
+// @Summary      Subscribe to Gold membership
+// @Description  Creates a new Chizze Gold membership subscription for the authenticated user
+// @Tags         Gold
+// @Accept       json
+// @Produce      json
+// @Param        body  body      models.SubscribeGoldRequest  true  "Subscription plan and payment details"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/gold/subscribe [post]
 func (h *GoldHandler) Subscribe(c *gin.Context) {
 	userID := c.GetString("user_id")
 
@@ -114,7 +138,16 @@ func (h *GoldHandler) Subscribe(c *gin.Context) {
 }
 
 // Cancel cancels the user's Gold membership
-// PUT /api/v1/gold/cancel
+// @Summary      Cancel Gold membership
+// @Description  Cancels the authenticated user's active Gold membership subscription
+// @Tags         Gold
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/gold/cancel [put]
 func (h *GoldHandler) Cancel(c *gin.Context) {
 	userID := c.GetString("user_id")
 

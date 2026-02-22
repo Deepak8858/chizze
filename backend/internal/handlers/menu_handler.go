@@ -46,7 +46,16 @@ func (h *MenuHandler) verifyItemOwnership(c *gin.Context, itemID, restaurantID s
 }
 
 // ListItems returns partner's menu items
-// GET /api/v1/partner/menu
+// @Summary      List menu items
+// @Description  Returns all menu items for the partner's restaurant
+// @Tags         Menu
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/menu [get]
 func (h *MenuHandler) ListItems(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -62,7 +71,18 @@ func (h *MenuHandler) ListItems(c *gin.Context) {
 }
 
 // CreateItem adds a new menu item for the partner's restaurant
-// POST /api/v1/partner/menu
+// @Summary      Create a menu item
+// @Description  Adds a new menu item for the partner's restaurant. Requires name and price.
+// @Tags         Menu
+// @Accept       json
+// @Produce      json
+// @Param        body  body      map[string]interface{}  true  "Menu item data (name, price required)"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/menu [post]
 func (h *MenuHandler) CreateItem(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -98,7 +118,20 @@ func (h *MenuHandler) CreateItem(c *gin.Context) {
 }
 
 // UpdateItem updates an existing menu item with ownership check
-// PUT /api/v1/partner/menu/:id
+// @Summary      Update a menu item
+// @Description  Updates an existing menu item with ownership verification
+// @Tags         Menu
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string                  true  "Menu item ID"
+// @Param        body  body      map[string]interface{}  true  "Menu item fields to update"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/menu/{id} [put]
 func (h *MenuHandler) UpdateItem(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -129,7 +162,18 @@ func (h *MenuHandler) UpdateItem(c *gin.Context) {
 }
 
 // DeleteItem removes a menu item with ownership check
-// DELETE /api/v1/partner/menu/:id
+// @Summary      Delete a menu item
+// @Description  Removes a menu item with ownership verification
+// @Tags         Menu
+// @Accept       json
+// @Produce      json
+// @Param        id  path      string  true  "Menu item ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/menu/{id} [delete]
 func (h *MenuHandler) DeleteItem(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {

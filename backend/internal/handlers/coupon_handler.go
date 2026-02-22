@@ -53,7 +53,14 @@ func parseCouponDoc(doc map[string]interface{}) *models.Coupon {
 }
 
 // ListAvailable returns active coupons
-// GET /api/v1/coupons
+// @Summary      List available coupons
+// @Description  Returns all currently active coupons
+// @Tags         Coupons
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /api/v1/coupons [get]
 func (h *CouponHandler) ListAvailable(c *gin.Context) {
 	result, err := h.appwrite.ListCoupons([]string{
 		appwrite.QueryEqual("is_active", true),
@@ -66,7 +73,17 @@ func (h *CouponHandler) ListAvailable(c *gin.Context) {
 }
 
 // Validate checks if a coupon is valid for a given order total
-// POST /api/v1/cart/validate-coupon
+// @Summary      Validate a coupon
+// @Description  Checks if a coupon code is valid for the given order total and returns the discount amount
+// @Tags         Coupons
+// @Accept       json
+// @Produce      json
+// @Param        body  body      models.ValidateCouponRequest  true  "Coupon code and order total"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/cart/validate-coupon [post]
 func (h *CouponHandler) Validate(c *gin.Context) {
 	var req models.ValidateCouponRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -38,7 +38,16 @@ func (h *PartnerHandler) getPartnerRestaurant(c *gin.Context) (map[string]interf
 }
 
 // Dashboard returns partner dashboard metrics
-// GET /api/v1/partner/dashboard
+// @Summary      Get partner dashboard
+// @Description  Returns dashboard metrics including today's revenue, order count, pending orders, and rating
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/dashboard [get]
 func (h *PartnerHandler) Dashboard(c *gin.Context) {
 	restaurant, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -99,7 +108,21 @@ func (h *PartnerHandler) Dashboard(c *gin.Context) {
 }
 
 // ListOrders returns orders for the partner's restaurant with status filtering
-// GET /api/v1/partner/orders?status=placed&page=1&per_page=20
+// @Summary      List partner orders
+// @Description  Returns orders for the partner's restaurant with optional status, date range, and pagination filters
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        status    query     string  false  "Filter by order status"
+// @Param        from      query     string  false  "Start date (RFC3339)"
+// @Param        to        query     string  false  "End date (RFC3339)"
+// @Param        page      query     int     false  "Page number"
+// @Param        per_page  query     int     false  "Items per page"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/orders [get]
 func (h *PartnerHandler) ListOrders(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -155,7 +178,17 @@ func (h *PartnerHandler) ListOrders(c *gin.Context) {
 }
 
 // Analytics returns revenue trends, top items, and peak hours for the partner
-// GET /api/v1/partner/analytics?period=week (day|week|month)
+// @Summary      Get partner analytics
+// @Description  Returns revenue trends, top selling items, and peak hours for the given period
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        period  query     string  false  "Time period: day, week, or month"  default(week)
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/analytics [get]
 func (h *PartnerHandler) Analytics(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -300,7 +333,17 @@ func (h *PartnerHandler) Analytics(c *gin.Context) {
 }
 
 // ToggleOnline toggles the restaurant's online/offline status
-// PUT /api/v1/partner/restaurant/status
+// @Summary      Toggle restaurant online status
+// @Description  Toggles the restaurant's online/offline status. If no body is provided, the current state is inverted.
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        body  body      object{is_online=bool}  false  "Optional explicit online state"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/restaurant/status [put]
 func (h *PartnerHandler) ToggleOnline(c *gin.Context) {
 	restaurant, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -332,7 +375,16 @@ func (h *PartnerHandler) ToggleOnline(c *gin.Context) {
 }
 
 // ListCategories returns menu categories for the partner's restaurant
-// GET /api/v1/partner/categories
+// @Summary      List menu categories
+// @Description  Returns all menu categories for the partner's restaurant
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/categories [get]
 func (h *PartnerHandler) ListCategories(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -348,7 +400,18 @@ func (h *PartnerHandler) ListCategories(c *gin.Context) {
 }
 
 // CreateCategory creates a new menu category
-// POST /api/v1/partner/categories
+// @Summary      Create a menu category
+// @Description  Creates a new menu category for the partner's restaurant
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        body  body      object{name=string,sort_order=int}  true  "Category data"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/categories [post]
 func (h *PartnerHandler) CreateCategory(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -380,7 +443,20 @@ func (h *PartnerHandler) CreateCategory(c *gin.Context) {
 }
 
 // UpdateCategory updates a menu category
-// PUT /api/v1/partner/categories/:id
+// @Summary      Update a menu category
+// @Description  Updates an existing menu category with ownership verification
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string                  true  "Category ID"
+// @Param        body  body      map[string]interface{}  true  "Category fields to update"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/categories/{id} [put]
 func (h *PartnerHandler) UpdateCategory(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -419,7 +495,18 @@ func (h *PartnerHandler) UpdateCategory(c *gin.Context) {
 }
 
 // DeleteCategory deletes a menu category (and marks items as uncategorized)
-// DELETE /api/v1/partner/categories/:id
+// @Summary      Delete a menu category
+// @Description  Deletes a menu category with ownership verification
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        id  path      string  true  "Category ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/categories/{id} [delete]
 func (h *PartnerHandler) DeleteCategory(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {
@@ -448,7 +535,17 @@ func (h *PartnerHandler) DeleteCategory(c *gin.Context) {
 }
 
 // Performance returns preparation time and acceptance metrics
-// GET /api/v1/partner/performance
+// @Summary      Get partner performance metrics
+// @Description  Returns preparation time, acceptance rate, and cancellation rate for the last 7 days
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        period  query     string  false  "Time period"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/performance [get]
 func (h *PartnerHandler) Performance(c *gin.Context) {
 	_, restID, ok := h.getPartnerRestaurant(c)
 	if !ok {

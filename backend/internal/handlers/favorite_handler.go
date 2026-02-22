@@ -20,7 +20,15 @@ func NewFavoriteHandler(aw *services.AppwriteService) *FavoriteHandler {
 }
 
 // List returns the user's favorite restaurants
-// GET /api/v1/users/me/favorites
+// @Summary      List favorite restaurants
+// @Description  Returns the authenticated user's favorite restaurants with restaurant details
+// @Tags         Favorites
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/users/me/favorites [get]
 func (h *FavoriteHandler) List(c *gin.Context) {
 	userID := c.GetString("user_id")
 
@@ -53,7 +61,18 @@ func (h *FavoriteHandler) List(c *gin.Context) {
 }
 
 // Add adds a restaurant to the user's favorites
-// POST /api/v1/users/me/favorites
+// @Summary      Add a favorite restaurant
+// @Description  Adds a restaurant to the authenticated user's favorites
+// @Tags         Favorites
+// @Accept       json
+// @Produce      json
+// @Param        body  body      models.CreateFavoriteRequest  true  "Favorite data"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/users/me/favorites [post]
 func (h *FavoriteHandler) Add(c *gin.Context) {
 	userID := c.GetString("user_id")
 
@@ -93,7 +112,17 @@ func (h *FavoriteHandler) Add(c *gin.Context) {
 }
 
 // Remove removes a restaurant from the user's favorites
-// DELETE /api/v1/users/me/favorites/:restaurant_id
+// @Summary      Remove a favorite restaurant
+// @Description  Removes a restaurant from the authenticated user's favorites
+// @Tags         Favorites
+// @Accept       json
+// @Produce      json
+// @Param        restaurant_id  path      string  true  "Restaurant ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/users/me/favorites/{restaurant_id} [delete]
 func (h *FavoriteHandler) Remove(c *gin.Context) {
 	userID := c.GetString("user_id")
 	restaurantID := c.Param("restaurant_id")

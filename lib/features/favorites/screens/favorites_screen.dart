@@ -4,6 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/shimmer_loader.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
 import '../providers/favorites_provider.dart';
 import '../../home/models/restaurant.dart';
 
@@ -60,8 +62,11 @@ class FavoritesScreen extends ConsumerWidget {
 
             // ─── Content ───
             if (state.isLoading)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+              SliverFillRemaining(
+                child: ListSkeleton(
+                  itemCount: 4,
+                  itemBuilder: (_, __) => const RestaurantCardSkeleton(),
+                ),
               )
             else if (state.favorites.isEmpty)
               SliverFillRemaining(
@@ -109,55 +114,9 @@ class FavoritesScreen extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context, bool isDark) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.primary.withValues(alpha: 0.1),
-            ),
-            child: Icon(
-              Icons.favorite_border_rounded,
-              size: 48,
-              color: AppColors.primary.withValues(alpha: 0.5),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'No favorites yet',
-            style: AppTypography.h3.copyWith(
-              color: isDark ? AppColors.textPrimary : AppColors.lightTextPrimary,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Tap the heart icon on restaurants\nyou love to save them here',
-            textAlign: TextAlign.center,
-            style: AppTypography.body2.copyWith(
-              color: isDark
-                  ? AppColors.textSecondary
-                  : AppColors.lightTextSecondary,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          TextButton.icon(
-            onPressed: () => GoRouter.of(context).go('/home'),
-            icon: const Icon(Icons.explore_rounded),
-            label: const Text('Explore Restaurants'),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.primary,
-            ),
-          ),
-        ],
-      ),
-    )
-        .animate()
-        .fadeIn(duration: 600.ms)
-        .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1));
+    return EmptyStateWidget.favorites(
+      onExplore: () => GoRouter.of(context).go('/home'),
+    );
   }
 }
 

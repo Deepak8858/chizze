@@ -4,6 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/shimmer_loader.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
 import '../providers/scheduled_orders_provider.dart';
 
 /// Scheduled orders screen — view & cancel upcoming scheduled orders
@@ -43,7 +45,10 @@ class ScheduledOrdersScreen extends ConsumerWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Scheduled Orders')),
       body: state.isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? ListSkeleton(
+              itemCount: 4,
+              itemBuilder: (_, __) => const OrderCardSkeleton(),
+            )
           : state.orders.isEmpty
               ? _buildEmpty(context)
               : RefreshIndicator(
@@ -89,38 +94,7 @@ class ScheduledOrdersScreen extends ConsumerWidget {
   }
 
   Widget _buildEmpty(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('📅', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: AppSpacing.xl),
-          Text('No scheduled orders', style: AppTypography.h3),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Schedule orders in advance for\ntimely delivery',
-            style: AppTypography.body2,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppSpacing.xxl),
-          ElevatedButton(
-            onPressed: () => context.go('/home'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.xxl,
-                vertical: AppSpacing.md,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-              ),
-            ),
-            child: const Text('Browse Restaurants'),
-          ),
-        ],
-      ),
-    );
+    return EmptyStateWidget.noScheduledOrders();
   }
 
   Widget _buildOrderCard(

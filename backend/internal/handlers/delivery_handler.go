@@ -35,7 +35,19 @@ func NewDeliveryHandler(aw *services.AppwriteService, geo *services.GeoService, 
 }
 
 // ToggleOnline sets delivery partner online/offline
-// PUT /api/v1/delivery/status
+// @Summary Toggle online status
+// @Description Sets delivery partner online or offline and updates Redis geo set accordingly
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param request body object{is_online=bool} true "Online status"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/status [put]
 func (h *DeliveryHandler) ToggleOnline(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
@@ -85,7 +97,19 @@ func (h *DeliveryHandler) ToggleOnline(c *gin.Context) {
 }
 
 // UpdateLocation pushes delivery partner location with heading/speed
-// PUT /api/v1/delivery/location
+// @Summary Update delivery partner location
+// @Description Pushes the delivery partner's current GPS location, heading, and speed; broadcasts to customers tracking active deliveries
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param request body object{latitude=number,longitude=number,heading=number,speed=number} true "Location data"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/location [put]
 func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
@@ -165,7 +189,20 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 }
 
 // AcceptOrder assigns delivery partner to an order (sets partner, keeps status as ready)
-// PUT /api/v1/delivery/orders/:id/accept
+// @Summary Accept a delivery order
+// @Description Assigns the delivery partner to an order using a distributed lock to prevent double-acceptance
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/orders/{id}/accept [put]
 func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 	orderID := c.Param("id")
 	userID := middleware.GetUserID(c)
@@ -260,7 +297,19 @@ func (h *DeliveryHandler) getDeliveryPartnerProfile(c *gin.Context) (map[string]
 }
 
 // ActiveOrders returns orders assigned to or available for this delivery partner
-// GET /api/v1/delivery/orders
+// @Summary List active delivery orders
+// @Description Returns orders assigned to the partner or available for pickup depending on mode query param
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param mode query string false "Filter mode: assigned or available" default(assigned)
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(20)
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/orders [get]
 func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	pg := models.ParsePagination(c)
@@ -296,7 +345,17 @@ func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 }
 
 // Dashboard returns delivery partner dashboard metrics
-// GET /api/v1/delivery/dashboard
+// @Summary Get delivery dashboard
+// @Description Returns today's earnings, deliveries, distance, weekly progress, and active order info
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/dashboard [get]
 func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 	partner, _, ok := h.getDeliveryPartnerProfile(c)
 	if !ok {
@@ -384,7 +443,17 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 }
 
 // Earnings returns earnings breakdown for the delivery partner
-// GET /api/v1/delivery/earnings?period=week (day|week|month)
+// @Summary Get delivery earnings
+// @Description Returns earnings breakdown with weekly data, recent trips, and monthly totals
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param period query string false "Time period: day, week, or month" default(week)
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/earnings [get]
 func (h *DeliveryHandler) Earnings(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
@@ -509,7 +578,18 @@ func (h *DeliveryHandler) Earnings(c *gin.Context) {
 }
 
 // Performance returns delivery performance metrics for the partner
-// GET /api/v1/delivery/performance
+// @Summary Get delivery performance
+// @Description Returns completion rate, cancellation rate, avg delivery time, and daily trend for the last 7 days
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param period query string false "Time period" default(week)
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/performance [get]
 func (h *DeliveryHandler) Performance(c *gin.Context) {
 	_, _, ok := h.getDeliveryPartnerProfile(c)
 	if !ok {
@@ -614,7 +694,16 @@ func (h *DeliveryHandler) Performance(c *gin.Context) {
 }
 
 // GetProfile returns the delivery partner's full profile
-// GET /api/v1/delivery/profile
+// @Summary Get delivery partner profile
+// @Description Returns the full profile of the authenticated delivery partner
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/profile [get]
 func (h *DeliveryHandler) GetProfile(c *gin.Context) {
 	partner, _, ok := h.getDeliveryPartnerProfile(c)
 	if !ok {
@@ -624,7 +713,19 @@ func (h *DeliveryHandler) GetProfile(c *gin.Context) {
 }
 
 // UpdateProfile updates delivery partner profile fields (vehicle, bank, etc.)
-// PUT /api/v1/delivery/profile
+// @Summary Update delivery partner profile
+// @Description Updates delivery partner profile fields such as vehicle type, vehicle number, and bank account
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param request body models.UpdateDeliveryProfileRequest true "Profile fields to update"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/profile [put]
 func (h *DeliveryHandler) UpdateProfile(c *gin.Context) {
 	var req models.UpdateDeliveryProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -662,7 +763,18 @@ func (h *DeliveryHandler) UpdateProfile(c *gin.Context) {
 }
 
 // ListPayouts returns the delivery partner's payout history
-// GET /api/v1/delivery/payouts
+// @Summary List payouts
+// @Description Returns paginated payout history for the authenticated delivery partner
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(20)
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/payouts [get]
 func (h *DeliveryHandler) ListPayouts(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	pg := models.ParsePagination(c)
@@ -683,7 +795,19 @@ func (h *DeliveryHandler) ListPayouts(c *gin.Context) {
 }
 
 // RequestPayout creates a new payout request for the delivery partner
-// POST /api/v1/delivery/payouts/request
+// @Summary Request a payout
+// @Description Creates a new payout request; minimum ₹100, one pending request at a time
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param request body models.RequestPayoutRequest true "Payout amount and method"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/payouts/request [post]
 func (h *DeliveryHandler) RequestPayout(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req models.RequestPayoutRequest
@@ -768,7 +892,19 @@ func (h *DeliveryHandler) RequestPayout(c *gin.Context) {
 }
 
 // RejectOrder rejects/skips an order assignment
-// PUT /api/v1/delivery/orders/:id/reject
+// @Summary Reject a delivery order
+// @Description Rejects an order assignment and unassigns the delivery partner from the order
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/orders/{id}/reject [put]
 func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 	orderID := c.Param("id")
 	userID := middleware.GetUserID(c)

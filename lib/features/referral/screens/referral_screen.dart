@@ -8,7 +8,10 @@ import '../providers/referral_provider.dart';
 
 /// Referral screen — share code, apply code, view history
 class ReferralScreen extends ConsumerStatefulWidget {
-  const ReferralScreen({super.key});
+  /// Optional referral code from deep link (chizze://referral?code=XYZ)
+  final String? referralCode;
+
+  const ReferralScreen({super.key, this.referralCode});
 
   @override
   ConsumerState<ReferralScreen> createState() => _ReferralScreenState();
@@ -16,6 +19,15 @@ class ReferralScreen extends ConsumerStatefulWidget {
 
 class _ReferralScreenState extends ConsumerState<ReferralScreen> {
   final _codeController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-fill referral code from deep link
+    if (widget.referralCode != null && widget.referralCode!.isNotEmpty) {
+      _codeController.text = widget.referralCode!;
+    }
+  }
 
   @override
   void dispose() {

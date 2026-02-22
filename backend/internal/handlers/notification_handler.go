@@ -19,7 +19,17 @@ func NewNotificationHandler(aw *services.AppwriteService) *NotificationHandler {
 }
 
 // List returns user's notifications with pagination
-// GET /api/v1/notifications
+// @Summary      List notifications
+// @Description  Returns the authenticated user's notifications with pagination
+// @Tags         Notifications
+// @Accept       json
+// @Produce      json
+// @Param        page      query     int  false  "Page number"
+// @Param        per_page  query     int  false  "Items per page"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/notifications [get]
 func (h *NotificationHandler) List(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	pg := models.ParsePagination(c)
@@ -34,7 +44,18 @@ func (h *NotificationHandler) List(c *gin.Context) {
 }
 
 // MarkRead marks a notification as read with ownership check
-// PUT /api/v1/notifications/:id/read
+// @Summary      Mark notification as read
+// @Description  Marks a single notification as read with ownership verification
+// @Tags         Notifications
+// @Accept       json
+// @Produce      json
+// @Param        id  path      string  true  "Notification ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/notifications/{id}/read [put]
 func (h *NotificationHandler) MarkRead(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	notifID := c.Param("id")
@@ -62,7 +83,15 @@ func (h *NotificationHandler) MarkRead(c *gin.Context) {
 }
 
 // MarkAllRead marks all user's notifications as read
-// PUT /api/v1/notifications/read-all
+// @Summary      Mark all notifications as read
+// @Description  Marks all of the authenticated user's unread notifications as read
+// @Tags         Notifications
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/notifications/read-all [put]
 func (h *NotificationHandler) MarkAllRead(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	result, err := h.appwrite.ListNotifications(userID)

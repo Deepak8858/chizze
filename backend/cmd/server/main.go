@@ -20,7 +20,31 @@ import (
 	"github.com/chizze/backend/pkg/appwrite"
 	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/gin-gonic/gin"
+
+	_ "github.com/chizze/backend/docs" // swagger generated docs
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
+
+// @title           Chizze Food Delivery API
+// @version         1.0
+// @description     Backend API for Chizze — a food delivery platform with customer, restaurant partner, and delivery partner roles.
+// @termsOfService  https://chizze.app/terms
+
+// @contact.name   Chizze Support
+// @contact.url    https://chizze.app/support
+// @contact.email  support@chizze.app
+
+// @license.name  Proprietary
+// @license.url   https://chizze.app/license
+
+// @host      api.devdeepak.me
+// @BasePath  /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter "Bearer {token}"
 
 func main() {
 	// ─── Load Config ───
@@ -35,6 +59,15 @@ func main() {
 	log.Printf("  Appwrite: %s", cfg.AppwriteEndpoint)
 	log.Printf("  Timeout: %v | MaxConns: %d", cfg.RequestTimeout, cfg.MaxConnections)
 	log.Printf("═══════════════════════════════════════")
+
+	// ─── Initialize Tracing ───
+	tracingCtx := context.Background()
+	shutdownTracing, err := middleware.InitTracing(tracingCtx, "chizze-api", version)
+	if err != nil {
+		log.Printf("WARNING: Tracing init failed (non-fatal): %v", err)
+	} else {
+		log.Printf("OpenTelemetry tracing initialized")
+	}
 
 	// ─── Initialize Clients ───
 	awClient := appwrite.NewClient(cfg)
@@ -79,6 +112,7 @@ func main() {
 
 	// Global middleware — order matters
 	r.Use(middleware.Security())          // Request ID + security headers (first)
+	r.Use(middleware.OtelGin("chizze-api")) // OpenTelemetry request tracing
 	r.Use(middleware.Logger())            // Structured logging with request ID
 	r.Use(gin.Recovery())                 // Panic recovery
 	r.Use(middleware.CORS(cfg))           // CORS
@@ -135,6 +169,9 @@ func main() {
 			"circuit_breaker": awClient.BreakerState().String(),
 		})
 	})
+
+	// ─── Swagger UI ───
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// ─── API v1 Routes ───
 	v1 := r.Group("/api/v1")
@@ -351,6 +388,11 @@ func main() {
 	}
 	if err := redisClient.Close(); err != nil {
 		log.Printf("Redis close error: %v", err)
+	}
+	if shutdownTracing != nil {
+		if err := shutdownTracing(ctx); err != nil {
+			log.Printf("Tracing shutdown error: %v", err)
+		}
 	}
 	fmt.Println("✅ Server stopped gracefully")
 }

@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
 import '../models/order.dart';
 import '../providers/orders_provider.dart';
 
@@ -74,17 +75,10 @@ class OrdersScreen extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(String title, String subtitle, IconData icon) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 64, color: AppColors.textTertiary),
-          const SizedBox(height: AppSpacing.xl),
-          Text(title, style: AppTypography.h3),
-          const SizedBox(height: AppSpacing.sm),
-          Text(subtitle, style: AppTypography.body2),
-        ],
-      ),
+    return EmptyStateWidget(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
     );
   }
 

@@ -34,7 +34,20 @@ func NewOrderHandler(aw *services.AppwriteService, os *services.OrderService, ge
 }
 
 // PlaceOrder creates a new order with server-side price verification
-// POST /api/v1/orders
+// @Summary Place a new order
+// @Description Creates a new order with server-side price verification, fee calculation, and coupon application
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param order body models.PlaceOrderRequest true "Order details"
+// @Param X-Idempotency-Key header string false "Idempotency key to prevent duplicate orders"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/orders [post]
 func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
@@ -257,7 +270,18 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 }
 
 // GetOrder returns order details with ownership check
-// GET /api/v1/orders/:id
+// @Summary Get order details
+// @Description Returns order details with role-based ownership check
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/orders/{id} [get]
 func (h *OrderHandler) GetOrder(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	role := middleware.GetUserRole(c)
@@ -305,7 +329,19 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 }
 
 // ListOrders returns paginated order history for current user
-// GET /api/v1/orders
+// @Summary List orders
+// @Description Returns paginated order history filtered by the current user's role
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param status query string false "Filter by order status"
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(20)
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/orders [get]
 func (h *OrderHandler) ListOrders(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	role := middleware.GetUserRole(c)
@@ -347,7 +383,21 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 }
 
 // CancelOrder cancels an order with ownership check
-// PUT /api/v1/orders/:id/cancel
+// @Summary Cancel an order
+// @Description Cancels an order with ownership verification; only the customer who placed the order can cancel
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID"
+// @Param request body models.CancelOrderRequest true "Cancellation reason"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/orders/{id}/cancel [put]
 func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	orderID := c.Param("id")
@@ -398,7 +448,21 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 }
 
 // UpdateStatus updates order status with role-based validation
-// PUT /api/v1/orders/:id/status
+// @Summary Update order status
+// @Description Updates order status with role-based validation; restaurant owners set confirmed/preparing/ready, delivery partners set picked_up/out_for_delivery/delivered
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID"
+// @Param request body object{status=string} true "New status"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/partner/orders/{id}/status [put]
 func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	role := middleware.GetUserRole(c)

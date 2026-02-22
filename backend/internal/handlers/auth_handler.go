@@ -43,7 +43,17 @@ func (h *AuthHandler) issueJWT(userID, role string, duration time.Duration) (str
 }
 
 // Exchange validates an Appwrite client JWT and issues a Chizze API JWT
-// POST /api/v1/auth/exchange
+// @Summary Exchange Appwrite JWT for Chizze API token
+// @Description Validates an Appwrite client JWT and issues a Chizze API JWT. Creates user document if not exists.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body object true "JSON with jwt (string, required) and role (string, optional)"
+// @Success 200 {object} map[string]interface{} "token, user_id, role, is_new"
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/auth/exchange [post]
 func (h *AuthHandler) Exchange(c *gin.Context) {
 	var req struct {
 		AppwriteJWT string `json:"jwt" binding:"required"`
@@ -121,7 +131,16 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 }
 
 // SendOTP sends OTP to phone number
-// POST /api/v1/auth/send-otp
+// @Summary Send OTP to phone number
+// @Description Sends an OTP to the given phone number with rate limiting (max 3 per 10 minutes)
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body object true "JSON with phone (string, required, format: +91XXXXXXXXXX)"
+// @Success 200 {object} map[string]interface{} "message, phone"
+// @Failure 400 {object} map[string]interface{}
+// @Failure 429 {object} map[string]interface{}
+// @Router /api/v1/auth/send-otp [post]
 func (h *AuthHandler) SendOTP(c *gin.Context) {
 	var req struct {
 		Phone string `json:"phone" binding:"required"`
@@ -154,7 +173,16 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 }
 
 // VerifyOTP verifies OTP and returns session
-// POST /api/v1/auth/verify-otp
+// @Summary Verify OTP and issue token
+// @Description Verifies OTP for a phone number and returns a JWT token
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body object true "JSON with phone (string), otp (string), user_id (string) — all required"
+// @Success 200 {object} map[string]interface{} "message, token, user_id, role"
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/auth/verify-otp [post]
 func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	var req struct {
 		Phone  string `json:"phone" binding:"required"`
@@ -205,7 +233,15 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 }
 
 // Refresh re-issues a JWT from a valid existing token
-// POST /api/v1/auth/refresh
+// @Summary Refresh JWT token
+// @Description Re-issues a new JWT from a valid existing token. Token must not be blacklisted.
+// @Tags Auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{} "token, user_id, role"
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/auth/refresh [post]
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	// Extract and validate the current token
 	userID := middleware.GetUserID(c)
@@ -239,7 +275,13 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 }
 
 // Logout invalidates the session via Redis blacklist
-// DELETE /api/v1/auth/logout
+// @Summary Logout user
+// @Description Invalidates the user's session by blacklisting their token in Redis for 7 days
+// @Tags Auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{} "message"
+// @Router /api/v1/auth/logout [delete]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == "" {

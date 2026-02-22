@@ -685,6 +685,7 @@ class _CircleBackButton extends StatelessWidget {
         backgroundColor: AppColors.background.withValues(alpha: 0.7),
         child: IconButton(
           icon: const Icon(Icons.arrow_back_rounded, size: 20),
+          tooltip: 'Go back',
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -748,9 +749,12 @@ class _AddButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
+    return Semantics(
+      button: true,
+      label: 'Add item to cart',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
         width: 90,
         height: 34,
         decoration: BoxDecoration(
@@ -766,6 +770,7 @@ class _AddButton extends StatelessWidget {
               fontSize: 13,
             ),
           ),
+        ),
         ),
       ),
     );

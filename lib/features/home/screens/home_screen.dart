@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
 import '../providers/restaurant_provider.dart';
 import '../models/restaurant.dart';
 import '../../favorites/providers/favorites_provider.dart';
@@ -164,9 +165,12 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildSearchBar(BuildContext context) {
-    return GestureDetector(
-      onTap: () => context.go('/search'),
-      child: Container(
+    return Semantics(
+      button: true,
+      label: 'Search restaurants or dishes',
+      child: GestureDetector(
+        onTap: () => context.go('/search'),
+        child: Container(
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
         decoration: BoxDecoration(
@@ -176,7 +180,8 @@ class HomeScreen extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.search_rounded, color: AppColors.textTertiary, size: 22),
+            Icon(Icons.search_rounded, color: AppColors.textTertiary, size: 22,
+                 semanticLabel: 'Search'),
             const SizedBox(width: AppSpacing.md),
             Text(
               'Search restaurants or dishes...',
@@ -185,6 +190,7 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     ).animate(delay: 100.ms).fadeIn().slideY(begin: 0.05);
@@ -213,8 +219,11 @@ class HomeScreen extends ConsumerWidget {
         final (emoji, name) = categories[index];
         return Padding(
           padding: const EdgeInsets.only(right: AppSpacing.md),
-          child: GestureDetector(
-            onTap: () => context.go('/search'),
+          child: Semantics(
+            button: true,
+            label: 'Browse $name restaurants',
+            child: GestureDetector(
+              onTap: () => context.go('/search'),
             child: Column(
               children: [
                 Container(
@@ -233,6 +242,7 @@ class HomeScreen extends ConsumerWidget {
                 Text(name, style: AppTypography.caption),
               ],
             ),
+          ),
           ),
         ).animate(delay: (100 + index * 50).ms).fadeIn().slideX(begin: 0.2);
       },
@@ -279,7 +289,11 @@ class HomeScreen extends ConsumerWidget {
     final coupons = ref.watch(couponsProvider).available.where((c) => c.isUsable).take(5).toList();
 
     if (coupons.isEmpty) {
-      return const Center(child: Text('No offers available', style: TextStyle(fontSize: 13)));
+      return const EmptyStateWidget(
+        icon: Icons.local_offer_outlined,
+        title: 'No offers right now',
+        subtitle: 'Check back soon for exciting deals!',
+      );
     }
 
     final gradients = [
@@ -384,9 +398,13 @@ class HomeScreen extends ConsumerWidget {
           Text(title, style: AppTypography.h3),
           GestureDetector(
             onTap: onTap,
-            child: Text(
-              action,
-              style: AppTypography.caption.copyWith(color: AppColors.primary),
+            child: Semantics(
+              button: true,
+              label: '$action $title',
+              child: Text(
+                action,
+                style: AppTypography.caption.copyWith(color: AppColors.primary),
+              ),
             ),
           ),
         ],
@@ -473,18 +491,23 @@ class HomeScreen extends ConsumerWidget {
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: GestureDetector(
-                      onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(restaurant.id),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.45),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                          color: isFav ? AppColors.primary : Colors.white,
-                          size: 20,
+                    child: Semantics(
+                      button: true,
+                      label: isFav ? 'Remove from favorites' : 'Add to favorites',
+                      child: GestureDetector(
+                        onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(restaurant.id),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                            color: isFav ? AppColors.primary : Colors.white,
+                            size: 20,
+                            semanticLabel: isFav ? 'Favorited' : 'Not favorited',
+                          ),
                         ),
                       ),
                     ),
@@ -531,6 +554,7 @@ class HomeScreen extends ConsumerWidget {
                               Icons.star_rounded,
                               size: 12,
                               color: Colors.white,
+                              semanticLabel: 'stars',
                             ),
                           ],
                         ),
@@ -552,6 +576,7 @@ class HomeScreen extends ConsumerWidget {
                         Icons.access_time_rounded,
                         size: 14,
                         color: AppColors.textTertiary,
+                        semanticLabel: 'Delivery time',
                       ),
                       const SizedBox(width: 4),
                       Text(

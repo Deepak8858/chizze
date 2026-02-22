@@ -22,7 +22,15 @@ func NewReferralHandler(aw *services.AppwriteService) *ReferralHandler {
 }
 
 // GetCode returns the user's referral code, generating one if needed
-// GET /api/v1/referrals/code
+// @Summary      Get referral code
+// @Description  Returns the authenticated user's referral code and share link, generating a new code if none exists
+// @Tags         Referrals
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/referrals/code [get]
 func (h *ReferralHandler) GetCode(c *gin.Context) {
 	userID := c.GetString("user_id")
 
@@ -52,7 +60,18 @@ func (h *ReferralHandler) GetCode(c *gin.Context) {
 }
 
 // Apply applies a referral code for the current user
-// POST /api/v1/referrals/apply
+// @Summary      Apply a referral code
+// @Description  Applies a referral code for the authenticated user, granting rewards to both referrer and referee
+// @Tags         Referrals
+// @Accept       json
+// @Produce      json
+// @Param        body  body      models.ApplyReferralRequest  true  "Referral code to apply"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/referrals/apply [post]
 func (h *ReferralHandler) Apply(c *gin.Context) {
 	userID := c.GetString("user_id")
 
@@ -117,7 +136,15 @@ func (h *ReferralHandler) Apply(c *gin.Context) {
 }
 
 // ListReferrals returns the user's referral history
-// GET /api/v1/referrals
+// @Summary      List referrals
+// @Description  Returns the authenticated user's referral history and total earnings
+// @Tags         Referrals
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/referrals [get]
 func (h *ReferralHandler) ListReferrals(c *gin.Context) {
 	userID := c.GetString("user_id")
 

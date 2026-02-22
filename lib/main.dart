@@ -1,19 +1,38 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/theme.dart';
 import 'core/router/app_router.dart';
 import 'core/services/websocket_service.dart';
+import 'core/services/api_client.dart';
 import 'features/profile/providers/user_profile_provider.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase (non-fatal if config not present)
+  try {
+    await Firebase.initializeApp();
+    debugPrint('[Firebase] Initialized successfully');
+  } catch (e) {
+    debugPrint('[Firebase] Not available: $e');
+  }
+
+  // Initialize offline cache (Hive)
+  await cacheService.init();
 
   // Lock to portrait mode (mobile-only app)
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // Global error handler — catches uncaught Flutter exceptions
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('[ErrorBoundary] ${details.exceptionAsString()}');
+  };
 
   runApp(const ProviderScope(child: ChizzeApp()));
 }

@@ -203,10 +203,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const CouponsScreen(),
       ),
 
-      // ─── Referral ───
+      // ─── Referral (supports ?code=XYZ deep link) ───
       GoRoute(
         path: '/referral',
-        builder: (context, state) => const ReferralScreen(),
+        builder: (context, state) => ReferralScreen(
+          referralCode: state.uri.queryParameters['code'],
+        ),
       ),
 
       // ─── Chizze Gold ───

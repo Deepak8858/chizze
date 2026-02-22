@@ -23,7 +23,18 @@ func NewRestaurantHandler(aw *services.AppwriteService, geo *services.GeoService
 }
 
 // List returns restaurants with search/filter/pagination
-// GET /api/v1/restaurants
+// @Summary List restaurants
+// @Description Returns restaurants with optional search, filter, and pagination
+// @Tags Restaurants
+// @Produce json
+// @Param cuisine query string false "Filter by cuisine type"
+// @Param veg_only query string false "Filter vegetarian only (true/false)"
+// @Param sort query string false "Sort order (e.g. rating)"
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(20)
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/restaurants [get]
 func (h *RestaurantHandler) List(c *gin.Context) {
 	pg := models.ParsePagination(c)
 	queries := []string{
@@ -51,7 +62,17 @@ func (h *RestaurantHandler) List(c *gin.Context) {
 }
 
 // Nearby returns restaurants within a radius using geo bounding box + Haversine
-// GET /api/v1/restaurants/nearby?lat=X&lng=Y&radius=5
+// @Summary Find nearby restaurants
+// @Description Returns restaurants within a radius using geo bounding box and Haversine distance refinement
+// @Tags Restaurants
+// @Produce json
+// @Param lat query number true "Latitude"
+// @Param lng query number true "Longitude"
+// @Param radius query number false "Search radius in km (default 5, max 50)"
+// @Success 200 {object} map[string]interface{} "restaurants, total, center, radius_km"
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/restaurants/nearby [get]
 func (h *RestaurantHandler) Nearby(c *gin.Context) {
 	lat, err := strconv.ParseFloat(c.Query("lat"), 64)
 	if err != nil {
@@ -108,7 +129,14 @@ func (h *RestaurantHandler) Nearby(c *gin.Context) {
 }
 
 // GetDetail returns restaurant details
-// GET /api/v1/restaurants/:id
+// @Summary Get restaurant details
+// @Description Returns detailed information about a specific restaurant
+// @Tags Restaurants
+// @Produce json
+// @Param id path string true "Restaurant ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/restaurants/{id} [get]
 func (h *RestaurantHandler) GetDetail(c *gin.Context) {
 	id := c.Param("id")
 	restaurant, err := h.appwrite.GetRestaurant(id)
@@ -120,7 +148,14 @@ func (h *RestaurantHandler) GetDetail(c *gin.Context) {
 }
 
 // GetMenu returns restaurant menu grouped by categories
-// GET /api/v1/restaurants/:id/menu
+// @Summary Get restaurant menu
+// @Description Returns the restaurant's menu items grouped by categories
+// @Tags Restaurants
+// @Produce json
+// @Param id path string true "Restaurant ID"
+// @Success 200 {object} map[string]interface{} "categories, uncategorized"
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/restaurants/{id}/menu [get]
 func (h *RestaurantHandler) GetMenu(c *gin.Context) {
 	restaurantID := c.Param("id")
 
@@ -186,7 +221,16 @@ func (h *RestaurantHandler) GetMenu(c *gin.Context) {
 }
 
 // GetReviews returns paginated reviews for a restaurant
-// GET /api/v1/restaurants/:id/reviews
+// @Summary Get restaurant reviews
+// @Description Returns paginated reviews for a specific restaurant
+// @Tags Restaurants
+// @Produce json
+// @Param id path string true "Restaurant ID"
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(20)
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/restaurants/{id}/reviews [get]
 func (h *RestaurantHandler) GetReviews(c *gin.Context) {
 	restaurantID := c.Param("id")
 	pg := models.ParsePagination(c)

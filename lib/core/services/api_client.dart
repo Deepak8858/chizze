@@ -5,9 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_config.dart';
 import '../models/api_response.dart';
+import 'cache_service.dart';
 
 /// Secure storage key for persisted JWT
 const _kJwtStorageKey = 'chizze_jwt_token';
+
+/// Global cache service instance (initialized in main.dart)
+final CacheService cacheService = CacheService();
 
 /// Centralized HTTP client for the Go backend API (uses Dio)
 class ApiClient {
@@ -31,6 +35,9 @@ class ApiClient {
         },
       ),
     );
+
+    // Add cache interceptor first (serves offline responses)
+    _dio.interceptors.add(CacheInterceptor(cacheService));
 
     // Add interceptor for automatic 401 → refresh → retry
     _dio.interceptors.add(

@@ -22,7 +22,20 @@ func NewReviewHandler(aw *services.AppwriteService) *ReviewHandler {
 }
 
 // CreateReview submits a review for an order with ownership/duplicate/status checks
-// POST /api/v1/orders/:id/review
+// @Summary      Create a review
+// @Description  Submits a review for a delivered order. Validates ownership, delivery status, and duplicate checks.
+// @Tags         Reviews
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string                      true  "Order ID"
+// @Param        body  body      models.CreateReviewRequest  true  "Review data"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/orders/{id}/review [post]
 func (h *ReviewHandler) CreateReview(c *gin.Context) {
 	orderID := c.Param("id")
 	userID := middleware.GetUserID(c)
@@ -120,7 +133,20 @@ func (h *ReviewHandler) updateRestaurantRating(restaurantID string) {
 }
 
 // ReplyToReview lets restaurant owner reply to a review with ownership check
-// POST /api/v1/partner/reviews/:id/reply
+// @Summary      Reply to a review
+// @Description  Allows a restaurant owner to reply to a review with ownership verification
+// @Tags         Reviews
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string                     true  "Review ID"
+// @Param        body  body      models.ReplyReviewRequest  true  "Reply text"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/reviews/{id}/reply [post]
 func (h *ReviewHandler) ReplyToReview(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	reviewID := c.Param("id")

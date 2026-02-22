@@ -237,6 +237,7 @@ class CartScreen extends ConsumerWidget {
             style: AppTypography.body2.copyWith(color: Colors.white),
             decoration: InputDecoration(
               hintText: 'E.g. Less spicy, extra sauce...',
+              labelText: 'Special instructions',
               filled: false,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
@@ -277,12 +278,16 @@ class CartScreen extends ConsumerWidget {
                 padding: EdgeInsets.only(
                   right: option != options.last ? AppSpacing.sm : 0,
                 ),
-                child: GestureDetector(
-                  onTap: () {
-                    ref
-                        .read(cartProvider.notifier)
-                        .setDeliveryInstructions(isSelected ? '' : option.$1);
-                  },
+                child: Semantics(
+                  button: true,
+                  selected: isSelected,
+                  label: '${option.$1} delivery instruction',
+                  child: GestureDetector(
+                    onTap: () {
+                      ref
+                          .read(cartProvider.notifier)
+                          .setDeliveryInstructions(isSelected ? '' : option.$1);
+                    },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(
@@ -322,6 +327,7 @@ class CartScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                ),
                 ),
               ),
             );
@@ -409,11 +415,15 @@ class _QuantityButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Icon(icon, size: 16, color: AppColors.primary),
+    return Semantics(
+      button: true,
+      label: icon == Icons.add ? 'Increase quantity' : 'Decrease quantity',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 16, color: AppColors.primary),
+        ),
       ),
     );
   }

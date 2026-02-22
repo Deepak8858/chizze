@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
 import '../providers/notifications_provider.dart';
 
 /// Selected notification filter
@@ -154,21 +155,7 @@ class NotificationsScreen extends ConsumerWidget {
   }
 
   Widget _buildEmpty() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('🔔', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: AppSpacing.xl),
-          Text('No notifications yet', style: AppTypography.h3),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'We\'ll notify you about orders & offers',
-            style: AppTypography.body2,
-          ),
-        ],
-      ),
-    );
+    return EmptyStateWidget.noNotifications();
   }
 
   Widget _buildNotificationCard(

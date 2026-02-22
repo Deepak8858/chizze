@@ -20,7 +20,15 @@ func NewScheduledOrderHandler(aw *services.AppwriteService) *ScheduledOrderHandl
 }
 
 // List returns the user's scheduled orders
-// GET /api/v1/orders/scheduled
+// @Summary      List scheduled orders
+// @Description  Returns the authenticated user's scheduled orders
+// @Tags         Scheduled Orders
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/orders/scheduled [get]
 func (h *ScheduledOrderHandler) List(c *gin.Context) {
 	userID := c.GetString("user_id")
 
@@ -33,7 +41,18 @@ func (h *ScheduledOrderHandler) List(c *gin.Context) {
 }
 
 // Create creates a new scheduled order
-// POST /api/v1/orders/scheduled
+// @Summary      Create a scheduled order
+// @Description  Creates a new scheduled order for the authenticated user
+// @Tags         Scheduled Orders
+// @Accept       json
+// @Produce      json
+// @Param        body  body      models.CreateScheduledOrderRequest  true  "Scheduled order data"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/orders/scheduled [post]
 func (h *ScheduledOrderHandler) Create(c *gin.Context) {
 	userID := c.GetString("user_id")
 
@@ -71,7 +90,16 @@ func (h *ScheduledOrderHandler) Create(c *gin.Context) {
 }
 
 // Cancel cancels a scheduled order
-// PUT /api/v1/orders/scheduled/:id/cancel
+// @Summary      Cancel a scheduled order
+// @Description  Cancels an existing scheduled order by ID
+// @Tags         Scheduled Orders
+// @Accept       json
+// @Produce      json
+// @Param        id  path      string  true  "Scheduled order ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/orders/scheduled/{id}/cancel [put]
 func (h *ScheduledOrderHandler) Cancel(c *gin.Context) {
 	orderID := c.Param("id")
 

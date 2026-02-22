@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,17 +10,17 @@ import 'api_config.dart';
 /// Key under which the device push token is cached locally
 const _kDeviceTokenKey = 'chizze_device_push_token';
 
-/// Lightweight push-notification service.
+/// Top-level handler for background FCM messages.
+/// Must be a top-level function (not a method or closure).
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('[Push] Background message: ${message.messageId}');
+}
+
+/// Push-notification service backed by Firebase Cloud Messaging.
 ///
-/// Handles:
-/// * Generating / retrieving a device token (placeholder until Firebase is wired)
-/// * Sending the token to the Go backend via `PUT /users/me/fcm-token`
-/// * Initialising `flutter_local_notifications` for heads-up display
-///
-/// To integrate real FCM later:
-/// 1. Add `firebase_messaging` to pubspec.yaml + Firebase project setup
-/// 2. Replace [_generateDeviceToken] with `FirebaseMessaging.instance.getToken()`
-/// 3. Listen to `FirebaseMessaging.onMessage` and call [showLocalNotification]
+/// Falls back to a dev-mode placeholder token when Firebase is not
+/// configured (e.g. missing google-services.json).
 class PushNotificationService {
   PushNotificationService(this._api);
 
@@ -31,13 +32,67 @@ class PushNotificationService {
   /// Cached device token for the current session
   String? _deviceToken;
 
+  /// Whether Firebase Messaging initialised successfully
+  bool _firebaseAvailable = false;
+
   // ─── Initialisation ───
 
   /// Call once at app startup (e.g., in main.dart after auth)
   Future<void> init() async {
     await _initLocalNotifications();
+    await _initFirebaseMessaging();
     await _ensureDeviceToken();
     debugPrint('[Push] Service initialised. Token: $_deviceToken');
+  }
+
+  /// Set up Firebase Messaging listeners
+  Future<void> _initFirebaseMessaging() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+
+      // Request permission (iOS + Android 13+)
+      final settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+      debugPrint('[Push] Permission status: ${settings.authorizationStatus}');
+
+      // Register background handler
+      FirebaseMessaging.onBackgroundMessage(
+          firebaseMessagingBackgroundHandler);
+
+      // Foreground messages → show local notification
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        debugPrint('[Push] Foreground message: ${message.messageId}');
+        final notification = message.notification;
+        if (notification != null) {
+          showLocalNotification(
+            title: notification.title ?? 'Chizze',
+            body: notification.body ?? '',
+            payload: message.data['route'],
+          );
+        }
+      });
+
+      // Handle notification taps (app was in background)
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        debugPrint('[Push] Notification opened: ${message.data}');
+        // TODO: Navigate based on message.data['route']
+      });
+
+      // Check if app was launched from a notification
+      final initial = await messaging.getInitialMessage();
+      if (initial != null) {
+        debugPrint('[Push] App launched from notification: ${initial.data}');
+      }
+
+      _firebaseAvailable = true;
+    } catch (e) {
+      debugPrint('[Push] Firebase Messaging not available: $e');
+      _firebaseAvailable = false;
+    }
   }
 
   /// Initialise the flutter_local_notifications plugin
@@ -62,12 +117,32 @@ class PushNotificationService {
   /// Ensure we have a device token; generate one if needed and register it
   /// with the backend.
   Future<void> _ensureDeviceToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    _deviceToken = prefs.getString(_kDeviceTokenKey);
+    // Try to get a real FCM token first
+    if (_firebaseAvailable) {
+      try {
+        _deviceToken = await FirebaseMessaging.instance.getToken();
+        debugPrint('[Push] FCM token acquired');
 
+        // Listen for token refreshes
+        FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+          _deviceToken = newToken;
+          registerToken();
+          debugPrint('[Push] FCM token refreshed');
+        });
+      } catch (e) {
+        debugPrint('[Push] Failed to get FCM token: $e');
+      }
+    }
+
+    // Fallback to local dev token if FCM unavailable
     if (_deviceToken == null) {
-      _deviceToken = _generateDeviceToken();
-      await prefs.setString(_kDeviceTokenKey, _deviceToken!);
+      final prefs = await SharedPreferences.getInstance();
+      _deviceToken = prefs.getString(_kDeviceTokenKey);
+
+      if (_deviceToken == null) {
+        _deviceToken = _generateDeviceToken();
+        await prefs.setString(_kDeviceTokenKey, _deviceToken!);
+      }
     }
 
     await registerToken();
@@ -89,8 +164,8 @@ class PushNotificationService {
     }
   }
 
-  /// Placeholder token generator.
-  /// Replace with `FirebaseMessaging.instance.getToken()` when Firebase is set up.
+  /// Dev-mode placeholder token generator.
+  /// Used only when Firebase is not configured.
   String _generateDeviceToken() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     final rng = Random.secure();

@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../features/orders/models/order.dart';
 import '../providers/partner_provider.dart';
 import '../models/partner_order.dart';
@@ -204,19 +205,7 @@ class PartnerDashboardScreen extends ConsumerWidget {
         const SizedBox(height: AppSpacing.md),
         if (activeOrders.isEmpty)
           GlassCard(
-            child: Center(
-              child: Column(
-                children: [
-                  const Text('🎉', style: TextStyle(fontSize: 40)),
-                  const SizedBox(height: AppSpacing.md),
-                  Text('No active orders', style: AppTypography.body1),
-                  Text(
-                    'New orders will appear here',
-                    style: AppTypography.caption,
-                  ),
-                ],
-              ),
-            ),
+            child: EmptyStateWidget.noPartnerOrders(),
           )
         else
           ...activeOrders.take(3).toList().asMap().entries.map((entry) {

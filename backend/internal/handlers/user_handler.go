@@ -30,7 +30,14 @@ func NewUserHandler(aw *services.AppwriteService) *UserHandler {
 }
 
 // GetProfile returns current user profile
-// GET /api/v1/users/me
+// @Summary Get current user profile
+// @Description Returns the authenticated user's profile information
+// @Tags Users
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/users/me [get]
 func (h *UserHandler) GetProfile(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	user, err := h.appwrite.GetUser(userID)
@@ -42,7 +49,17 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 }
 
 // UpdateProfile updates current user profile with field whitelist
-// PUT /api/v1/users/me
+// @Summary Update current user profile
+// @Description Updates the authenticated user's profile. Allowed fields: name, email, phone, profile_image, role, address, latitude, longitude.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object true "Profile fields to update"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/users/me [put]
 func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
@@ -73,7 +90,14 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 }
 
 // ListAddresses returns user's saved addresses
-// GET /api/v1/users/me/addresses
+// @Summary List user addresses
+// @Description Returns the authenticated user's saved addresses
+// @Tags Users
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/users/me/addresses [get]
 func (h *UserHandler) ListAddresses(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	result, err := h.appwrite.ListAddresses(userID)
@@ -85,7 +109,17 @@ func (h *UserHandler) ListAddresses(c *gin.Context) {
 }
 
 // CreateAddress adds a new address
-// POST /api/v1/users/me/addresses
+// @Summary Create a new address
+// @Description Adds a new saved address for the authenticated user
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object true "Address data (label, line1, line2, city, state, pincode, latitude, longitude, etc.)"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/users/me/addresses [post]
 func (h *UserHandler) CreateAddress(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
@@ -105,7 +139,20 @@ func (h *UserHandler) CreateAddress(c *gin.Context) {
 }
 
 // UpdateAddress updates an existing address with ownership check
-// PUT /api/v1/users/me/addresses/:id
+// @Summary Update an existing address
+// @Description Updates a saved address after verifying ownership
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Address ID"
+// @Param request body object true "Updated address data"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/users/me/addresses/{id} [put]
 func (h *UserHandler) UpdateAddress(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	addrID := c.Param("id")
@@ -139,7 +186,17 @@ func (h *UserHandler) UpdateAddress(c *gin.Context) {
 }
 
 // DeleteAddress removes an address with ownership check
-// DELETE /api/v1/users/me/addresses/:id
+// @Summary Delete an address
+// @Description Deletes a saved address after verifying ownership
+// @Tags Users
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Address ID"
+// @Success 200 {object} map[string]interface{} "message"
+// @Failure 403 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/users/me/addresses/{id} [delete]
 func (h *UserHandler) DeleteAddress(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	addrID := c.Param("id")
@@ -164,7 +221,17 @@ func (h *UserHandler) DeleteAddress(c *gin.Context) {
 }
 
 // UpdateFCMToken updates the user's FCM token for push notifications
-// PUT /api/v1/users/me/fcm-token
+// @Summary Update FCM token
+// @Description Updates the user's Firebase Cloud Messaging token for push notifications
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object true "JSON with token (string, required)"
+// @Success 200 {object} map[string]interface{} "message"
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/users/me/fcm-token [put]
 func (h *UserHandler) UpdateFCMToken(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 

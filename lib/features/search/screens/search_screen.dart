@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
 import '../../home/models/restaurant.dart';
 import '../../home/providers/restaurant_provider.dart';
 
@@ -146,6 +147,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back_rounded),
+                    tooltip: 'Go back',
                     onPressed: () => context.go('/home'),
                   ),
                   Expanded(
@@ -159,6 +161,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         suffixIcon: query.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.close_rounded, size: 20),
+                                tooltip: 'Clear search',
                                 onPressed: () {
                                   _searchController.clear();
                                   ref.read(searchQueryProvider.notifier).state =
@@ -263,25 +266,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildEmptyState(String query) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            query.isEmpty ? Icons.search_rounded : Icons.search_off_rounded,
-            size: 64,
-            color: AppColors.textTertiary,
-          ),
-          const SizedBox(height: AppSpacing.base),
-          Text(
-            query.isEmpty
-                ? 'Search for restaurants or cuisines'
-                : 'No results for "$query"',
-            style: AppTypography.body2,
-          ),
-        ],
-      ),
-    );
+    if (query.isEmpty) {
+      return const EmptyStateWidget(
+        icon: Icons.search_rounded,
+        title: 'Discover restaurants',
+        subtitle: 'Search for restaurants or cuisines',
+      );
+    }
+    return EmptyStateWidget.noSearchResults(query);
   }
 
   Widget _buildRestaurantCard(Restaurant restaurant, int index) {
@@ -464,9 +456,13 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
+    return Semantics(
+      button: true,
+      toggled: isActive,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
@@ -497,6 +493,7 @@ class _FilterChip extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

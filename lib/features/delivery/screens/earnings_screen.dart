@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/shimmer_loader.dart';
 import '../providers/earnings_provider.dart';
 
 /// Earnings screen — period selector, chart, trips, payouts
@@ -27,7 +28,7 @@ class EarningsScreen extends ConsumerWidget {
         ],
       ),
       body: earnings.isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const EarningsSkeleton()
           : RefreshIndicator(
               onRefresh: () => ref.read(earningsProvider.notifier).refresh(),
               color: AppColors.primary,
