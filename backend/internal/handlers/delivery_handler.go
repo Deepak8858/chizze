@@ -3,27 +3,35 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
+	"github.com/chizze/backend/internal/websocket"
 	"github.com/chizze/backend/pkg/appwrite"
 	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/chizze/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // DeliveryHandler handles delivery partner endpoints
 type DeliveryHandler struct {
-	appwrite *services.AppwriteService
-	geo      *services.GeoService
-	redis    *redispkg.Client
+	appwrite    *services.AppwriteService
+	geo         *services.GeoService
+	redis       *redispkg.Client
+	broadcaster *websocket.EventBroadcaster
 }
 
 // NewDeliveryHandler creates a delivery handler
-func NewDeliveryHandler(aw *services.AppwriteService, geo *services.GeoService, redis *redispkg.Client) *DeliveryHandler {
-	return &DeliveryHandler{appwrite: aw, geo: geo, redis: redis}
+func NewDeliveryHandler(aw *services.AppwriteService, geo *services.GeoService, redis *redispkg.Client, broadcaster ...*websocket.EventBroadcaster) *DeliveryHandler {
+	h := &DeliveryHandler{appwrite: aw, geo: geo, redis: redis}
+	if len(broadcaster) > 0 {
+		h.broadcaster = broadcaster[0]
+	}
+	return h
 }
 
 // ToggleOnline sets delivery partner online/offline
@@ -52,6 +60,27 @@ func (h *DeliveryHandler) ToggleOnline(c *gin.Context) {
 		utils.InternalError(c, "Failed to update status")
 		return
 	}
+
+	// Update Redis geo set: add location when online, remove when offline
+	if h.redis != nil {
+		geoCtx := context.Background()
+		if req.IsOnline {
+			// Re-add with last known location (will be overwritten by UpdateLocation)
+			lat, _ := partnerResult.Documents[0]["current_latitude"].(float64)
+			lng, _ := partnerResult.Documents[0]["current_longitude"].(float64)
+			if lat != 0 && lng != 0 {
+				h.redis.GeoAdd(geoCtx, "rider_locations", &redis.GeoLocation{
+					Name:      userID,
+					Longitude: lng,
+					Latitude:  lat,
+				})
+			}
+		} else {
+			// Remove rider from geo set when going offline
+			h.redis.ZRem(geoCtx, "rider_locations", userID)
+		}
+	}
+
 	utils.Success(c, updated)
 }
 
@@ -91,6 +120,19 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 		return
 	}
 
+	// Store rider position in Redis geo set for proximity matching
+	if h.redis != nil {
+		geoCtx := context.Background()
+		_, geoErr := h.redis.GeoAdd(geoCtx, "rider_locations", &redis.GeoLocation{
+			Name:      userID,
+			Longitude: req.Longitude,
+			Latitude:  req.Latitude,
+		})
+		if geoErr != nil {
+			log.Printf("[delivery] GeoAdd rider_locations failed for %s: %v", userID, geoErr)
+		}
+	}
+
 	// Also store in rider_locations for tracking history
 	_, _ = h.appwrite.CreateDeliveryLocation("unique()", map[string]interface{}{
 		"partner_id": userID,
@@ -100,6 +142,24 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 		"speed":      req.Speed,
 		"timestamp":  time.Now().Format(time.RFC3339),
 	})
+
+	// Broadcast live location to customers tracking this rider's deliveries
+	if h.broadcaster != nil {
+		// Find active orders for this rider and broadcast location to each customer
+		activeOrders, err := h.appwrite.ListOrders([]string{
+			appwrite.QueryEqual("delivery_partner_id", userID),
+			appwrite.QueryEqual("status", "out_for_delivery"),
+		})
+		if err == nil && activeOrders != nil {
+			for _, o := range activeOrders.Documents {
+				custID, _ := o["user_id"].(string)
+				oID, _ := o["$id"].(string)
+				if custID != "" {
+					h.broadcaster.BroadcastDeliveryLocation(custID, oID, req.Latitude, req.Longitude, req.Heading)
+				}
+			}
+		}
+	}
 
 	utils.Success(c, gin.H{"message": "Location updated"})
 }
@@ -177,6 +237,10 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 			"is_read":    false,
 			"created_at": time.Now().Format(time.RFC3339),
 		})
+		// Broadcast via WebSocket for live tracking
+		if h.broadcaster != nil {
+			h.broadcaster.BroadcastOrderUpdate(customerID, orderID, "rider_assigned", "A delivery partner is on the way")
+		}
 	}
 
 	utils.Success(c, gin.H{"message": "Order accepted", "order_id": orderID})

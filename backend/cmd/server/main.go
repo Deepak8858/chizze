@@ -15,6 +15,8 @@ import (
 	"github.com/chizze/backend/internal/handlers"
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/services"
+	"github.com/chizze/backend/internal/websocket"
+	"github.com/chizze/backend/internal/workers"
 	"github.com/chizze/backend/pkg/appwrite"
 	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/gin-gonic/gin"
@@ -42,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("FATAL: Redis connection failed: %v", err)
 	}
-	defer redisClient.Close()
+	// Note: Redis is closed explicitly in the graceful shutdown block below
 
 	// ─── Initialize Services ───
 	awService := services.NewAppwriteService(awClient)
@@ -50,14 +52,19 @@ func main() {
 	paymentService := services.NewPaymentService(cfg)
 	geoService := services.NewGeoService()
 
+	// ─── Initialize WebSocket Hub ───
+	hub := websocket.NewHub()
+	go hub.Run()
+	broadcaster := websocket.NewEventBroadcaster(hub)
+
 	// ─── Initialize Handlers ───
 	authHandler := handlers.NewAuthHandler(awService, redisClient, cfg)
 	userHandler := handlers.NewUserHandler(awService)
 	restaurantHandler := handlers.NewRestaurantHandler(awService, geoService)
 	menuHandler := handlers.NewMenuHandler(awService)
-	orderHandler := handlers.NewOrderHandler(awService, orderService, geoService, redisClient)
+	orderHandler := handlers.NewOrderHandler(awService, orderService, geoService, redisClient, broadcaster)
 	paymentHandler := handlers.NewPaymentHandler(awService, paymentService)
-	deliveryHandler := handlers.NewDeliveryHandler(awService, geoService, redisClient)
+	deliveryHandler := handlers.NewDeliveryHandler(awService, geoService, redisClient, broadcaster)
 	reviewHandler := handlers.NewReviewHandler(awService)
 	couponHandler := handlers.NewCouponHandler(awService)
 	notifHandler := handlers.NewNotificationHandler(awService)
@@ -79,18 +86,53 @@ func main() {
 	r.Use(middleware.Gzip())                                // Response compression
 	r.Use(middleware.RedisRateLimit(redisClient, 200, 500)) // 200 req/s, burst 500 (Redis-backed)
 
-	// Health check (no auth, no rate limit)
+	// Health check — liveness probe (always 200 if server is running)
 	r.GET("/health", func(c *gin.Context) {
-		redisStatus := "ok"
-		if err := redisClient.Ping(c.Request.Context()); err != nil {
-			redisStatus = "error: " + err.Error()
-		}
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
 			"service": "chizze-api",
-			"version": "1.0.0",
+			"version": version,
 			"uptime":  time.Since(startTime).String(),
-			"redis":   redisStatus,
+		})
+	})
+
+	// Readiness probe — checks all dependencies
+	r.GET("/health/ready", func(c *gin.Context) {
+		checks := make(map[string]string)
+		allOk := true
+
+		// Check Redis
+		if err := redisClient.Ping(c.Request.Context()); err != nil {
+			checks["redis"] = "error: " + err.Error()
+			allOk = false
+		} else {
+			checks["redis"] = "ok"
+		}
+
+		// Check Appwrite (lightweight health call)
+		awHealthCtx, awCancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer awCancel()
+		if err := awClient.Health(awHealthCtx); err != nil {
+			checks["appwrite"] = "error: " + err.Error()
+			allOk = false
+		} else {
+			checks["appwrite"] = "ok"
+		}
+
+		status := http.StatusOK
+		statusText := "ready"
+		if !allOk {
+			status = http.StatusServiceUnavailable
+			statusText = "degraded"
+		}
+
+		c.JSON(status, gin.H{
+			"status":         statusText,
+			"service":        "chizze-api",
+			"version":        version,
+			"uptime":         time.Since(startTime).String(),
+			"checks":         checks,
+			"circuit_breaker": awClient.BreakerState().String(),
 		})
 	})
 
@@ -123,6 +165,11 @@ func main() {
 	authenticated := v1.Group("")
 	authenticated.Use(middleware.Auth(cfg, redisClient))
 	{
+		// WebSocket
+		authenticated.GET("/ws", func(c *gin.Context) {
+			websocket.ServeWs(hub, c)
+		})
+
 		// Auth (authenticated)
 		authenticated.POST("/auth/refresh", authHandler.Refresh)
 		authenticated.DELETE("/auth/logout", authHandler.Logout)
@@ -251,6 +298,23 @@ func main() {
 	// Webhooks (no auth — validated by signature)
 	v1.POST("/payments/webhook", paymentHandler.Webhook)
 
+	// ─── Start Background Workers ───
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+
+	deliveryMatcher := workers.NewDeliveryMatcher(awService, geoService, redisClient, hub, 15*time.Second)
+	go deliveryMatcher.Start(workerCtx)
+
+	orderTimeout := workers.NewOrderTimeout(awService, hub, 30*time.Second, 5*time.Minute)
+	go orderTimeout.Start(workerCtx)
+
+	scheduledOrderProcessor := workers.NewScheduledOrderProcessor(awService, hub, 30*time.Second)
+	go scheduledOrderProcessor.Start(workerCtx)
+
+	notificationDispatcher := workers.NewNotificationDispatcher(awService, hub, redisClient, 10*time.Second)
+	go notificationDispatcher.Start(workerCtx)
+
+	log.Printf("🔧 4 background workers started")
+
 	// ─── Start Server with Production Settings ───
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -275,6 +339,11 @@ func main() {
 	<-quit
 
 	fmt.Println("\n🛑 Shutting down server...")
+
+	// Cancel workers first
+	workerCancel()
+	log.Println("Workers signaled to stop")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
@@ -287,3 +356,6 @@ func main() {
 }
 
 var startTime = time.Now()
+
+// version is set at build time via -ldflags
+var version = "1.0.0"

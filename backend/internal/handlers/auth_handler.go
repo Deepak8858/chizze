@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"log"
-	"strconv"
 	"time"
 
 	"github.com/chizze/backend/internal/config"
@@ -137,19 +136,14 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 		return
 	}
 
-	// Rate limit: max 3 OTP requests per phone per 10 minutes
+	// Rate limit: max 3 OTP requests per phone per 10 minutes (atomic)
 	ctx := context.Background()
 	rateLimitKey := "otp_limit:" + req.Phone
-	count, _ := h.redis.Get(ctx, rateLimitKey)
-	if count != "" {
-		countInt, _ := strconv.Atoi(count)
-		if countInt >= 3 {
-			utils.Error(c, 429, "Too many OTP requests. Please try again later.")
-			return
-		}
+	allowed, _, _ := h.redis.RateLimitCheck(ctx, rateLimitKey, 3, 10*time.Minute)
+	if !allowed {
+		utils.Error(c, 429, "Too many OTP requests. Please try again later.")
+		return
 	}
-	h.redis.Incr(ctx, rateLimitKey)
-	h.redis.Expire(ctx, rateLimitKey, 10*time.Minute)
 
 	// In production: integrate with Appwrite phone auth or SMS provider (MSG91, Twilio, etc.)
 	// For now, Appwrite SDK handles OTP on client side — this endpoint is a rate-limited proxy

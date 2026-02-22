@@ -64,6 +64,11 @@ func (c *Client) Underlying() *redis.Client {
 	return c.rdb
 }
 
+// GetRedis returns the raw go-redis client (alias for Underlying)
+func (c *Client) GetRedis() *redis.Client {
+	return c.rdb
+}
+
 // ─── Key-Value Helpers ───
 
 // Get retrieves a value by key. Returns empty string and redis.Nil if not found.
@@ -141,4 +146,42 @@ func (c *Client) RateLimitCheck(ctx context.Context, key string, limit int64, wi
 	}
 
 	return true, remaining, 0
+}
+
+// ─── Geo Helpers (for rider location matching) ───
+
+// GeoAdd adds a member with longitude/latitude to a geo set.
+func (c *Client) GeoAdd(ctx context.Context, key string, members ...*redis.GeoLocation) (int64, error) {
+	return c.rdb.GeoAdd(ctx, key, members...).Result()
+}
+
+// GeoSearch searches for members within a sorted set that match geo criteria.
+// Returns a list of member names (strings).
+func (c *Client) GeoSearch(ctx context.Context, key string, q *redis.GeoSearchQuery) ([]string, error) {
+	return c.rdb.GeoSearch(ctx, key, q).Result()
+}
+
+// ZRem removes one or more members from a sorted set (used to remove riders from geo set).
+func (c *Client) ZRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
+	return c.rdb.ZRem(ctx, key, members...).Result()
+}
+
+// ─── List Helpers (for notification queue) ───
+
+// LPush prepends one or more values to a list.
+func (c *Client) LPush(ctx context.Context, key string, values ...interface{}) (int64, error) {
+	return c.rdb.LPush(ctx, key, values...).Result()
+}
+
+// BRPop is a blocking pop from one or more lists with a timeout.
+// Returns the key and value that was popped.
+func (c *Client) BRPop(ctx context.Context, timeout time.Duration, keys ...string) ([]string, error) {
+	return c.rdb.BRPop(ctx, timeout, keys...).Result()
+}
+
+// ─── Error Helpers ───
+
+// IsNilError returns true if the given error is redis.Nil (key not found).
+func IsNilError(err error) bool {
+	return err == redis.Nil
 }

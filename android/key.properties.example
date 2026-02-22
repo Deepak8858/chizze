@@ -1,0 +1,16 @@
+# ══════════════════════════════════════════
+# Android Release Signing — key.properties
+# ══════════════════════════════════════════
+# Copy this to android/key.properties and fill in values.
+# NEVER commit key.properties or .jks files to git.
+#
+# Generate a keystore:
+#   keytool -genkey -v -keystore chizze-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 \
+#     -alias chizze -storetype JKS
+# ══════════════════════════════════════════
+
+storeFile=chizze-release.jks
+storePassword=your_keystore_password
+keyAlias=chizze
+keyPassword=your_key_password

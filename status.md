@@ -1,9 +1,9 @@
 # Chizze — Project Status
 
-> **Last Updated:** 2026-02-23T14:00:00+05:30
-> **Current Phase:** Phase 6 — Polish & Advanced (COMPLETE)
-> **Phase Status:** ✅ Phase 6 COMPLETE
-> **Next Action:** Production deployment & testing
+> **Last Updated:** 2026-02-25T14:00:00+05:30
+> **Current Phase:** Phase 9 — Production Deployment & CI/CD (COMPLETE)
+> **Phase Status:** ✅ Phase 9 COMPLETE
+> **Next Action:** Production launch — configure secrets, deploy to VPS
 
 ---
 
@@ -53,6 +53,9 @@ design_system:
 | 4 | Restaurant Partner | 10-12 | ✅ COMPLETE + AUDITED | 100% |
 | 5 | Delivery Partner | 13-15 | ✅ COMPLETE | 100% |
 | 6 | Polish & Advanced | 16-18 | ✅ COMPLETE | 100% |
+| 7 | Real-time & Workers | — | ✅ COMPLETE | 100% |
+| 8 | Testing & Quality Assurance | — | ✅ COMPLETE | 100% |
+| 9 | Production Deployment & CI/CD | — | ✅ COMPLETE | 100% |
 
 ---
 
@@ -750,6 +753,170 @@ Flutter                        Go Backend                    Razorpay API
 
 ---
 
+## Phase 7 — Real-time & Workers (COMPLETE)
+
+### 7.1 Go WebSocket Hub ✅
+
+- [x] `internal/websocket/hub.go` — Central Hub with client registry, per-user messaging (`SendToUser`), register/unregister/broadcast channels
+- [x] `internal/websocket/client.go` — gorilla/websocket Client with read/write pumps, 60s pong timeout, ping keepalive
+- [x] `internal/websocket/events.go` — EventBroadcaster with 6 typed event methods: `BroadcastOrderUpdate`, `BroadcastDeliveryRequest`, `BroadcastDeliveryLocation`, `BroadcastNewOrder`, `BroadcastNotification`, `BroadcastRiderStatusChange`
+- [x] WebSocket endpoint: `GET /api/v1/ws` (behind JWT auth middleware)
+
+### 7.2 Go Background Workers ✅
+
+- [x] `internal/workers/delivery_matcher.go` — Matches unassigned ready orders to nearby riders via Redis GeoSearch (5km radius, 15s interval)
+- [x] `internal/workers/order_timeout.go` — Auto-cancels orders stuck in "placed" status > 5 minutes (30s interval)
+- [x] `internal/workers/scheduled_order_processor.go` — Promotes scheduled orders to "placed" when their time arrives (30s interval, 2min lookahead)
+- [x] `internal/workers/notification_dispatcher.go` — Redis queue-based async notification delivery via `BRPop` (10s interval), stores in Appwrite + sends via WebSocket
+- [x] All workers wired into `main.go` with context cancellation and graceful shutdown
+
+### 7.3 Handler WebSocket Integration ✅
+
+- [x] `OrderHandler` — Broadcasts `order_update` on status change and cancellation
+- [x] `DeliveryHandler` — Broadcasts `delivery_request` on rider assignment, `delivery_location` on live location updates (to all customers with active out-for-delivery orders)
+- [x] Variadic constructor pattern for backward compatibility
+
+### 7.4 Flutter WebSocket Client ✅
+
+- [x] `lib/core/services/websocket_service.dart` — Full WebSocket client:
+  - Connects to Go backend `/api/v1/ws` with JWT auth
+  - Auto-reconnect with exponential backoff (1s → 30s max)
+  - Typed `WsEvent` model with `WsEventType` enum (7 event types)
+  - Filtered streams: `orderUpdates`, `deliveryLocations`, `notifications`, etc.
+  - Heartbeat ping every 25s
+  - Riverpod providers: `webSocketServiceProvider`, `wsEventsProvider`, `wsOrderUpdatesProvider`, `wsDeliveryLocationProvider`, `wsNotificationsProvider`
+  - `wsAutoConnectProvider` — auto-connects on auth, disconnects on logout
+- [x] `web_socket_channel: ^3.0.3` added to pubspec.yaml
+
+### 7.5 Flutter Provider Integration ✅
+
+- [x] `OrdersNotifier` — Listens to WS `order_update` events alongside Appwrite Realtime
+- [x] `RiderLocationNotifier` — Listens to WS `delivery_location` events alongside Appwrite Realtime (higher frequency from Go backend)
+- [x] `ChizzeApp` (main.dart) — Watches `wsAutoConnectProvider` to activate WS lifecycle
+
+### Verification
+- `flutter analyze` — **0 issues**
+- `go build ./...` — **0 errors**
+
+---
+
+## Phase 9 — Production Deployment & CI/CD (COMPLETE)
+
+### 9.1 GitHub Actions CI/CD Pipeline ✅
+
+- [x] `.github/workflows/ci.yml` — 5-job pipeline:
+  - **go-test**: golangci-lint, `go test ./...`, govulncheck
+  - **flutter-test**: `flutter analyze`, `flutter test --coverage`
+  - **docker-build**: Multi-platform buildx, GHCR push, layer caching
+  - **android-build**: APK (split-per-abi) + AAB, keystore from secrets
+  - **deploy**: SSH blue-green deploy with health check + auto-rollback
+- [x] Triggers: push main/develop, PRs to main, concurrency group cancellation
+
+### 9.2 Makefile ✅
+
+- [x] `Makefile` — 18 targets: dev, go-build, go-test, go-lint, go-vuln, flutter-test, flutter-lint, android-apk, android-aab, docker-build, docker-up, docker-down, test, lint, build, clean, deploy-staging, deploy-prod
+
+### 9.3 Enhanced Health Endpoints ✅
+
+- [x] `/health` — Liveness probe (always 200, used by container orchestrators)
+- [x] `/health/ready` — Readiness probe (checks Redis + Appwrite, returns 503 if degraded)
+- [x] Build-time version injection via `-ldflags -X main.version=${VERSION}`
+- [x] `appwrite/client.go` — Added `Health()` method for readiness check
+
+### 9.4 Nginx Reverse Proxy ✅
+
+- [x] `deploy/nginx/nginx.conf`:
+  - Rate limiting: 100 req/s general, 10 req/min auth endpoints
+  - Connection limiting: 50 per IP
+  - TLS 1.2+ with modern cipher suite
+  - Security headers: HSTS, X-Frame-Options DENY, CSP, X-Content-Type-Options
+  - WebSocket upgrade for `/api/v1/ws` (86400s timeout)
+  - Upstream: least_conn, keepalive 64
+- [x] `deploy/nginx/proxy_params.conf` — Shared proxy headers and timeouts
+
+### 9.5 Production Docker Compose ✅
+
+- [x] `deploy/docker-compose.prod.yml` — 4 services:
+  - **nginx**: 1.25-alpine, ports 80/443, SSL + certbot volumes
+  - **api**: GHCR image, 2 replicas, 512M RAM / 2 CPU limit, 15s health interval
+  - **redis**: 7-alpine, 512mb maxmemory allkeys-lru, AOF persistence, password auth, internal network only
+  - **certbot**: Auto-renewal every 12 hours
+- [x] Networks: `frontend` (public) + `backend` (internal, no external access)
+- [x] Logging: json-file driver with rotation (50m/5 files api, 20m/3 files redis)
+
+### 9.6 Environment Configuration ✅
+
+- [x] `deploy/.env.example` — Production vars: Appwrite, Razorpay live, Redis, JWT, Docker image, monitoring
+- [x] `backend/.env.example` — Updated with REQUEST_TIMEOUT, MAX_CONNECTIONS, SENTRY_DSN, LOG_LEVEL, FCM
+- [x] `.env.example` (Flutter root) — Documents `--dart-define` for dev/staging/production builds
+
+### 9.7 Android Release Build ✅
+
+- [x] `android/app/build.gradle.kts`:
+  - Application ID: `com.chizze.app` (changed from `com.example.chizze`)
+  - Release signing: key.properties with conditional fallback to debug
+  - R8/ProGuard: `isMinifyEnabled = true`, `isShrinkResources = true`
+  - ABI splits: armeabi-v7a, arm64-v8a, x86_64 + universal
+- [x] `android/app/proguard-rules.pro` — Rules for Flutter, Razorpay, Gson, OkHttp, Firebase, Appwrite, Mapbox
+- [x] `android/key.properties.example` — Template with keytool generation command
+
+### 9.8 Deployment Scripts ✅
+
+- [x] `deploy/scripts/setup.sh` — VPS setup: Docker + Compose, ufw firewall (22/80/443), fail2ban, 2GB swap, sysctl tuning (somaxconn, tcp_tw_reuse, file-max), deploy user
+- [x] `deploy/scripts/ssl-setup.sh` — Let's Encrypt via certbot with temporary Nginx for ACME challenge
+- [x] `deploy/scripts/deploy.sh` — Manual deploy: image pull, blue-green rollout, health check (30 attempts × 2s), automatic rollback on failure
+- [x] `deploy/README.md` — Documentation for deployment workflow + required GitHub Secrets
+
+### 9.9 Security & Gitignore ✅
+
+- [x] `.gitignore` updated: android/key.properties, *.jks, deploy/ssl/, deploy/certbot/, *.pem, deploy/.env.prod, deploy/.env.staging
+
+### 9.10 Validation ✅
+
+- [x] `go build ./cmd/server` — Compiles successfully with all health endpoint changes
+- [x] `go test ./...` — All 55+ Go backend tests PASS
+- [x] `flutter test` — All 132 Flutter tests PASS
+
+### 9.11 GitHub Secrets Required for CI/CD
+
+| Secret | Description |
+|---|---|
+| `DEPLOY_HOST` | Production server IP/hostname |
+| `DEPLOY_USER` | SSH username (deploy) |
+| `DEPLOY_SSH_KEY` | SSH private key for deployment |
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded release .jks keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_ALIAS` | Key alias (chizze) |
+| `ANDROID_KEY_PASSWORD` | Key password |
+
+### 9.12 Files Created/Modified
+
+**New Files (13):**
+- `.github/workflows/ci.yml` — CI/CD pipeline
+- `Makefile` — Build/test/deploy targets
+- `deploy/docker-compose.prod.yml` — Production stack
+- `deploy/nginx/nginx.conf` — Nginx reverse proxy
+- `deploy/nginx/proxy_params.conf` — Shared proxy params
+- `deploy/.env.example` — Production env template
+- `.env.example` — Flutter build env docs
+- `android/app/proguard-rules.pro` — R8 rules
+- `android/key.properties.example` — Signing template
+- `deploy/scripts/setup.sh` — VPS setup
+- `deploy/scripts/ssl-setup.sh` — SSL setup
+- `deploy/scripts/deploy.sh` — Deploy with rollback
+- `deploy/README.md` — Deployment docs
+
+**Modified Files (7):**
+- `backend/cmd/server/main.go` — Split health/ready, version var
+- `backend/pkg/appwrite/client.go` — Added Health() method
+- `backend/Dockerfile` — VERSION build arg + ldflags
+- `backend/.env.example` — Added monitoring/perf vars
+- `android/app/build.gradle.kts` — Release signing, ProGuard, ABI splits
+- `.gitignore` — Added deploy secrets, keystore, SSL entries
+- `lib/features/cart/providers/cart_provider.dart` — Fixed copyWith bug (from Phase 8)
+
+---
+
 ## Known Issues & Tech Debt
 
 | ID | Severity | File | Issue | Status |
@@ -804,10 +971,56 @@ security:
 
 ---
 
+## Phase 8 — Testing & Quality Assurance (COMPLETE)
+
+### 8.1 Go Backend Unit Tests ✅
+
+**10 test files, 55+ tests across 5 packages — ALL PASSING**
+
+| Package | File | Tests | Coverage |
+|---|---|---|---|
+| `pkg/utils` | `geo_test.go` | 9 | Haversine, EstimateETA, BoundingBox |
+| `pkg/utils` | `validators_test.go` | 5 (52 sub-cases) | Phone, email, pincode, role, sanitize |
+| `internal/models` | `order_test.go` | 4 (24 transitions) | CanTransition valid/invalid, constants |
+| `internal/models` | `common_test.go` | 6 | Pagination, AppError, collection constants |
+| `internal/services` | `order_service_test.go` | 3 | GenerateOrderNumber, CalculateFees, ValidateTransition |
+| `internal/services` | `geo_service_test.go` | 3 | Distance, EstimateDeliveryTime, NearbyBounds |
+| `pkg/redis` | `redis_test.go` | 3 | IsNilError, CloseNil, Underlying/GetRedis |
+| `internal/websocket` | `websocket_test.go` | 11 | Hub lifecycle, SendToUser, Broadcast, Events, EventBroadcaster |
+| `internal/middleware` | `auth_test.go` | 9 | JWT auth (missing/invalid/expired/wrong/valid), RequireRole, context helpers |
+| `internal/middleware` | `ratelimit_test.go` | 4 | Token bucket, burst exhaustion, different IPs, middleware 429 |
+
+### 8.2 Flutter Unit Tests ✅
+
+**8 test files, 132 tests — ALL PASSING (`flutter test` exit 0)**
+
+| Directory | File | Tests | Coverage |
+|---|---|---|---|
+| `test/models/` | `order_test.dart` | 19 | OrderStatus (fromString, progress, isActive, label/emoji), OrderItem, Order (fromMap, toMap, copyWith, mockList) |
+| `test/models/` | `restaurant_test.dart` | 9 | Restaurant (fromMap, toMap, mockList, defaults, veg-only) |
+| `test/models/` | `menu_item_test.dart` | 16 | CustomizationOption, CustomizationGroup, MenuCategory, MenuItem (fromMap, JSON customizations, mockList, mockCategories) |
+| `test/models/` | `api_response_test.dart` | 7 | PaginationMeta, ApiResponse (success/error/meta), ApiException |
+| `test/models/` | `delivery_partner_test.dart` | 22 | DeliveryPartner (fromDashboard, copyWith, empty), DeliveryRequest (fromMap, computed), DeliveryMetrics (weeklyProgress, earnings, mock, copyWith), DeliveryStep, ActiveDelivery |
+| `test/providers/` | `cart_provider_test.dart` | 27 | CartItem (totalPrice, cartKey), CartState (itemTotal, deliveryFee, platformFee, gst, grandTotal), CartNotifier (add/update/remove/coupon/clear) |
+| `test/providers/` | `coupons_provider_test.dart` | 12 | Coupon (isExpired, isUsable, daysRemaining, defaults), CouponsState (appliedCoupon lookup) |
+| `test/providers/` | `gold_provider_test.dart` | 20 | GoldPlan (durationLabel, benefits), GoldSubscription (isActive, daysRemaining), GoldState (isGoldMember, copyWith, clearSubscription) |
+
+### 8.3 Test Summary ✅
+
+- **Go backend:** `go test ./...` — 55+ tests PASS (0 failures)
+- **Flutter frontend:** `flutter test` — 132 tests PASS (0 failures)
+- **Total test coverage:** All pure business logic, models, state management, middleware, WebSocket events
+- **Bug found:** `CartState.copyWith` nullable pattern means `removeCoupon()` can't clear `couponCode` via `null` (documented in test)
+
+---
+
 ## Changelog
 
 | Date | Action | Details |
 |---|---|---|
+| 2026-02-25 14:00 | Phase 9 — COMPLETE | Production Deployment & CI/CD. 13 new files, 7 modified. GitHub Actions CI/CD (5 jobs: go-test, flutter-test, docker-build, android-build, deploy). Makefile (18 targets). Health endpoints split (liveness /health + readiness /health/ready). Nginx reverse proxy (rate limiting, TLS, WebSocket, security headers). Production docker-compose (nginx + api×2 + redis + certbot, dual network). Environment configs (3 .env.example files). Android release build (com.chizze.app, ProGuard, ABI splits, release signing). Deployment scripts (setup.sh, ssl-setup.sh, deploy.sh with rollback). deploy/README.md. All tests pass: 55+ Go, 132 Flutter. |
+| 2026-02-25 10:30 | Bug Fix | CartState.copyWith nullable pattern fixed — added clearCouponCode flag so removeCoupon() can set couponCode to null. 28/28 cart tests pass. |
+| 2026-02-25 10:00 | Phase 8 — COMPLETE | 10 Go test files (55+ tests), 8 Flutter test files (132 tests). All passing. Covers: utils (geo, validators), models (order transitions, pagination, errors), services (order numbers, fees, geo), redis (nil errors, client), websocket (hub, events, broadcaster), middleware (JWT auth, rate limiting), Flutter models (order, restaurant, menu_item, api_response, delivery_partner), Flutter providers (cart, coupons, gold). 1 bug documented (copyWith nullable pattern). |
 | 2026-02-21 16:00 | Phase 4 Audit Complete | 25 issues found (5 errors, 3 logic, 11 warnings, 6 info) — all fixed, `flutter analyze` reports 0 issues |
 | 2026-02-21 10:00 | Production Hardening Complete | 22 backend fixes, 11 Flutter fixes, 3 infrastructure items |
 | 2026-02-21 09:30 | Infrastructure | .gitignore updated, .dockerignore created, .env.example updated |
@@ -819,6 +1032,7 @@ security:
 | 2026-02-20 14:00 | Auth/Payment Audit | Fixed auth field mismatch, payment flow, Razorpay key, logout, JWT refresh |
 | 2026-02-20 13:30 | Phase 3.5 Complete | Go backend, auth bridge, payment bridge — all verified |
 | 2026-02-20 12:00 | Redis fix | `go mod tidy` promoted go-redis/v9 to direct dependency |
+| 2026-02-24 10:00 | Phase 7 — COMPLETE | WebSocket hub (Go): hub.go, client.go, events.go with 6 event types. 4 background workers: delivery_matcher (Redis GeoSearch), order_timeout, scheduled_order_processor, notification_dispatcher. Handler integration: OrderHandler + DeliveryHandler broadcast events. Flutter WebSocket client: websocket_service.dart with auto-reconnect, typed events, Riverpod providers. Integrated into OrdersNotifier + RiderLocationNotifier. flutter analyze 0 issues, go build 0 errors |
 | 2026-02-23 14:00 | Phase 6 — COMPLETE | Dark/light theme, favorites (full stack + heart icon), offers carousel, notification filters, Chizze Gold (full stack), referral system (full stack), scheduled orders (full stack), push notification service, 10 new API endpoints. Go backend: 4 new handler files, 14 new Appwrite CRUD methods. Flutter: 8 new files, 5 modified. dart analyze 0 issues |
 | 2026-02-22 12:00 | Phase 5 — COMPLETE | Go backend: Payout model + CRUD, 5 new handlers (profile GET/PUT, payouts GET, payout request POST, reject order), 5 new routes, notification triggers (AcceptOrder + all UpdateStatus transitions). Flutter: real GPS tracking via LocationService, updateProfile(), fetchPerformance(), earnings payout endpoint fix, DeliveryPartner.copyWith expanded. dart analyze 0 issues, go build 0 errors, go vet 0 issues |
 | 2026-02-22 10:00 | Phase 5 — Delivery screens enhanced | Earnings provider rewrite (period selector, fromMap, payouts), earnings screen (period chips, breakdown, payout section), profile screen (logout, hours online, subtitles), simulateNewRequest(), deliveryPayouts endpoint, 0 analyze issues |

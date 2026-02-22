@@ -61,7 +61,7 @@ func (h *GoldHandler) Subscribe(c *gin.Context) {
 	plans := models.GoldPlans()
 	var selectedPlan *models.GoldPlan
 	for _, p := range plans {
-		if p.ID == req.PlanID {
+		if p.Type == req.PlanType {
 			selectedPlan = &p
 			break
 		}
@@ -78,17 +78,23 @@ func (h *GoldHandler) Subscribe(c *gin.Context) {
 		return
 	}
 
+	// Map plan type to duration days
+	durationDays := map[string]int{"monthly": 30, "quarterly": 90, "annual": 365}[selectedPlan.Type]
+	if durationDays == 0 {
+		durationDays = 30
+	}
+
 	now := time.Now()
 	data := map[string]interface{}{
 		"user_id":        userID,
-		"plan_id":        req.PlanID,
-		"plan_name":      selectedPlan.Name,
+		"plan_type":      req.PlanType,
+		"plan_name":      selectedPlan.Label,
 		"amount":         selectedPlan.Price,
-		"duration_days":  selectedPlan.DurationDays,
+		"duration_days":  durationDays,
 		"payment_id":     req.PaymentID,
 		"status":         "active",
 		"started_at":     now.Format(time.RFC3339),
-		"expires_at":     now.AddDate(0, 0, selectedPlan.DurationDays).Format(time.RFC3339),
+		"expires_at":     now.AddDate(0, 0, durationDays).Format(time.RFC3339),
 		"auto_renew":     true,
 		"created_at":     now.Format(time.RFC3339),
 	}

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/realtime_service.dart';
+import '../../../core/services/websocket_service.dart';
 
 /// Rider location model for map tracking
 class RiderLocation {
@@ -33,18 +34,21 @@ class RiderLocation {
 
 }
 
-/// Rider location notifier — real-time updates from Appwrite
+/// Rider location notifier — real-time updates from Appwrite + Go WebSocket
 class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
   final RealtimeService _realtime;
+  final WebSocketService _ws;
   StreamSubscription? _realtimeSubscription;
+  StreamSubscription? _wsSubscription;
 
-  RiderLocationNotifier(this._realtime) : super(null);
+  RiderLocationNotifier(this._realtime, this._ws) : super(null);
 
   /// Start tracking a specific rider (for customer view)
   void trackRider(String riderId) {
     // Cancel any existing subscription
     stopTracking();
 
+    // Appwrite Realtime channel
     try {
       final channel = RealtimeChannels.riderLocationChannel(riderId);
       _realtimeSubscription = _realtime
@@ -56,19 +60,31 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
                 state = RiderLocation.fromRealtimeData(event.data);
               }
             },
-            onError: (_) {
-              // No mock fallback — location stays null until real data arrives
-            },
+            onError: (_) {},
           );
-    } catch (_) {
-      // Realtime not available — location stays null
-    }
+    } catch (_) {}
+
+    // Go WebSocket — delivery_location events (higher frequency from rider app)
+    _wsSubscription = _ws.deliveryLocations.listen((event) {
+      if (event.latitude != null && event.longitude != null) {
+        state = RiderLocation(
+          riderId: riderId,
+          latitude: event.latitude!,
+          longitude: event.longitude!,
+          heading: event.bearing ?? 0,
+          speed: 0,
+          updatedAt: event.timestamp,
+        );
+      }
+    });
   }
 
   /// Stop tracking
   void stopTracking() {
     _realtimeSubscription?.cancel();
     _realtimeSubscription = null;
+    _wsSubscription?.cancel();
+    _wsSubscription = null;
     state = null;
   }
 
@@ -83,5 +99,6 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
 final riderLocationProvider =
     StateNotifierProvider<RiderLocationNotifier, RiderLocation?>((ref) {
       final realtime = ref.watch(realtimeServiceProvider);
-      return RiderLocationNotifier(realtime);
+      final ws = ref.watch(webSocketServiceProvider);
+      return RiderLocationNotifier(realtime, ws);
     });

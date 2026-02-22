@@ -185,6 +185,10 @@ func (s *AppwriteService) ListDeliveryPartners(queries []string) (*appwrite.Docu
 	return s.client.ListDocuments(models.CollectionDeliveryRequests, queries)
 }
 
+func (s *AppwriteService) CreateDeliveryRequest(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionDeliveryRequests, id, data)
+}
+
 // ─── Users (create) ───
 
 func (s *AppwriteService) CreateUser(id string, data map[string]interface{}) (map[string]interface{}, error) {

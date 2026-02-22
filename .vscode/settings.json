@@ -1,4 +1,13 @@
 {
     "java.configuration.updateBuildConfiguration": "automatic",
-    "cmake.sourceDirectory": "H:/chizze/windows/runner"
+    "cmake.sourceDirectory": "H:/chizze/windows/runner",
+    "go.gopath": "H:\\chizze\\backend\\.gopath",
+    "go.toolsEnvVars": {
+        "GOPATH": "H:\\chizze\\backend\\.gopath"
+    },
+    "gopls": {
+        "build.env": {
+            "GOPATH": "H:\\chizze\\backend\\.gopath"
+        }
+    }
 }

@@ -4,6 +4,7 @@ import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
 import '../../../core/services/realtime_service.dart';
+import '../../../core/services/websocket_service.dart';
 import '../models/order.dart';
 
 /// Orders state
@@ -37,11 +38,15 @@ class OrdersState {
 class OrdersNotifier extends StateNotifier<OrdersState> {
   final ApiClient _api;
   final RealtimeService _realtime;
+  final WebSocketService _ws;
   StreamSubscription? _realtimeSub;
+  StreamSubscription? _wsSub;
 
-  OrdersNotifier(this._api, this._realtime) : super(const OrdersState()) {
+  OrdersNotifier(this._api, this._realtime, this._ws)
+      : super(const OrdersState()) {
     fetchOrders();
     _subscribeToRealtimeUpdates();
+    _subscribeToWsUpdates();
   }
 
   /// Listen for real-time order status changes from Appwrite
@@ -64,9 +69,22 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     }
   }
 
+  /// Listen for WebSocket order_update events from Go backend
+  void _subscribeToWsUpdates() {
+    _wsSub = _ws.orderUpdates.listen((event) {
+      final orderId = event.orderId;
+      final statusStr = event.status;
+      if (orderId != null && statusStr != null) {
+        final newStatus = OrderStatus.fromString(statusStr);
+        updateOrderStatus(orderId, newStatus);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _realtimeSub?.cancel();
+    _wsSub?.cancel();
     super.dispose();
   }
 
@@ -177,5 +195,6 @@ final ordersProvider = StateNotifierProvider<OrdersNotifier, OrdersState>((
 ) {
   final api = ref.watch(apiClientProvider);
   final realtime = ref.watch(realtimeServiceProvider);
-  return OrdersNotifier(api, realtime);
+  final ws = ref.watch(webSocketServiceProvider);
+  return OrdersNotifier(api, realtime, ws);
 });

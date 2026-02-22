@@ -8,6 +8,7 @@ import (
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
+	"github.com/chizze/backend/internal/websocket"
 	"github.com/chizze/backend/pkg/appwrite"
 	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/chizze/backend/pkg/utils"
@@ -16,15 +17,20 @@ import (
 
 // OrderHandler handles order endpoints
 type OrderHandler struct {
-	appwrite *services.AppwriteService
-	orders   *services.OrderService
-	geo      *services.GeoService
-	redis    *redispkg.Client
+	appwrite    *services.AppwriteService
+	orders      *services.OrderService
+	geo         *services.GeoService
+	redis       *redispkg.Client
+	broadcaster *websocket.EventBroadcaster
 }
 
 // NewOrderHandler creates an order handler
-func NewOrderHandler(aw *services.AppwriteService, os *services.OrderService, geo *services.GeoService, redis *redispkg.Client) *OrderHandler {
-	return &OrderHandler{appwrite: aw, orders: os, geo: geo, redis: redis}
+func NewOrderHandler(aw *services.AppwriteService, os *services.OrderService, geo *services.GeoService, redis *redispkg.Client, broadcaster ...*websocket.EventBroadcaster) *OrderHandler {
+	h := &OrderHandler{appwrite: aw, orders: os, geo: geo, redis: redis}
+	if len(broadcaster) > 0 {
+		h.broadcaster = broadcaster[0]
+	}
+	return h
 }
 
 // PlaceOrder creates a new order with server-side price verification
@@ -382,6 +388,12 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		utils.InternalError(c, "Failed to cancel order")
 		return
 	}
+
+	// Broadcast cancellation via WebSocket
+	if h.broadcaster != nil {
+		h.broadcaster.BroadcastOrderUpdate(userID, orderID, models.OrderStatusCancelled, "Order cancelled by customer")
+	}
+
 	utils.Success(c, updated)
 }
 
@@ -514,6 +526,10 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 				"is_read":    false,
 				"created_at": now,
 			})
+			// Broadcast via WebSocket for instant updates
+			if h.broadcaster != nil {
+				h.broadcaster.BroadcastOrderUpdate(customerID, orderID, req.Status, notifBody)
+			}
 		}
 	}
 

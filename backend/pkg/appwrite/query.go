@@ -50,6 +50,16 @@ func QueryOrderAsc(attribute string) string {
 	return string(b)
 }
 
+// IsNull creates an isNull query
+func QueryIsNull(attribute string) string {
+	q := map[string]interface{}{
+		"method":    "isNull",
+		"attribute": attribute,
+	}
+	b, _ := json.Marshal(q)
+	return string(b)
+}
+
 // GreaterThanEqual creates a >= filter query
 func QueryGreaterThanEqual(attribute string, value interface{}) string {
 	q := map[string]interface{}{

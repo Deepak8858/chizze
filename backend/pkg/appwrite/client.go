@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/chizze/backend/internal/config"
+	"github.com/sony/gobreaker"
 )
 
 // Client wraps Appwrite REST API calls with production-grade HTTP settings
@@ -22,6 +23,7 @@ type Client struct {
 	apiKey     string
 	databaseID string
 	httpClient *http.Client
+	breaker    *gobreaker.CircuitBreaker
 }
 
 // NewClient creates an Appwrite client with optimized connection pooling
@@ -55,6 +57,20 @@ func NewClient(cfg *config.Config) *Client {
 			Transport: transport,
 			Timeout:   cfg.RequestTimeout,
 		},
+		breaker: gobreaker.NewCircuitBreaker(gobreaker.Settings{
+			Name:        "appwrite",
+			MaxRequests: 5,                // half-open: allow 5 probe requests
+			Interval:    30 * time.Second, // closed-state window for counting failures
+			Timeout:     15 * time.Second, // open → half-open after 15s
+			ReadyToTrip: func(counts gobreaker.Counts) bool {
+				// Trip if ≥5 failures in the window OR failure ratio >50% with ≥10 requests
+				return counts.ConsecutiveFailures >= 5 ||
+					(counts.Requests >= 10 && float64(counts.TotalFailures)/float64(counts.Requests) > 0.5)
+			},
+			OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
+				fmt.Printf("[circuit-breaker] %s: %s → %s\n", name, from.String(), to.String())
+			},
+		}),
 	}
 }
 
@@ -64,8 +80,19 @@ type DocumentList struct {
 	Documents []map[string]interface{} `json:"documents"`
 }
 
-// request makes an authenticated HTTP request to Appwrite with retry
+// request makes an authenticated HTTP request to Appwrite with circuit breaker + retry
 func (c *Client) request(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+	result, err := c.breaker.Execute(func() (interface{}, error) {
+		return c.requestWithRetry(ctx, method, path, body)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.([]byte), nil
+}
+
+// requestWithRetry performs the actual HTTP request with exponential backoff retry
+func (c *Client) requestWithRetry(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
 	var lastErr error
 
 	for attempt := 0; attempt < 3; attempt++ {
@@ -267,38 +294,53 @@ func (c *Client) VerifyJWT(jwtToken string) (map[string]interface{}, error) {
 	return c.VerifyJWTCtx(context.Background(), jwtToken)
 }
 
-// VerifyJWTCtx validates an Appwrite JWT with context
+// VerifyJWTCtx validates an Appwrite JWT with context (circuit-breaker protected)
 func (c *Client) VerifyJWTCtx(ctx context.Context, jwtToken string) (map[string]interface{}, error) {
-	reqURL := fmt.Sprintf("%s/account", c.endpoint)
-	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	result, err := c.breaker.Execute(func() (interface{}, error) {
+		reqURL := fmt.Sprintf("%s/account", c.endpoint)
+		req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Appwrite-Project", c.projectID)
+		req.Header.Set("X-Appwrite-JWT", jwtToken)
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("execute request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read response: %w", err)
+		}
+
+		if resp.StatusCode >= 500 {
+			return nil, fmt.Errorf("JWT verification server error (status %d): %s", resp.StatusCode, string(body))
+		}
+
+		if resp.StatusCode != 200 {
+			// 4xx errors are not circuit-breaker failures (bad tokens, etc.)
+			return nil, &nonCircuitError{fmt.Errorf("JWT verification failed (status %d): %s", resp.StatusCode, string(body))}
+		}
+
+		var account map[string]interface{}
+		if err := json.Unmarshal(body, &account); err != nil {
+			return nil, fmt.Errorf("unmarshal account: %w", err)
+		}
+		return account, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		// Unwrap nonCircuitError for callers
+		if nce, ok := err.(*nonCircuitError); ok {
+			return nil, nce.err
+		}
+		return nil, err
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Appwrite-Project", c.projectID)
-	req.Header.Set("X-Appwrite-JWT", jwtToken)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("JWT verification failed (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	var account map[string]interface{}
-	if err := json.Unmarshal(body, &account); err != nil {
-		return nil, fmt.Errorf("unmarshal account: %w", err)
-	}
-	return account, nil
+	return result.(map[string]interface{}), nil
 }
 
 // GetEndpoint returns the Appwrite endpoint URL
@@ -309,6 +351,33 @@ func (c *Client) GetEndpoint() string {
 // GetProjectID returns the Appwrite project ID
 func (c *Client) GetProjectID() string {
 	return c.projectID
+}
+
+// Health performs a lightweight connectivity check against Appwrite (bypasses circuit breaker)
+func (c *Client) Health(ctx context.Context) error {
+	url := fmt.Sprintf("%s/health", c.endpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("appwrite health request build: %w", err)
+	}
+	req.Header.Set("X-Appwrite-Project", c.projectID)
+	req.Header.Set("X-Appwrite-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("appwrite health unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("appwrite health returned %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// BreakerState returns the current circuit breaker state (for observability)
+func (c *Client) BreakerState() gobreaker.State {
+	return c.breaker.State()
 }
 
 // ─── Error helpers ───
@@ -331,4 +400,14 @@ func isRetryable(err error) bool {
 		return netErr.Timeout()
 	}
 	return false
+}
+
+// nonCircuitError wraps errors that should NOT count as circuit breaker failures
+// (e.g. 4xx client errors — bad token, not found, etc.)
+type nonCircuitError struct {
+	err error
+}
+
+func (e *nonCircuitError) Error() string {
+	return e.err.Error()
 }

@@ -50,8 +50,25 @@ app.*.map.json
 backend/.env
 !.env.example
 !backend/.env.example
+!deploy/.env.example
 local.properties
 appwrite.config.json
+
+# Android signing
+android/key.properties
+android/app/*.jks
+android/app/*.keystore
+
+# SSL / Certificates
+deploy/ssl/
+deploy/certbot/
+*.pem
+*.key
+*.crt
+
+# Deploy secrets
+deploy/.env.prod
+deploy/.env.staging
 
 # Build & analysis output files
 analyze_output.txt

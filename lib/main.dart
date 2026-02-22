@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/theme.dart';
 import 'core/router/app_router.dart';
+import 'core/services/websocket_service.dart';
 import 'features/profile/providers/user_profile_provider.dart';
 
 void main() {
@@ -24,6 +25,9 @@ class ChizzeApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
     final isDark = ref.watch(userProfileProvider.select((p) => p.darkMode));
+
+    // Activate WebSocket auto-connect (reacts to auth state)
+    ref.watch(wsAutoConnectProvider);
 
     // Update system UI to match theme
     SystemChrome.setSystemUIOverlayStyle(

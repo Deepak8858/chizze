@@ -56,7 +56,7 @@ func (h *ScheduledOrderHandler) Create(c *gin.Context) {
 		"items":         req.Items,
 		"address_id":    req.AddressID,
 		"scheduled_for": req.ScheduledFor,
-		"total":         req.Total,
+		"coupon_code":   req.CouponCode,
 		"status":        "scheduled",
 		"created_at":    time.Now().Format(time.RFC3339),
 	}

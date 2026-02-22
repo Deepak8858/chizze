@@ -76,6 +76,7 @@ class CartState {
     String? restaurantId,
     String? restaurantName,
     String? couponCode,
+    bool clearCouponCode = false,
     double? couponDiscount,
     String? deliveryInstructions,
     String? specialInstructions,
@@ -84,7 +85,7 @@ class CartState {
       items: items ?? this.items,
       restaurantId: restaurantId ?? this.restaurantId,
       restaurantName: restaurantName ?? this.restaurantName,
-      couponCode: couponCode ?? this.couponCode,
+      couponCode: clearCouponCode ? null : (couponCode ?? this.couponCode),
       couponDiscount: couponDiscount ?? this.couponDiscount,
       deliveryInstructions: deliveryInstructions ?? this.deliveryInstructions,
       specialInstructions: specialInstructions ?? this.specialInstructions,
@@ -177,7 +178,7 @@ class CartNotifier extends StateNotifier<CartState> {
 
   /// Remove coupon
   void removeCoupon() {
-    state = state.copyWith(couponCode: null, couponDiscount: 0);
+    state = state.copyWith(clearCouponCode: true, couponDiscount: 0);
   }
 
   /// Set delivery instructions

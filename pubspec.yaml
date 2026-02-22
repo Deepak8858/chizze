@@ -28,6 +28,7 @@ dependencies:
 
   # Networking
   dio: ^5.7.0
+  web_socket_channel: ^3.0.3
 
   # Backend
   appwrite: 21.1.0
