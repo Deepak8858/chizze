@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../providers/delivery_provider.dart';
@@ -11,7 +12,9 @@ class DeliveryProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final partner = ref.watch(deliveryProvider).partner;
+    final dState = ref.watch(deliveryProvider);
+    final partner = dState.partner;
+    final metrics = dState.metrics;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -21,11 +24,15 @@ class DeliveryProfileScreen extends ConsumerWidget {
         child: Column(
           children: [
             // ─── Avatar & Name ───
-            _buildProfileHeader(partner.name, partner.rating),
+            _buildProfileHeader(partner.name, partner.rating, partner.phone),
             const SizedBox(height: AppSpacing.xxl),
 
             // ─── Stats ───
-            _buildStatsRow(partner.totalDeliveries, partner.totalEarnings),
+            _buildStatsRow(
+              partner.totalDeliveries,
+              partner.totalEarnings,
+              metrics.hoursOnline,
+            ),
             const SizedBox(height: AppSpacing.xxl),
 
             // ─── Vehicle Info ───
@@ -36,16 +43,33 @@ class DeliveryProfileScreen extends ConsumerWidget {
             _buildMenuItem(
               Icons.account_balance_wallet_rounded,
               'Bank Details',
+              subtitle: 'Manage payout accounts',
             ),
-            _buildMenuItem(Icons.description_rounded, 'Documents'),
-            _buildMenuItem(Icons.schedule_rounded, 'Availability'),
-            _buildMenuItem(Icons.headset_mic_rounded, 'Support'),
-            _buildMenuItem(Icons.info_outline_rounded, 'About Chizze'),
+            _buildMenuItem(
+              Icons.description_rounded,
+              'Documents',
+              subtitle: 'ID, License & Vehicle docs',
+            ),
+            _buildMenuItem(
+              Icons.schedule_rounded,
+              'Availability',
+              subtitle: 'Set your working hours',
+            ),
+            _buildMenuItem(
+              Icons.headset_mic_rounded,
+              'Support',
+              subtitle: 'Help & FAQs',
+            ),
+            _buildMenuItem(
+              Icons.info_outline_rounded,
+              'About Chizze',
+              subtitle: 'Terms, privacy & version',
+            ),
             const SizedBox(height: AppSpacing.xxl),
 
             // ─── Logout ───
             TextButton.icon(
-              onPressed: () {},
+              onPressed: () => _confirmLogout(context, ref),
               icon: const Icon(Icons.logout_rounded, color: AppColors.error),
               label: Text(
                 'Logout',
@@ -58,7 +82,37 @@ class DeliveryProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildProfileHeader(String name, double rating) {
+  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('Logout', style: AppTypography.h3),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: AppTypography.body2,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Logout',
+              style: TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      ref.read(authProvider.notifier).logout();
+    }
+  }
+
+  Widget _buildProfileHeader(String name, double rating, String phone) {
     return Column(
       children: [
         Container(
@@ -77,6 +131,10 @@ class DeliveryProfileScreen extends ConsumerWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         Text(name, style: AppTypography.h2.copyWith(fontSize: 20)),
+        if (phone.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(phone, style: AppTypography.caption),
+        ],
         const SizedBox(height: AppSpacing.xs),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -101,7 +159,7 @@ class DeliveryProfileScreen extends ConsumerWidget {
     ).animate().fadeIn(delay: 100.ms);
   }
 
-  Widget _buildStatsRow(int deliveries, double earnings) {
+  Widget _buildStatsRow(int deliveries, double earnings, double hoursOnline) {
     return Row(
       children: [
         Expanded(
@@ -122,7 +180,7 @@ class DeliveryProfileScreen extends ConsumerWidget {
             ),
           ),
         ),
-        const SizedBox(width: AppSpacing.md),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: GlassCard(
             child: Column(
@@ -136,7 +194,26 @@ class DeliveryProfileScreen extends ConsumerWidget {
                     fontSize: 20,
                   ),
                 ),
-                Text('Total Earned', style: AppTypography.overline),
+                Text('Earned', style: AppTypography.overline),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: GlassCard(
+            child: Column(
+              children: [
+                const Text('⏱️', style: TextStyle(fontSize: 24)),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  '${hoursOnline.toStringAsFixed(1)}h',
+                  style: AppTypography.h3.copyWith(
+                    color: AppColors.info,
+                    fontSize: 20,
+                  ),
+                ),
+                Text('Online', style: AppTypography.overline),
               ],
             ),
           ),
@@ -194,7 +271,7 @@ class DeliveryProfileScreen extends ConsumerWidget {
     ).animate(delay: 300.ms).fadeIn();
   }
 
-  Widget _buildMenuItem(IconData icon, String label) {
+  Widget _buildMenuItem(IconData icon, String label, {String? subtitle}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
       decoration: BoxDecoration(
@@ -204,6 +281,9 @@ class DeliveryProfileScreen extends ConsumerWidget {
       child: ListTile(
         leading: Icon(icon, size: 22, color: AppColors.textSecondary),
         title: Text(label, style: AppTypography.body2),
+        subtitle: subtitle != null
+            ? Text(subtitle, style: AppTypography.caption.copyWith(fontSize: 11))
+            : null,
         trailing: const Icon(
           Icons.arrow_forward_ios_rounded,
           size: 14,

@@ -106,19 +106,19 @@ class Order {
       estimatedDeliveryMin: map['estimated_delivery_min'] ?? 30,
       placedAt: DateTime.tryParse(map['placed_at'] ?? '') ?? DateTime.now(),
       confirmedAt: map['confirmed_at'] != null
-          ? DateTime.tryParse(map['confirmed_at'])
+          ? DateTime.tryParse(map['confirmed_at'].toString())
           : null,
       preparedAt: map['prepared_at'] != null
-          ? DateTime.tryParse(map['prepared_at'])
+          ? DateTime.tryParse(map['prepared_at'].toString())
           : null,
       pickedUpAt: map['picked_up_at'] != null
-          ? DateTime.tryParse(map['picked_up_at'])
+          ? DateTime.tryParse(map['picked_up_at'].toString())
           : null,
       deliveredAt: map['delivered_at'] != null
-          ? DateTime.tryParse(map['delivered_at'])
+          ? DateTime.tryParse(map['delivered_at'].toString())
           : null,
       cancelledAt: map['cancelled_at'] != null
-          ? DateTime.tryParse(map['cancelled_at'])
+          ? DateTime.tryParse(map['cancelled_at'].toString())
           : null,
       cancellationReason: map['cancellation_reason'],
       cancelledBy: map['cancelled_by'],

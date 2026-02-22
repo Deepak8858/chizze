@@ -1,12 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
+import '../../../core/models/api_response.dart';
 import '../../../core/services/realtime_service.dart';
 import '../../../features/orders/models/order.dart';
 import '../models/partner_order.dart';
+import '../services/order_notification_service.dart';
+
+/// Connection status for realtime updates
+enum RealtimeConnectionStatus {
+  connected,
+  polling,
+  disconnected,
+}
 
 /// Partner dashboard state
 class PartnerState {
@@ -15,6 +25,8 @@ class PartnerState {
   final List<PartnerOrder> orders;
   final bool isLoading;
   final String? restaurantName;
+  final RealtimeConnectionStatus connectionStatus;
+  final int unacknowledgedNewOrders;
 
   const PartnerState({
     this.isOnline = true,
@@ -22,6 +34,8 @@ class PartnerState {
     this.orders = const [],
     this.isLoading = false,
     this.restaurantName,
+    this.connectionStatus = RealtimeConnectionStatus.disconnected,
+    this.unacknowledgedNewOrders = 0,
   });
 
   PartnerState copyWith({
@@ -30,6 +44,8 @@ class PartnerState {
     List<PartnerOrder>? orders,
     bool? isLoading,
     String? restaurantName,
+    RealtimeConnectionStatus? connectionStatus,
+    int? unacknowledgedNewOrders,
   }) {
     return PartnerState(
       isOnline: isOnline ?? this.isOnline,
@@ -37,6 +53,9 @@ class PartnerState {
       orders: orders ?? this.orders,
       isLoading: isLoading ?? this.isLoading,
       restaurantName: restaurantName ?? this.restaurantName,
+      connectionStatus: connectionStatus ?? this.connectionStatus,
+      unacknowledgedNewOrders:
+          unacknowledgedNewOrders ?? this.unacknowledgedNewOrders,
     );
   }
 
@@ -45,7 +64,9 @@ class PartnerState {
       .toList();
 
   List<PartnerOrder> get preparingOrders =>
-      orders.where((o) => o.order.status == OrderStatus.preparing).toList();
+      orders.where((o) =>
+          o.order.status == OrderStatus.confirmed ||
+          o.order.status == OrderStatus.preparing).toList();
 
   List<PartnerOrder> get readyOrders =>
       orders.where((o) => o.order.status == OrderStatus.ready).toList();
@@ -54,8 +75,7 @@ class PartnerState {
       .where(
         (o) =>
             o.order.status == OrderStatus.delivered ||
-            o.order.status == OrderStatus.pickedUp ||
-            o.order.status == OrderStatus.outForDelivery,
+            o.order.status == OrderStatus.cancelled,
       )
       .toList();
 
@@ -68,38 +88,125 @@ class PartnerState {
       .toList();
 }
 
-/// Partner notifier — API-backed with mock fallback + Realtime
+/// Partner notifier — API-backed with Realtime + polling fallback + notifications
 class PartnerNotifier extends StateNotifier<PartnerState> {
   final ApiClient _api;
   final RealtimeService _realtime;
+  final OrderNotificationService _notificationService;
   StreamSubscription? _realtimeSub;
+  Timer? _pollingTimer;
+  Timer? _reconnectTimer;
+  Set<String> _knownOrderIds = {};
+  bool _realtimeConnected = false;
+  bool _isLoadingGuard = false;
+  int _reconnectAttempts = 0;
 
-  PartnerNotifier(this._api, this._realtime) : super(const PartnerState()) {
+  PartnerNotifier(this._api, this._realtime, this._notificationService)
+      : super(const PartnerState()) {
+    _initNotifications();
     _loadData();
     _subscribeToRealtime();
   }
 
-  /// Listen for new/updated orders in real-time
+  Future<void> _initNotifications() async {
+    await _notificationService.initialize();
+  }
+
+  /// Listen for new/updated orders in real-time via Appwrite
   void _subscribeToRealtime() {
     try {
       final channel = RealtimeChannels.allOrdersChannel();
-      _realtimeSub = _realtime.subscribe(channel).listen((event) {
-        if (event.type == RealtimeEventType.create ||
-            event.type == RealtimeEventType.update) {
-          // Refresh orders when any order changes
-          refresh();
+      _realtimeSub = _realtime.subscribe(channel).listen(
+        (event) {
+          _realtimeConnected = true;
+          _reconnectAttempts = 0;
+          _reconnectTimer?.cancel();
+          state = state.copyWith(
+            connectionStatus: RealtimeConnectionStatus.connected,
+          );
+          // Stop polling — realtime is working
+          _stopPolling();
+
+          if (event.type == RealtimeEventType.create) {
+            // New order — refresh and notify
+            _loadData(notifyNewOrders: true);
+          } else if (event.type == RealtimeEventType.update) {
+            // Order status changed — refresh silently
+            _loadData(notifyNewOrders: false);
+          }
+        },
+        onError: (_) {
+          _realtimeConnected = false;
+          _startPollingFallback();
+          _scheduleRealtimeReconnect();
+        },
+        onDone: () {
+          _realtimeConnected = false;
+          _startPollingFallback();
+          _scheduleRealtimeReconnect();
+        },
+      );
+
+      // Also start polling as initial fallback — will be stopped once realtime connects
+      Future.delayed(const Duration(seconds: 5), () {
+        if (!_realtimeConnected) {
+          _startPollingFallback();
         }
       });
-    } catch (_) {} // Realtime not available
+    } catch (_) {
+      // Realtime not available — use polling only
+      _startPollingFallback();
+    }
+  }
+
+  /// Polling fallback: fetch orders every 15 seconds when Realtime is down
+  void _startPollingFallback() {
+    if (_pollingTimer?.isActive == true) return; // Already polling
+    debugPrint('[PartnerNotifier] Starting polling fallback (15s interval)');
+    state = state.copyWith(
+      connectionStatus: RealtimeConnectionStatus.polling,
+    );
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _loadData(notifyNewOrders: true);
+    });
+  }
+
+  void _stopPolling() {
+    if (_pollingTimer?.isActive == true) {
+      debugPrint('[PartnerNotifier] Stopping polling — realtime connected');
+      _pollingTimer?.cancel();
+      _pollingTimer = null;
+    }
+  }
+
+  /// Attempt to re-subscribe to Realtime with exponential backoff
+  void _scheduleRealtimeReconnect() {
+    _reconnectTimer?.cancel();
+    if (_reconnectAttempts >= 5) {
+      debugPrint('[PartnerNotifier] Max reconnect attempts reached, staying on polling');
+      return;
+    }
+    final delay = Duration(seconds: 10 * (1 << _reconnectAttempts)); // 10s, 20s, 40s, 80s, 160s
+    debugPrint('[PartnerNotifier] Scheduling realtime reconnect in ${delay.inSeconds}s (attempt ${_reconnectAttempts + 1})');
+    _reconnectTimer = Timer(delay, () {
+      _reconnectAttempts++;
+      _realtimeSub?.cancel();
+      _subscribeToRealtime();
+    });
   }
 
   @override
   void dispose() {
     _realtimeSub?.cancel();
+    _pollingTimer?.cancel();
+    _reconnectTimer?.cancel();
+    _notificationService.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool notifyNewOrders = false}) async {
+    if (_isLoadingGuard) return; // Prevent concurrent loads
+    _isLoadingGuard = true;
     state = state.copyWith(isLoading: true);
     try {
       // Fetch dashboard metrics + active orders in parallel
@@ -111,39 +218,83 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
       final dashboardResponse = results[0];
       final ordersResponse = results[1];
 
+      // Parse dashboard independently
+      PartnerMetrics metrics = state.metrics;
+      bool isOnline = state.isOnline;
+      String? restaurantName = state.restaurantName;
+
       if (dashboardResponse.success && dashboardResponse.data != null) {
-        final d = dashboardResponse.data as Map<String, dynamic>;
-        final metrics = PartnerMetrics(
-          todayRevenue: (d['today_revenue'] ?? 0).toDouble(),
-          todayOrders: d['today_orders'] ?? 0,
-          avgRating: (d['avg_rating'] ?? 0).toDouble(),
-          pendingOrders: d['pending_orders'] ?? 0,
-        );
-
-        final isOnline = d['is_online'] ?? true;
-        final restaurantName = d['restaurant_name'] as String?;
-
-        List<PartnerOrder> orders = [];
-        if (ordersResponse.success && ordersResponse.data != null) {
-          orders = _parseOrders(ordersResponse.data);
+        final d = dashboardResponse.data;
+        if (d is Map<String, dynamic>) {
+          metrics = PartnerMetrics(
+            todayRevenue: (d['today_revenue'] ?? 0).toDouble(),
+            todayOrders: d['today_orders'] ?? 0,
+            avgRating: (d['avg_rating'] ?? 0).toDouble(),
+            pendingOrders: d['pending_orders'] ?? 0,
+          );
+          isOnline = d['is_online'] ?? true;
+          restaurantName = d['restaurant_name'] as String?;
         }
-
-        state = state.copyWith(
-          metrics: metrics,
-          orders: orders,
-          isOnline: isOnline,
-          restaurantName: restaurantName,
-          isLoading: false,
-        );
-        return;
       }
-    } catch (_) {}
 
-    // No mock fallback — show empty state with error
-    state = state.copyWith(
-      metrics: const PartnerMetrics(),
-      orders: const [],
-      isLoading: false,
+      // Parse orders independently (even if dashboard fails)
+      List<PartnerOrder> orders = state.orders;
+      if (ordersResponse.success && ordersResponse.data != null) {
+        orders = _parseOrders(ordersResponse.data);
+      }
+
+      // Detect genuinely new orders for notification
+      if (notifyNewOrders && _knownOrderIds.isNotEmpty) {
+        final currentIds = orders.map((o) => o.order.id).toSet();
+        final brandNewIds = currentIds.difference(_knownOrderIds);
+        for (final newId in brandNewIds) {
+          final newOrder = orders.firstWhere((o) => o.order.id == newId);
+          if (newOrder.isNew) {
+            _notifyNewOrder(newOrder);
+          }
+        }
+      }
+
+      // Update known order IDs
+      _knownOrderIds = orders.map((o) => o.order.id).toSet();
+
+      // Count unacknowledged new orders
+      final newCount = orders
+          .where((o) => o.isNew && o.order.status == OrderStatus.placed)
+          .length;
+
+      // Manage repeated alert for unattended new orders
+      if (newCount > 0) {
+        _notificationService.startRepeatedAlert();
+      } else {
+        _notificationService.stopRepeatedAlert();
+      }
+
+      state = state.copyWith(
+        metrics: metrics,
+        orders: orders,
+        isOnline: isOnline,
+        restaurantName: restaurantName,
+        isLoading: false,
+        unacknowledgedNewOrders: newCount,
+      );
+    } catch (_) {
+      // On error, preserve existing data but stop loading
+      state = state.copyWith(isLoading: false);
+    } finally {
+      _isLoadingGuard = false;
+    }
+  }
+
+  /// Send notification for a newly detected order
+  void _notifyNewOrder(PartnerOrder po) {
+    final order = po.order;
+    final itemsSummary =
+        order.items.map((i) => '${i.name} × ${i.quantity}').join(', ');
+    _notificationService.playNewOrderAlert(
+      orderNumber: order.orderNumber,
+      itemsSummary: itemsSummary,
+      amount: order.grandTotal,
     );
   }
 
@@ -151,7 +302,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
   List<PartnerOrder> _parseOrders(dynamic data) {
     if (data is! List) return [];
     return data.map<PartnerOrder>((item) {
-      final map = item as Map<String, dynamic>;
+      final map = Map<String, dynamic>.from(item as Map<String, dynamic>);
 
       // Parse items JSON if stored as string
       if (map['items'] is String) {
@@ -178,7 +329,13 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
   }
 
   /// Refresh data from API
-  Future<void> refresh() => _loadData();
+  Future<void> refresh() => _loadData(notifyNewOrders: true);
+
+  /// Acknowledge new orders — clears badge count
+  void acknowledgeNewOrders() {
+    _notificationService.stopRepeatedAlert();
+    state = state.copyWith(unacknowledgedNewOrders: 0);
+  }
 
   /// Toggle restaurant online/offline
   Future<void> toggleOnline() async {
@@ -195,8 +352,10 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     }
   }
 
-  /// Accept an order
+  /// Accept an order with haptic feedback
   void acceptOrder(String orderId) {
+    OrderNotificationService.hapticConfirm();
+    final previousOrders = List<PartnerOrder>.from(state.orders);
     final updatedOrders = state.orders.map((po) {
       if (po.order.id == orderId) {
         return po.copyWith(
@@ -211,17 +370,22 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     }).toList();
     state = state.copyWith(orders: updatedOrders);
 
-    // Push status update to API
+    // Push status update to API with rollback on failure
     _api
         .put(
           '${ApiConfig.partnerOrders}/$orderId/status',
           body: {'status': 'confirmed'},
         )
-        .ignore();
+        .catchError((_) {
+          state = state.copyWith(orders: previousOrders);
+          return ApiResponse<dynamic>(success: false);
+        });
   }
 
-  /// Reject an order
+  /// Reject an order with haptic feedback
   void rejectOrder(String orderId, String reason) {
+    OrderNotificationService.hapticReject();
+    final previousOrders = List<PartnerOrder>.from(state.orders);
     final updatedOrders = state.orders
         .where((po) => po.order.id != orderId)
         .toList();
@@ -232,29 +396,40 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           '${ApiConfig.partnerOrders}/$orderId/status',
           body: {'status': 'cancelled', 'reason': reason},
         )
-        .ignore();
+        .catchError((_) {
+          state = state.copyWith(orders: previousOrders);
+          return ApiResponse<dynamic>(success: false);
+        });
   }
 
   /// Mark order as preparing
   void markPreparing(String orderId) {
+    final previousOrders = List<PartnerOrder>.from(state.orders);
     _updateOrderStatus(orderId, OrderStatus.preparing);
     _api
         .put(
           '${ApiConfig.partnerOrders}/$orderId/status',
           body: {'status': 'preparing'},
         )
-        .ignore();
+        .catchError((_) {
+          state = state.copyWith(orders: previousOrders);
+          return ApiResponse<dynamic>(success: false);
+        });
   }
 
   /// Mark order as ready for pickup
   void markReady(String orderId) {
+    final previousOrders = List<PartnerOrder>.from(state.orders);
     _updateOrderStatus(orderId, OrderStatus.ready);
     _api
         .put(
           '${ApiConfig.partnerOrders}/$orderId/status',
           body: {'status': 'ready'},
         )
-        .ignore();
+        .catchError((_) {
+          state = state.copyWith(orders: previousOrders);
+          return ApiResponse<dynamic>(success: false);
+        });
   }
 
   void _updateOrderStatus(String orderId, OrderStatus status) {
@@ -280,5 +455,6 @@ final partnerProvider = StateNotifierProvider<PartnerNotifier, PartnerState>((
 ) {
   final api = ref.watch(apiClientProvider);
   final realtime = ref.watch(realtimeServiceProvider);
-  return PartnerNotifier(api, realtime);
+  final notificationService = OrderNotificationService();
+  return PartnerNotifier(api, realtime, notificationService);
 });

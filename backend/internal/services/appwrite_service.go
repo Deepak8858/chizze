@@ -234,6 +234,24 @@ func (s *AppwriteService) CreateDeliveryLocation(id string, data map[string]inte
 	return s.client.CreateDocument(models.CollectionRiderLocations, id, data)
 }
 
+// ─── Payouts ───
+
+func (s *AppwriteService) CreatePayout(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionPayouts, id, data)
+}
+
+func (s *AppwriteService) GetPayout(id string) (map[string]interface{}, error) {
+	return s.client.GetDocument(models.CollectionPayouts, id)
+}
+
+func (s *AppwriteService) UpdatePayout(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.UpdateDocument(models.CollectionPayouts, id, data)
+}
+
+func (s *AppwriteService) ListPayouts(queries []string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionPayouts, queries)
+}
+
 // ─── Addresses (single fetch) ───
 
 func (s *AppwriteService) GetAddress(id string) (map[string]interface{}, error) {
@@ -252,4 +270,86 @@ func (s *AppwriteService) GetRestaurantByOwner(ownerID string) (*appwrite.Docume
 	return s.client.ListDocuments(models.CollectionRestaurants, []string{
 		appwrite.QueryEqual("owner_id", ownerID),
 	})
+}
+
+// ─── Favorites ───
+
+func (s *AppwriteService) ListFavorites(userID string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionFavorites, []string{
+		appwrite.QueryEqual("user_id", userID),
+		appwrite.QueryOrderDesc("created_at"),
+	})
+}
+
+func (s *AppwriteService) CreateFavorite(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionFavorites, id, data)
+}
+
+func (s *AppwriteService) DeleteFavorite(id string) error {
+	return s.client.DeleteDocument(models.CollectionFavorites, id)
+}
+
+func (s *AppwriteService) FindFavorite(userID, restaurantID string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionFavorites, []string{
+		appwrite.QueryEqual("user_id", userID),
+		appwrite.QueryEqual("restaurant_id", restaurantID),
+	})
+}
+
+// ─── Gold Subscriptions ───
+
+func (s *AppwriteService) CreateGoldSubscription(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionGoldSubscriptions, id, data)
+}
+
+func (s *AppwriteService) GetActiveGoldSubscription(userID string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionGoldSubscriptions, []string{
+		appwrite.QueryEqual("user_id", userID),
+		appwrite.QueryEqual("status", "active"),
+		appwrite.QueryOrderDesc("created_at"),
+	})
+}
+
+func (s *AppwriteService) UpdateGoldSubscription(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.UpdateDocument(models.CollectionGoldSubscriptions, id, data)
+}
+
+// ─── Referrals ───
+
+func (s *AppwriteService) CreateReferral(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionReferrals, id, data)
+}
+
+func (s *AppwriteService) ListReferrals(userID string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionReferrals, []string{
+		appwrite.QueryEqual("referrer_user_id", userID),
+		appwrite.QueryOrderDesc("created_at"),
+	})
+}
+
+func (s *AppwriteService) FindReferralByCode(code string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionUsers, []string{
+		appwrite.QueryEqual("referral_code", code),
+	})
+}
+
+// ─── Scheduled Orders ───
+
+func (s *AppwriteService) CreateScheduledOrder(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionScheduledOrders, id, data)
+}
+
+func (s *AppwriteService) ListScheduledOrders(userID string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionScheduledOrders, []string{
+		appwrite.QueryEqual("user_id", userID),
+		appwrite.QueryOrderDesc("scheduled_for"),
+	})
+}
+
+func (s *AppwriteService) UpdateScheduledOrder(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.UpdateDocument(models.CollectionScheduledOrders, id, data)
+}
+
+func (s *AppwriteService) DeleteScheduledOrder(id string) error {
+	return s.client.DeleteDocument(models.CollectionScheduledOrders, id)
 }

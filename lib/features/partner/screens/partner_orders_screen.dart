@@ -396,28 +396,79 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
   }
 
   void _showRejectDialog(String orderId) {
+    String selectedReason = '';
+    final reasons = [
+      'Too busy right now',
+      'Items unavailable',
+      'Kitchen closing soon',
+      'Closing for the day',
+      'Unable to fulfill order',
+    ];
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Reject Order?'),
-        content: const Text('Are you sure you want to reject this order?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text('Reject Order'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select a reason:',
+                style: AppTypography.body2.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              RadioGroup<String>(
+                groupValue: selectedReason,
+                onChanged: (String? val) {
+                  if (val != null) {
+                    setDialogState(() => selectedReason = val);
+                  }
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: reasons.map(
+                    (reason) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Radio<String>(
+                        value: reason,
+                        activeColor: AppColors.primary,
+                      ),
+                      title: Text(
+                        reason,
+                        style: AppTypography.body2.copyWith(color: Colors.white),
+                      ),
+                      onTap: () => setDialogState(() => selectedReason = reason),
+                    ),
+                  ).toList(),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              ref
-                  .read(partnerProvider.notifier)
-                  .rejectOrder(orderId, 'Too busy');
-              Navigator.pop(context);
-            },
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Reject'),
-          ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: selectedReason.isEmpty
+                  ? null
+                  : () {
+                      ref
+                          .read(partnerProvider.notifier)
+                          .rejectOrder(orderId, selectedReason);
+                      Navigator.pop(context);
+                    },
+              style: TextButton.styleFrom(foregroundColor: AppColors.error),
+              child: const Text('Reject'),
+            ),
+          ],
+        ),
       ),
     );
   }

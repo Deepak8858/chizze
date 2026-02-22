@@ -1,6 +1,10 @@
+import 'dart:io';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../../core/services/image_upload_service.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
@@ -193,6 +197,32 @@ class MenuManagementScreen extends ConsumerWidget {
         ),
         child: Row(
           children: [
+            // Item image thumbnail
+            if (item.imageUrl.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: CachedNetworkImage(
+                    imageUrl: item.imageUrl,
+                    width: 44,
+                    height: 44,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      width: 44,
+                      height: 44,
+                      color: AppColors.surfaceElevated,
+                      child: const Icon(Icons.image, size: 20, color: AppColors.textTertiary),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 44,
+                      height: 44,
+                      color: AppColors.surfaceElevated,
+                      child: const Icon(Icons.broken_image, size: 20, color: AppColors.textTertiary),
+                    ),
+                  ),
+                ),
+              ),
             // Veg indicator
             Container(
               width: 14,
@@ -408,6 +438,8 @@ class MenuManagementScreen extends ConsumerWidget {
     );
     bool isVeg = existingItem?.isVeg ?? false;
     String selectedCategoryId = existingItem?.categoryId ?? categories.first.id;
+    File? selectedImageFile;
+    bool isUploading = false;
 
     showModalBottomSheet(
       context: context,
@@ -424,7 +456,8 @@ class MenuManagementScreen extends ConsumerWidget {
             AppSpacing.xl,
             MediaQuery.of(context).viewInsets.bottom + AppSpacing.xl,
           ),
-          child: Column(
+          child: SingleChildScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -433,6 +466,67 @@ class MenuManagementScreen extends ConsumerWidget {
                 style: AppTypography.h3,
               ),
               const SizedBox(height: AppSpacing.xl),
+
+              // ─── Image Picker ───
+              GestureDetector(
+                onTap: () async {
+                  final file = await ImageUploadService.pickImage();
+                  if (file != null) {
+                    setSheetState(() => selectedImageFile = file);
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    border: Border.all(
+                      color: AppColors.divider,
+                      style: BorderStyle.solid,
+                    ),
+                  ),
+                  child: selectedImageFile != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          child: Image.file(
+                            selectedImageFile!,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                          ),
+                        )
+                      : (existingItem != null &&
+                              existingItem.imageUrl.isNotEmpty)
+                          ? ClipRRect(
+                              borderRadius:
+                                  BorderRadius.circular(AppSpacing.radiusMd),
+                              child: CachedNetworkImage(
+                                imageUrl: existingItem.imageUrl,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                              ),
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate_rounded,
+                                  size: 36,
+                                  color: AppColors.textTertiary,
+                                ),
+                                const SizedBox(height: AppSpacing.sm),
+                                Text(
+                                  'Tap to add photo',
+                                  style: AppTypography.caption.copyWith(
+                                    color: AppColors.textTertiary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+
               TextField(
                 controller: nameController,
                 style: AppTypography.body2.copyWith(color: Colors.white),
@@ -522,42 +616,56 @@ class MenuManagementScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               ChizzeButton(
-                label: existingItem != null ? 'Save Changes' : 'Add Item',
+                label: isUploading
+                    ? 'Uploading...'
+                    : (existingItem != null ? 'Save Changes' : 'Add Item'),
                 icon: existingItem != null
                     ? Icons.save_rounded
                     : Icons.add_rounded,
-                onPressed: () {
-                  final name = nameController.text.trim();
-                  final price =
-                      double.tryParse(priceController.text.trim()) ?? 0;
-                  if (name.isEmpty || price <= 0) return;
+                onPressed: isUploading
+                    ? null
+                    : () {
+                        final name = nameController.text.trim();
+                        final price =
+                            double.tryParse(priceController.text.trim()) ?? 0;
+                        if (name.isEmpty || price <= 0) return;
 
-                  if (existingItem != null) {
-                    ref
-                        .read(menuManagementProvider.notifier)
-                        .updateItem(
-                          existingItem.id,
-                          name: name,
-                          price: price,
-                          description: descController.text.trim(),
-                          isVeg: isVeg,
-                          categoryId: selectedCategoryId,
-                        );
-                  } else {
-                    ref
-                        .read(menuManagementProvider.notifier)
-                        .addItem(
-                          name: name,
-                          categoryId: selectedCategoryId,
-                          price: price,
-                          description: descController.text.trim(),
-                          isVeg: isVeg,
-                        );
-                  }
-                  Navigator.pop(context);
-                },
+                        setSheetState(() => isUploading = true);
+
+                        if (existingItem != null) {
+                          ref
+                              .read(menuManagementProvider.notifier)
+                              .updateItem(
+                                existingItem.id,
+                                name: name,
+                                price: price,
+                                description: descController.text.trim(),
+                                isVeg: isVeg,
+                                categoryId: selectedCategoryId,
+                                imageFile: selectedImageFile,
+                              )
+                              .then((_) {
+                                if (context.mounted) Navigator.pop(context);
+                              });
+                        } else {
+                          ref
+                              .read(menuManagementProvider.notifier)
+                              .addItem(
+                                name: name,
+                                categoryId: selectedCategoryId,
+                                price: price,
+                                description: descController.text.trim(),
+                                isVeg: isVeg,
+                                imageFile: selectedImageFile,
+                              )
+                              .then((_) {
+                                if (context.mounted) Navigator.pop(context);
+                              });
+                        }
+                      },
               ),
             ],
+          ),
           ),
         ),
       ),

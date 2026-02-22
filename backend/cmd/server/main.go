@@ -62,6 +62,10 @@ func main() {
 	couponHandler := handlers.NewCouponHandler(awService)
 	notifHandler := handlers.NewNotificationHandler(awService)
 	partnerHandler := handlers.NewPartnerHandler(awService)
+	favoriteHandler := handlers.NewFavoriteHandler(awService)
+	goldHandler := handlers.NewGoldHandler(awService)
+	referralHandler := handlers.NewReferralHandler(awService)
+	scheduledOrderHandler := handlers.NewScheduledOrderHandler(awService)
 
 	// ─── Create Router ───
 	r := gin.New()
@@ -132,6 +136,7 @@ func main() {
 			users.POST("/me/addresses", userHandler.CreateAddress)
 			users.PUT("/me/addresses/:id", userHandler.UpdateAddress)
 			users.DELETE("/me/addresses/:id", userHandler.DeleteAddress)
+			users.PUT("/me/fcm-token", userHandler.UpdateFCMToken)
 		}
 
 		// Orders
@@ -161,6 +166,33 @@ func main() {
 			notifs.PUT("/:id/read", notifHandler.MarkRead)
 			notifs.PUT("/read-all", notifHandler.MarkAllRead)
 		}
+
+		// Favorites
+		users.GET("/me/favorites", favoriteHandler.List)
+		users.POST("/me/favorites", favoriteHandler.Add)
+		users.DELETE("/me/favorites/:restaurant_id", favoriteHandler.Remove)
+
+		// Gold Membership
+		gold := authenticated.Group("/gold")
+		{
+			gold.GET("/plans", goldHandler.GetPlans)
+			gold.GET("/status", goldHandler.GetStatus)
+			gold.POST("/subscribe", goldHandler.Subscribe)
+			gold.PUT("/cancel", goldHandler.Cancel)
+		}
+
+		// Referrals
+		referrals := authenticated.Group("/referrals")
+		{
+			referrals.GET("/code", referralHandler.GetCode)
+			referrals.POST("/apply", referralHandler.Apply)
+			referrals.GET("", referralHandler.ListReferrals)
+		}
+
+		// Scheduled Orders
+		orders.GET("/scheduled", scheduledOrderHandler.List)
+		orders.POST("/scheduled", scheduledOrderHandler.Create)
+		orders.PUT("/scheduled/:id/cancel", scheduledOrderHandler.Cancel)
 	}
 
 	// ─── Partner Routes (restaurant_owner) ───
@@ -204,11 +236,16 @@ func main() {
 		delivery.GET("/dashboard", deliveryHandler.Dashboard)
 		delivery.GET("/earnings", deliveryHandler.Earnings)
 		delivery.GET("/performance", deliveryHandler.Performance)
+		delivery.GET("/profile", deliveryHandler.GetProfile)
+		delivery.PUT("/profile", deliveryHandler.UpdateProfile)
 		delivery.PUT("/status", deliveryHandler.ToggleOnline)
 		delivery.PUT("/location", deliveryHandler.UpdateLocation)
 		delivery.PUT("/orders/:id/accept", deliveryHandler.AcceptOrder)
+		delivery.PUT("/orders/:id/reject", deliveryHandler.RejectOrder)
 		delivery.PUT("/orders/:id/status", orderHandler.UpdateStatus)
 		delivery.GET("/orders", deliveryHandler.ActiveOrders)
+		delivery.GET("/payouts", deliveryHandler.ListPayouts)
+		delivery.POST("/payouts/request", deliveryHandler.RequestPayout)
 	}
 
 	// Webhooks (no auth — validated by signature)

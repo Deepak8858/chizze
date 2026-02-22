@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
+import '../../../core/services/image_upload_service.dart';
 import '../../restaurant/models/menu_item.dart';
 
 /// Menu management state for restaurant partner
@@ -32,11 +35,13 @@ class MenuManagementState {
       items.where((i) => i.categoryId == categoryId).toList();
 }
 
-/// Menu management notifier — API-backed with mock fallback
+/// Menu management notifier — API-backed with image upload support
 class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
   final ApiClient _api;
+  final ImageUploadService _uploadService;
 
-  MenuManagementNotifier(this._api) : super(const MenuManagementState()) {
+  MenuManagementNotifier(this._api, this._uploadService)
+      : super(const MenuManagementState()) {
     _loadData();
   }
 
@@ -194,13 +199,20 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
 
   // ─── Item Operations ───
 
-  void addItem({
+  Future<void> addItem({
     required String name,
     required String categoryId,
     required double price,
     String description = '',
     bool isVeg = false,
-  }) {
+    File? imageFile,
+  }) async {
+    // Upload image first if provided
+    String? imageUrl;
+    if (imageFile != null) {
+      imageUrl = await _uploadService.uploadMenuItemImage(imageFile);
+    }
+
     final newItem = MenuItem(
       id: 'item_${DateTime.now().millisecondsSinceEpoch}',
       restaurantId: '',
@@ -209,22 +221,21 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
       description: description,
       price: price,
       isVeg: isVeg,
+      imageUrl: imageUrl ?? '',
     );
     state = state.copyWith(items: [...state.items, newItem]);
 
     // Push to API
-    _api
-        .post(
-          ApiConfig.partnerMenu,
-          body: {
-            'name': name,
-            'category_id': categoryId,
-            'price': price,
-            'description': description,
-            'is_veg': isVeg,
-          },
-        )
-        .then((response) {
+    final body = <String, dynamic>{
+      'name': name,
+      'category_id': categoryId,
+      'price': price,
+      'description': description,
+      'is_veg': isVeg,
+    };
+    if (imageUrl != null) body['image_url'] = imageUrl;
+
+    _api.post(ApiConfig.partnerMenu, body: body).then((response) {
       if (response.success && response.data != null) {
         final created = MenuItem.fromMap(
           response.data as Map<String, dynamic>,
@@ -234,17 +245,29 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
         }).toList();
         state = state.copyWith(items: updated);
       }
-    }).ignore();
+    }).catchError((_) {
+      // Remove the temp item on failure
+      state = state.copyWith(
+        items: state.items.where((i) => i.id != newItem.id).toList(),
+      );
+    });
   }
 
-  void updateItem(
+  Future<void> updateItem(
     String itemId, {
     String? name,
     double? price,
     String? description,
     bool? isVeg,
     String? categoryId,
-  }) {
+    File? imageFile,
+  }) async {
+    // Upload new image if provided
+    String? newImageUrl;
+    if (imageFile != null) {
+      newImageUrl = await _uploadService.uploadMenuItemImage(imageFile);
+    }
+
     final updated = state.items.map((item) {
       if (item.id == itemId) {
         return MenuItem(
@@ -259,6 +282,7 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
           isBestseller: item.isBestseller,
           isMustTry: item.isMustTry,
           customizations: item.customizations,
+          imageUrl: newImageUrl ?? item.imageUrl,
         );
       }
       return item;
@@ -272,6 +296,7 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     if (description != null) body['description'] = description;
     if (isVeg != null) body['is_veg'] = isVeg;
     if (categoryId != null) body['category_id'] = categoryId;
+    if (newImageUrl != null) body['image_url'] = newImageUrl;
 
     if (body.isNotEmpty) {
       _api.put('${ApiConfig.partnerMenu}/$itemId', body: body).ignore();
@@ -294,6 +319,12 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
           isBestseller: item.isBestseller,
           isMustTry: item.isMustTry,
           customizations: item.customizations,
+          imageUrl: item.imageUrl,
+          spiceLevel: item.spiceLevel,
+          preparationTimeMin: item.preparationTimeMin,
+          calories: item.calories,
+          allergens: item.allergens,
+          sortOrder: item.sortOrder,
         );
         return toggled!;
       }
@@ -323,5 +354,6 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
 final menuManagementProvider =
     StateNotifierProvider<MenuManagementNotifier, MenuManagementState>((ref) {
       final api = ref.watch(apiClientProvider);
-      return MenuManagementNotifier(api);
+      final uploadService = ref.watch(imageUploadServiceProvider);
+      return MenuManagementNotifier(api, uploadService);
     });

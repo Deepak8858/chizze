@@ -7,6 +7,8 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../providers/restaurant_provider.dart';
 import '../models/restaurant.dart';
+import '../../favorites/providers/favorites_provider.dart';
+import '../../coupons/providers/coupons_provider.dart';
 
 /// Customer home screen — restaurant discovery feed
 class HomeScreen extends ConsumerWidget {
@@ -64,6 +66,19 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
 
+            // ─── Offers For You ───
+            SliverToBoxAdapter(
+              child: _buildSectionHeader('Offers For You', 'View All', () {
+                context.push('/coupons');
+              }),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 130,
+                child: _buildOffersCarousel(context, ref),
+              ),
+            ),
+
             // ─── Section: Top Picks ───
             SliverToBoxAdapter(
               child: _buildSectionHeader('Top Picks for You', 'See All', () {
@@ -77,7 +92,7 @@ class HomeScreen extends ConsumerWidget {
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) =>
-                      _buildRestaurantCard(context, restaurants[index], index),
+                      _buildRestaurantCard(context, ref, restaurants[index], index),
                   childCount: restaurants.length,
                 ),
               ),
@@ -260,6 +275,101 @@ class HomeScreen extends ConsumerWidget {
     ).animate(delay: 300.ms).fadeIn().slideY(begin: 0.1);
   }
 
+  Widget _buildOffersCarousel(BuildContext context, WidgetRef ref) {
+    final coupons = ref.watch(couponsProvider).available.where((c) => c.isUsable).take(5).toList();
+
+    if (coupons.isEmpty) {
+      return const Center(child: Text('No offers available', style: TextStyle(fontSize: 13)));
+    }
+
+    final gradients = [
+      [const Color(0xFFFF6B6B), const Color(0xFFFF8E53)],
+      [const Color(0xFF4ECDC4), const Color(0xFF2BC0E4)],
+      [const Color(0xFFA770EF), const Color(0xFFCF8BF3)],
+      [const Color(0xFFFFD93D), const Color(0xFFFF6B6B)],
+      [const Color(0xFF6C5CE7), const Color(0xFFA29BFE)],
+    ];
+
+    return ListView.builder(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      itemCount: coupons.length,
+      itemBuilder: (context, index) {
+        final coupon = coupons[index];
+        final colors = gradients[index % gradients.length];
+        return Padding(
+          padding: const EdgeInsets.only(right: AppSpacing.md),
+          child: GestureDetector(
+            onTap: () => context.push('/coupons'),
+            child: Container(
+              width: 200,
+              padding: const EdgeInsets.all(AppSpacing.base),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: colors,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${coupon.discountPercent.toInt()}% OFF',
+                    style: AppTypography.h2.copyWith(
+                      color: Colors.white,
+                      fontSize: 22,
+                    ),
+                  ),
+                  Text(
+                    coupon.title,
+                    style: AppTypography.caption.copyWith(
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          coupon.code,
+                          style: AppTypography.overline.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${coupon.daysRemaining}d left',
+                        style: AppTypography.overline.copyWith(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 9,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ).animate(delay: (200 + index * 80).ms).fadeIn().slideX(begin: 0.15);
+      },
+    );
+  }
+
   Widget _buildSectionHeader(String title, String action, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -286,9 +396,11 @@ class HomeScreen extends ConsumerWidget {
 
   Widget _buildRestaurantCard(
     BuildContext context,
+    WidgetRef ref,
     Restaurant restaurant,
     int index,
   ) {
+    final isFav = ref.watch(favoritesProvider).favoriteIds.contains(restaurant.id);
     final emoji = _cuisineEmoji(restaurant.cuisines.first);
 
     return Padding(
@@ -357,6 +469,26 @@ class HomeScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
+                  // Heart / Favorite button
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(restaurant.id),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          color: isFav ? AppColors.primary : Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

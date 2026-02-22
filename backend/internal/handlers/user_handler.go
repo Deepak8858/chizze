@@ -162,3 +162,26 @@ func (h *UserHandler) DeleteAddress(c *gin.Context) {
 	}
 	utils.Success(c, gin.H{"message": "Address deleted"})
 }
+
+// UpdateFCMToken updates the user's FCM token for push notifications
+// PUT /api/v1/users/me/fcm-token
+func (h *UserHandler) UpdateFCMToken(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+
+	var req struct {
+		Token string `json:"token" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "FCM token is required")
+		return
+	}
+
+	_, err := h.appwrite.UpdateUser(userID, map[string]interface{}{
+		"fcm_token": req.Token,
+	})
+	if err != nil {
+		utils.InternalError(c, "Failed to update FCM token")
+		return
+	}
+	utils.Success(c, gin.H{"message": "FCM token updated"})
+}

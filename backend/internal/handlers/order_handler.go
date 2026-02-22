@@ -478,6 +478,45 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		utils.InternalError(c, "Failed to update order status")
 		return
 	}
+
+	// Send notifications on delivery status changes
+	customerID, _ := order["user_id"].(string)
+	orderNumber, _ := order["order_number"].(string)
+	if customerID != "" {
+		var notifTitle, notifBody string
+		switch req.Status {
+		case models.OrderStatusConfirmed:
+			notifTitle = "Order Confirmed"
+			notifBody = "Your order " + orderNumber + " has been confirmed by the restaurant"
+		case models.OrderStatusPreparing:
+			notifTitle = "Preparing Your Order"
+			notifBody = "The restaurant is now preparing your order " + orderNumber
+		case models.OrderStatusReady:
+			notifTitle = "Order Ready"
+			notifBody = "Your order " + orderNumber + " is ready for pickup"
+		case models.OrderStatusPickedUp:
+			notifTitle = "Order Picked Up"
+			notifBody = "Your order " + orderNumber + " has been picked up by the delivery partner"
+		case models.OrderStatusOutForDelivery:
+			notifTitle = "Out for Delivery"
+			notifBody = "Your order " + orderNumber + " is on its way!"
+		case models.OrderStatusDelivered:
+			notifTitle = "Order Delivered"
+			notifBody = "Your order " + orderNumber + " has been delivered. Enjoy your meal!"
+		}
+		if notifTitle != "" {
+			_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
+				"user_id":    customerID,
+				"title":      notifTitle,
+				"body":       notifBody,
+				"type":       "order_status",
+				"data":       map[string]interface{}{"order_id": orderID, "status": req.Status},
+				"is_read":    false,
+				"created_at": now,
+			})
+		}
+	}
+
 	utils.Success(c, updated)
 }
 

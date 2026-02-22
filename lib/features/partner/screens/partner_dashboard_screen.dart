@@ -25,6 +25,19 @@ class PartnerDashboardScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ─── Connection Status ───
+              if (partnerState.connectionStatus !=
+                  RealtimeConnectionStatus.connected)
+                _buildConnectionBanner(partnerState.connectionStatus),
+
+              // ─── New Orders Alert ───
+              if (partnerState.unacknowledgedNewOrders > 0)
+                _buildNewOrderBanner(
+                  context,
+                  ref,
+                  partnerState.unacknowledgedNewOrders,
+                ),
+
               // ─── Header ───
               _buildHeader(ref, partnerState),
 
@@ -214,9 +227,7 @@ class PartnerDashboardScreen extends ConsumerWidget {
                 partnerOrder: po,
                 onAccept: () =>
                     ref.read(partnerProvider.notifier).acceptOrder(po.order.id),
-                onReject: () => ref
-                    .read(partnerProvider.notifier)
-                    .rejectOrder(po.order.id, 'Too busy'),
+                onReject: () => _showQuickRejectDialog(context, ref, po.order.id),
                 onTap: () => context.go('/partner/orders'),
               ),
             ).animate(delay: (entry.key * 80).ms).fadeIn().slideX(begin: 0.03);
@@ -225,12 +236,70 @@ class PartnerDashboardScreen extends ConsumerWidget {
     );
   }
 
+  void _showQuickRejectDialog(BuildContext context, WidgetRef ref, String orderId) {
+    const reasons = [
+      'Too busy right now',
+      'Item unavailable',
+      'Kitchen closing soon',
+      'Cannot deliver to this area',
+      'Other',
+    ];
+    String selectedReason = '';
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text('Reject Order'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioGroup<String>(
+                groupValue: selectedReason,
+                onChanged: (String? val) => setDialogState(() => selectedReason = val ?? ''),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: reasons.map((reason) => ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Radio<String>(
+                      value: reason,
+                      activeColor: AppColors.primary,
+                    ),
+                    title: Text(reason, style: AppTypography.body2.copyWith(color: Colors.white)),
+                    onTap: () => setDialogState(() => selectedReason = reason),
+                  )).toList(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: selectedReason.isEmpty
+                  ? null
+                  : () {
+                      ref.read(partnerProvider.notifier).rejectOrder(orderId, selectedReason);
+                      Navigator.pop(context);
+                    },
+              style: TextButton.styleFrom(foregroundColor: AppColors.error),
+              child: const Text('Reject'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildQuickActions(BuildContext context) {
     final actions = [
       ('📋', 'Orders', '/partner/orders'),
       ('🍽️', 'Menu', '/partner/menu'),
       ('📊', 'Analytics', '/partner/analytics'),
-      ('⚙️', 'Settings', '/partner/dashboard'),
+      ('⚙️', 'Settings', '/partner/menu'),
     ];
 
     return Column(
@@ -276,6 +345,116 @@ class PartnerDashboardScreen extends ConsumerWidget {
         ),
       ],
     ).animate(delay: 400.ms).fadeIn();
+  }
+
+  /// Connection status banner — shows when Realtime is degraded
+  Widget _buildConnectionBanner(RealtimeConnectionStatus status) {
+    final isPolling = status == RealtimeConnectionStatus.polling;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: (isPolling ? AppColors.warning : AppColors.error)
+            .withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(
+          color: (isPolling ? AppColors.warning : AppColors.error)
+              .withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isPolling ? Icons.sync_rounded : Icons.cloud_off_rounded,
+            size: 16,
+            color: isPolling ? AppColors.warning : AppColors.error,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              isPolling
+                  ? 'Live updates limited — refreshing every 15s'
+                  : 'Connection lost — updates paused',
+              style: AppTypography.caption.copyWith(
+                color: isPolling ? AppColors.warning : AppColors.error,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 300.ms);
+  }
+
+  /// New order alert banner
+  Widget _buildNewOrderBanner(
+      BuildContext context, WidgetRef ref, int count) {
+    return GestureDetector(
+      onTap: () {
+        ref.read(partnerProvider.notifier).acknowledgeNewOrders();
+        context.go('/partner/orders');
+      },
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.base),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.primary.withValues(alpha: 0.15),
+              AppColors.primary.withValues(alpha: 0.08),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: Text('🔔', style: TextStyle(fontSize: 18)),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$count new order${count > 1 ? 's' : ''}!',
+                    style: AppTypography.body1.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  Text(
+                    'Tap to view and accept',
+                    style: AppTypography.caption,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.primary,
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(duration: 300.ms).shake(
+          hz: 3,
+          duration: 600.ms,
+          offset: const Offset(2, 0),
+        );
   }
 }
 

@@ -6,15 +6,24 @@ import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../providers/notifications_provider.dart';
 
-/// Notifications center — grouped list with read/unread
+/// Selected notification filter
+final _notifFilterProvider = StateProvider<NotificationType?>((ref) => null);
+
+/// Notifications center — grouped list with read/unread + tab filters
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notifications = ref.watch(notificationsProvider);
+    final allNotifications = ref.watch(notificationsProvider);
     final notifier = ref.read(notificationsProvider.notifier);
     final unread = notifier.unreadCount;
+    final activeFilter = ref.watch(_notifFilterProvider);
+
+    // Apply filter
+    final notifications = activeFilter == null
+        ? allNotifications
+        : allNotifications.where((n) => n.type == activeFilter).toList();
 
     // Group by today / earlier
     final today = <AppNotification>[];
@@ -43,43 +52,104 @@ class NotificationsScreen extends ConsumerWidget {
             ),
         ],
       ),
-      body: notifications.isEmpty
-          ? _buildEmpty()
-          : ListView(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              children: [
-                if (today.isNotEmpty) ...[
-                  Text(
-                    'Today',
-                    style: AppTypography.overline.copyWith(
-                      color: AppColors.textTertiary,
+      body: Column(
+        children: [
+          // ─── Filter Chips ───
+          _buildFilterChips(ref, activeFilter),
+          const SizedBox(height: AppSpacing.sm),
+          // ─── Notification List ───
+          Expanded(
+            child: notifications.isEmpty
+                ? _buildEmpty()
+                : ListView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
                     ),
+                    children: [
+                      if (today.isNotEmpty) ...[
+                        Text(
+                          'Today',
+                          style: AppTypography.overline.copyWith(
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        ...today.asMap().entries.map(
+                          (e) => _buildNotificationCard(
+                            context,
+                            ref,
+                            e.value,
+                            e.key,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                      ],
+                      if (earlier.isNotEmpty) ...[
+                        Text(
+                          'Earlier',
+                          style: AppTypography.overline.copyWith(
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        ...earlier.asMap().entries.map(
+                          (e) => _buildNotificationCard(
+                            context,
+                            ref,
+                            e.value,
+                            e.key + today.length,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  ...today.asMap().entries.map(
-                    (e) => _buildNotificationCard(context, ref, e.value, e.key),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                ],
-                if (earlier.isNotEmpty) ...[
-                  Text(
-                    'Earlier',
-                    style: AppTypography.overline.copyWith(
-                      color: AppColors.textTertiary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  ...earlier.asMap().entries.map(
-                    (e) => _buildNotificationCard(
-                      context,
-                      ref,
-                      e.value,
-                      e.key + today.length,
-                    ),
-                  ),
-                ],
-              ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChips(WidgetRef ref, NotificationType? active) {
+    final filters = <(String, NotificationType?)>[
+      ('All', null),
+      ('📦 Orders', NotificationType.order),
+      ('🎁 Offers', NotificationType.promo),
+      ('⚙️ Updates', NotificationType.system),
+    ];
+
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        itemCount: filters.length,
+        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        itemBuilder: (context, index) {
+          final (label, type) = filters[index];
+          final isActive = active == type;
+          return GestureDetector(
+            onTap: () => ref.read(_notifFilterProvider.notifier).state = type,
+            child: AnimatedContainer(
+              duration: 200.ms,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: isActive ? AppColors.primary : AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+              ),
+              child: Text(
+                label,
+                style: AppTypography.caption.copyWith(
+                  color: isActive ? Colors.white : AppColors.textSecondary,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
             ),
+          );
+        },
+      ),
     );
   }
 

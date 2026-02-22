@@ -69,8 +69,6 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
   void stopTracking() {
     _realtimeSubscription?.cancel();
     _realtimeSubscription = null;
-    _mockTimer?.cancel();
-    _mockTimer = null;
     state = null;
   }
 

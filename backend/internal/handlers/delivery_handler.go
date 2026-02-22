@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
@@ -162,6 +163,22 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 		utils.InternalError(c, "Failed to accept order")
 		return
 	}
+
+	// Notify customer that a delivery partner accepted their order
+	customerID, _ := order["user_id"].(string)
+	orderNumber, _ := order["order_number"].(string)
+	if customerID != "" {
+		_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
+			"user_id":    customerID,
+			"title":      "Delivery Partner Assigned",
+			"body":       "A delivery partner has been assigned to your order " + orderNumber,
+			"type":       "delivery_update",
+			"data":       map[string]interface{}{"order_id": orderID},
+			"is_read":    false,
+			"created_at": time.Now().Format(time.RFC3339),
+		})
+	}
+
 	utils.Success(c, gin.H{"message": "Order accepted", "order_id": orderID})
 }
 
@@ -530,4 +547,189 @@ func (h *DeliveryHandler) Performance(c *gin.Context) {
 		"daily_trend":          dailyTrend,
 		"peak_day":             peakDay,
 	})
+}
+
+// GetProfile returns the delivery partner's full profile
+// GET /api/v1/delivery/profile
+func (h *DeliveryHandler) GetProfile(c *gin.Context) {
+	partner, _, ok := h.getDeliveryPartnerProfile(c)
+	if !ok {
+		return
+	}
+	utils.Success(c, partner)
+}
+
+// UpdateProfile updates delivery partner profile fields (vehicle, bank, etc.)
+// PUT /api/v1/delivery/profile
+func (h *DeliveryHandler) UpdateProfile(c *gin.Context) {
+	var req models.UpdateDeliveryProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "Invalid request body")
+		return
+	}
+
+	_, partnerID, ok := h.getDeliveryPartnerProfile(c)
+	if !ok {
+		return
+	}
+
+	updateData := map[string]interface{}{}
+	if req.VehicleType != "" {
+		updateData["vehicle_type"] = req.VehicleType
+	}
+	if req.VehicleNumber != "" {
+		updateData["vehicle_number"] = req.VehicleNumber
+	}
+	if req.BankAccountID != "" {
+		updateData["bank_account_id"] = req.BankAccountID
+	}
+
+	if len(updateData) == 0 {
+		utils.BadRequest(c, "No fields to update")
+		return
+	}
+
+	updated, err := h.appwrite.UpdateDeliveryPartner(partnerID, updateData)
+	if err != nil {
+		utils.InternalError(c, "Failed to update profile")
+		return
+	}
+	utils.Success(c, updated)
+}
+
+// ListPayouts returns the delivery partner's payout history
+// GET /api/v1/delivery/payouts
+func (h *DeliveryHandler) ListPayouts(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	pg := models.ParsePagination(c)
+
+	queries := []string{
+		appwrite.QueryEqual("user_id", userID),
+		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryLimit(pg.PerPage),
+		appwrite.QueryOffset(pg.Offset()),
+	}
+
+	result, err := h.appwrite.ListPayouts(queries)
+	if err != nil {
+		utils.InternalError(c, "Failed to fetch payouts")
+		return
+	}
+	utils.Paginated(c, result.Documents, pg.Page, pg.PerPage, result.Total)
+}
+
+// RequestPayout creates a new payout request for the delivery partner
+// POST /api/v1/delivery/payouts/request
+func (h *DeliveryHandler) RequestPayout(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var req models.RequestPayoutRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "Amount (>0) and method (bank_transfer|upi) are required")
+		return
+	}
+
+	partner, partnerID, ok := h.getDeliveryPartnerProfile(c)
+	if !ok {
+		return
+	}
+
+	// Validate minimum payout
+	if req.Amount < 100 {
+		utils.BadRequest(c, "Minimum payout amount is ₹100")
+		return
+	}
+
+	// Check that partner has sufficient balance
+	totalEarnings := getFloat(partner, "total_earnings")
+	if req.Amount > totalEarnings {
+		utils.BadRequest(c, "Insufficient earnings balance")
+		return
+	}
+
+	// Check for pending/processing payouts (only one at a time)
+	pendingQueries := []string{
+		appwrite.QueryEqual("user_id", userID),
+		appwrite.QueryEqual("status", models.PayoutStatusPending),
+		appwrite.QueryLimit(1),
+	}
+	if pending, _ := h.appwrite.ListPayouts(pendingQueries); pending != nil && pending.Total > 0 {
+		utils.BadRequest(c, "You already have a pending payout request")
+		return
+	}
+
+	processingQueries := []string{
+		appwrite.QueryEqual("user_id", userID),
+		appwrite.QueryEqual("status", models.PayoutStatusProcessing),
+		appwrite.QueryLimit(1),
+	}
+	if processing, _ := h.appwrite.ListPayouts(processingQueries); processing != nil && processing.Total > 0 {
+		utils.BadRequest(c, "A payout is already being processed")
+		return
+	}
+
+	// Create payout record
+	payout, err := h.appwrite.CreatePayout("unique()", map[string]interface{}{
+		"partner_id": partnerID,
+		"user_id":    userID,
+		"amount":     req.Amount,
+		"status":     models.PayoutStatusPending,
+		"method":     req.Method,
+		"reference":  "",
+		"note":       "",
+		"created_at": time.Now().Format(time.RFC3339),
+		"updated_at": time.Now().Format(time.RFC3339),
+	})
+	if err != nil {
+		utils.InternalError(c, "Failed to create payout request")
+		return
+	}
+
+	// Deduct from partner's total_earnings (available balance)
+	newBalance := totalEarnings - req.Amount
+	_, _ = h.appwrite.UpdateDeliveryPartner(partnerID, map[string]interface{}{
+		"total_earnings": newBalance,
+	})
+
+	// Create notification for partner
+	_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
+		"user_id":    userID,
+		"title":      "Payout Requested",
+		"body":       "Your payout of ₹" + fmt.Sprintf("%.0f", req.Amount) + " is being processed",
+		"type":       "payout",
+		"is_read":    false,
+		"created_at": time.Now().Format(time.RFC3339),
+	})
+
+	utils.Created(c, payout)
+}
+
+// RejectOrder rejects/skips an order assignment
+// PUT /api/v1/delivery/orders/:id/reject
+func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
+	orderID := c.Param("id")
+	userID := middleware.GetUserID(c)
+
+	// Verify order exists and is assigned to this partner
+	order, err := h.appwrite.GetOrder(orderID)
+	if err != nil {
+		utils.NotFound(c, "Order not found")
+		return
+	}
+
+	assignedPartner, _ := order["delivery_partner_id"].(string)
+	if assignedPartner != userID {
+		utils.Forbidden(c, "Order not assigned to you")
+		return
+	}
+
+	// Unassign partner
+	_, err = h.appwrite.UpdateOrder(orderID, map[string]interface{}{
+		"delivery_partner_id": "",
+		"accepted_at":         "",
+	})
+	if err != nil {
+		utils.InternalError(c, "Failed to reject order")
+		return
+	}
+	utils.Success(c, gin.H{"message": "Order rejected", "order_id": orderID})
 }

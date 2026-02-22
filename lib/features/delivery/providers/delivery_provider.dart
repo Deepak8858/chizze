@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/services/realtime_service.dart';
 import '../models/delivery_partner.dart';
 
@@ -13,6 +14,7 @@ class DeliveryState {
   final DeliveryRequest? incomingRequest;
   final ActiveDelivery? activeDelivery;
   final bool isLoading;
+  final String? errorMessage;
 
   const DeliveryState({
     required this.partner,
@@ -20,6 +22,7 @@ class DeliveryState {
     this.incomingRequest,
     this.activeDelivery,
     this.isLoading = false,
+    this.errorMessage,
   });
 
   DeliveryState copyWith({
@@ -28,8 +31,10 @@ class DeliveryState {
     DeliveryRequest? incomingRequest,
     ActiveDelivery? activeDelivery,
     bool? isLoading,
+    String? errorMessage,
     bool clearRequest = false,
     bool clearDelivery = false,
+    bool clearError = false,
   }) {
     return DeliveryState(
       partner: partner ?? this.partner,
@@ -41,6 +46,7 @@ class DeliveryState {
           ? null
           : (activeDelivery ?? this.activeDelivery),
       isLoading: isLoading ?? this.isLoading,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
 
@@ -49,13 +55,17 @@ class DeliveryState {
       incomingRequest != null && !incomingRequest!.hasExpired;
 }
 
-/// Delivery notifier — API-backed with mock fallback + Realtime
+/// Delivery notifier — API-backed with Realtime + location tracking
 class DeliveryNotifier extends StateNotifier<DeliveryState> {
   final ApiClient _api;
   final RealtimeService _realtime;
+  final LocationService _location;
   StreamSubscription? _realtimeSub;
+  StreamSubscription? _locationStreamSub;
+  Timer? _locationTimer;
+  bool _isLoadingGuard = false;
 
-  DeliveryNotifier(this._api, this._realtime)
+  DeliveryNotifier(this._api, this._realtime, this._location)
     : super(DeliveryState(partner: DeliveryPartner.empty)) {
     _loadData();
     _subscribeToRealtime();
@@ -67,22 +77,89 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       final channel = RealtimeChannels.deliveryRequestsChannel();
       _realtimeSub = _realtime.subscribe(channel).listen((event) {
         if (event.type == RealtimeEventType.create) {
-          // Parse real delivery request from event data
-          // TODO: implement DeliveryRequest.fromMap(event.data)
+          try {
+            final request = DeliveryRequest.fromMap(event.data);
+            state = state.copyWith(incomingRequest: request);
+          } catch (_) {
+            // Malformed event data — ignore
+          }
         }
       });
     } catch (_) {} // Realtime not available
   }
 
+  /// Start real GPS location tracking when online
+  void _startLocationTracking() {
+    _locationTimer?.cancel();
+    _locationStreamSub?.cancel();
+
+    // Use continuous position stream from geolocator (10m distance filter)
+    _locationStreamSub = _location.getPositionStream().listen((loc) {
+      // Update local state
+      state = state.copyWith(
+        partner: state.partner.copyWith(
+          currentLatitude: loc.latitude,
+          currentLongitude: loc.longitude,
+        ),
+      );
+    });
+
+    // Push to backend every 15 seconds
+    _locationTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _pushLocationUpdate();
+    });
+  }
+
+  void _stopLocationTracking() {
+    _locationTimer?.cancel();
+    _locationTimer = null;
+    _locationStreamSub?.cancel();
+    _locationStreamSub = null;
+  }
+
+  Future<void> _pushLocationUpdate() async {
+    // Use real GPS coordinates from state (updated by position stream)
+    if (state.partner.currentLatitude == 0) {
+      // Try to get a one-shot position if stream hasn't delivered yet
+      try {
+        final loc = await _location.getCurrentPosition();
+        state = state.copyWith(
+          partner: state.partner.copyWith(
+            currentLatitude: loc.latitude,
+            currentLongitude: loc.longitude,
+          ),
+        );
+      } catch (_) {
+        return;
+      }
+    }
+    _api
+        .put(
+          ApiConfig.deliveryLocation,
+          body: {
+            'latitude': state.partner.currentLatitude,
+            'longitude': state.partner.currentLongitude,
+            'heading': 0.0,
+            'speed': 0.0,
+          },
+        )
+        .ignore();
+  }
+
   @override
   void dispose() {
     _realtimeSub?.cancel();
+    _locationTimer?.cancel();
+    _locationStreamSub?.cancel();
     super.dispose();
   }
 
   Future<void> _loadData() async {
+    if (_isLoadingGuard) return;
+    _isLoadingGuard = true;
+    state = state.copyWith(isLoading: true);
+
     try {
-      // Fetch dashboard data (partner profile + today metrics + weekly progress)
       final response = await _api.get(ApiConfig.deliveryDashboard);
       if (response.success && response.data != null) {
         final data = response.data as Map<String, dynamic>;
@@ -92,7 +169,12 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         state = state.copyWith(
           partner: partner,
           metrics: metrics,
+          isLoading: false,
+          clearError: true,
         );
+
+        if (partner.isOnline) _startLocationTracking();
+        _isLoadingGuard = false;
         return;
       }
     } catch (_) {}
@@ -100,30 +182,49 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     // No mock fallback — show empty state
     state = state.copyWith(
       metrics: const DeliveryMetrics(),
+      isLoading: false,
     );
+    _isLoadingGuard = false;
   }
 
+  /// Refresh dashboard data
+  Future<void> refresh() => _loadData();
+
   /// Toggle online/offline
-  void toggleOnline() {
+  Future<void> toggleOnline() async {
+    final newOnline = !state.partner.isOnline;
     state = state.copyWith(
-      partner: state.partner.copyWith(isOnline: !state.partner.isOnline),
+      partner: state.partner.copyWith(isOnline: newOnline),
     );
-    // When going offline, clear incoming request
-    if (!state.partner.isOnline) {
+
+    if (!newOnline) {
       state = state.copyWith(clearRequest: true);
+      _stopLocationTracking();
+    } else {
+      _startLocationTracking();
     }
 
-    // Push to API
-    _api
-        .put(
-          ApiConfig.deliveryStatus,
-          body: {'is_online': state.partner.isOnline},
-        )
-        .ignore();
+    // Push to API with rollback on failure
+    try {
+      final response = await _api.put(
+        ApiConfig.deliveryStatus,
+        body: {'is_online': newOnline},
+      );
+      if (!response.success) {
+        // Rollback
+        state = state.copyWith(
+          partner: state.partner.copyWith(isOnline: !newOnline),
+        );
+      }
+    } catch (_) {
+      state = state.copyWith(
+        partner: state.partner.copyWith(isOnline: !newOnline),
+      );
+    }
   }
 
   /// Accept a delivery request
-  void acceptRequest() {
+  Future<void> acceptRequest() async {
     if (state.incomingRequest == null) return;
 
     final orderId = state.incomingRequest!.order.id;
@@ -139,7 +240,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     );
 
     // Push to API
-    _api.put('${ApiConfig.deliveryOrders}/$orderId/accept').ignore();
+    try {
+      await _api.put('${ApiConfig.deliveryOrders}/$orderId/accept');
+    } catch (_) {
+      // Accept already optimistic — don't rollback UI
+    }
   }
 
   /// Reject/skip a delivery request
@@ -148,7 +253,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   }
 
   /// Move to next delivery step
-  void advanceStep() {
+  Future<void> advanceStep() async {
     if (state.activeDelivery == null) return;
     final next = state.activeDelivery!.nextStep;
     if (next != null) {
@@ -179,20 +284,19 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   }
 
   /// Complete delivery
-  void completeDelivery() {
+  Future<void> completeDelivery() async {
     final orderId = state.activeDelivery?.request.order.id;
+    final earning = state.activeDelivery?.request.estimatedEarning ?? 0;
+    final distance = state.activeDelivery?.request.distanceKm ?? 0;
+
     state = state.copyWith(
       clearDelivery: true,
       partner: state.partner.copyWith(isOnDelivery: false),
-      metrics: DeliveryMetrics(
-        todayEarnings:
-            state.metrics.todayEarnings +
-            (state.activeDelivery?.request.estimatedEarning ?? 0),
+      metrics: state.metrics.copyWith(
+        todayEarnings: state.metrics.todayEarnings + earning,
         todayDeliveries: state.metrics.todayDeliveries + 1,
-        todayDistanceKm:
-            state.metrics.todayDistanceKm +
-            (state.activeDelivery?.request.distanceKm ?? 0),
-        weeklyGoal: state.metrics.weeklyGoal,
+        todayDistanceKm: state.metrics.todayDistanceKm + distance,
+        weeklyEarningsCurrent: state.metrics.weeklyEarningsCurrent + earning,
         weeklyCompleted: state.metrics.weeklyCompleted + 1,
       ),
     );
@@ -208,9 +312,72 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     }
   }
 
-  /// Simulate a new incoming request (removed — no mock data)
+  /// Report an issue with current delivery
+  Future<void> reportIssue(String reason, String details) async {
+    if (state.activeDelivery == null) return;
+    final orderId = state.activeDelivery!.request.order.id;
+    _api
+        .post(
+          '${ApiConfig.deliveryOrders}/$orderId/report',
+          body: {'reason': reason, 'details': details},
+        )
+        .ignore();
+  }
+
+  /// Update partner location (called externally e.g., from GPS)
+  void updateLocation(double lat, double lng) {
+    state = state.copyWith(
+      partner: state.partner.copyWith(
+        currentLatitude: lat,
+        currentLongitude: lng,
+      ),
+    );
+  }
+
+  /// Simulate a new delivery request (debug / demo only)
   void simulateNewRequest() {
-    // No-op: removed mock simulation
+    final mock = DeliveryRequest.mock();
+    state = state.copyWith(incomingRequest: mock);
+  }
+
+  /// Update delivery partner profile (vehicle, bank details)
+  Future<bool> updateProfile({
+    String? vehicleType,
+    String? vehicleNumber,
+    String? bankAccountId,
+  }) async {
+    try {
+      final body = <String, dynamic>{};
+      if (vehicleType != null) body['vehicle_type'] = vehicleType;
+      if (vehicleNumber != null) body['vehicle_number'] = vehicleNumber;
+      if (bankAccountId != null) body['bank_account_id'] = bankAccountId;
+
+      if (body.isEmpty) return false;
+
+      final response = await _api.put(ApiConfig.deliveryProfile, body: body);
+      if (response.success) {
+        // Update local state
+        state = state.copyWith(
+          partner: state.partner.copyWith(
+            vehicleType: vehicleType ?? state.partner.vehicleType,
+            vehicleNumber: vehicleNumber ?? state.partner.vehicleNumber,
+          ),
+        );
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Fetch performance metrics
+  Future<Map<String, dynamic>?> fetchPerformance() async {
+    try {
+      final response = await _api.get(ApiConfig.deliveryPerformance);
+      if (response.success && response.data != null) {
+        return response.data as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
   }
 }
 
@@ -219,6 +386,7 @@ final deliveryProvider = StateNotifierProvider<DeliveryNotifier, DeliveryState>(
   (ref) {
     final api = ref.watch(apiClientProvider);
     final realtime = ref.watch(realtimeServiceProvider);
-    return DeliveryNotifier(api, realtime);
+    final location = ref.watch(locationServiceProvider);
+    return DeliveryNotifier(api, realtime, location);
   },
 );

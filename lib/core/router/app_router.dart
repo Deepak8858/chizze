@@ -28,6 +28,10 @@ import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/address_management_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/coupons/screens/coupons_screen.dart';
+import '../../features/favorites/screens/favorites_screen.dart';
+import '../../features/referral/screens/referral_screen.dart';
+import '../../features/gold/screens/gold_screen.dart';
+import '../../features/orders/screens/scheduled_orders_screen.dart';
 
 /// Notifier that bridges Riverpod auth state → GoRouter refreshListenable.
 /// Only notifies when auth STATUS changes (not isLoading), so that in-progress
@@ -199,6 +203,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const CouponsScreen(),
       ),
 
+      // ─── Referral ───
+      GoRoute(
+        path: '/referral',
+        builder: (context, state) => const ReferralScreen(),
+      ),
+
+      // ─── Chizze Gold ───
+      GoRoute(
+        path: '/gold',
+        builder: (context, state) => const GoldScreen(),
+      ),
+
+      // ─── Scheduled Orders ───
+      GoRoute(
+        path: '/scheduled-orders',
+        builder: (context, state) => const ScheduledOrdersScreen(),
+      ),
+
       // ─── Order Confirmation ───
       GoRoute(
         path: '/order-confirmation/:id',
@@ -242,6 +264,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/search',
             pageBuilder: (context, state) =>
                 const NoTransitionPage(child: SearchScreen()),
+          ),
+          GoRoute(
+            path: '/favorites',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: FavoritesScreen()),
           ),
           GoRoute(
             path: '/orders',
@@ -329,8 +356,9 @@ class MainShell extends ConsumerWidget {
     final location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/home')) return 0;
     if (location.startsWith('/search')) return 1;
-    if (location.startsWith('/orders')) return 2;
-    if (location.startsWith('/profile')) return 3;
+    if (location.startsWith('/favorites')) return 2;
+    if (location.startsWith('/orders')) return 3;
+    if (location.startsWith('/profile')) return 4;
     return 0;
   }
 
@@ -351,8 +379,10 @@ class MainShell extends ConsumerWidget {
               case 1:
                 context.go('/search');
               case 2:
-                context.go('/orders');
+                context.go('/favorites');
               case 3:
+                context.go('/orders');
+              case 4:
                 context.go('/profile');
             }
           },
@@ -366,6 +396,11 @@ class MainShell extends ConsumerWidget {
               icon: Icon(Icons.search_outlined),
               activeIcon: Icon(Icons.search_rounded),
               label: 'Search',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.favorite_border_rounded),
+              activeIcon: Icon(Icons.favorite_rounded),
+              label: 'Favorites',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.receipt_long_outlined),

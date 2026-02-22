@@ -44,10 +44,15 @@ const (
 	CollectionOrders           = "orders"
 	CollectionDeliveryRequests = "delivery_requests"
 	CollectionRiderLocations   = "rider_locations"
+	CollectionPayouts          = "payouts"
 	CollectionReviews          = "reviews"
 	CollectionCoupons          = "coupons"
 	CollectionPayments         = "payments"
 	CollectionNotifications    = "notifications"
+	CollectionFavorites        = "favorites"
+	CollectionGoldSubscriptions = "gold_subscriptions"
+	CollectionReferrals        = "referrals"
+	CollectionScheduledOrders  = "scheduled_orders"
 )
 
 // AppError is a structured error for API responses

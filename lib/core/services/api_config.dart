@@ -38,6 +38,26 @@ class ApiConfig {
   // Notifications
   static const String notifications = '/notifications';
 
+  // Favorites
+  static const String favorites = '/users/me/favorites';
+
+  // Gold Membership
+  static const String goldPlans = '/gold/plans';
+  static const String goldStatus = '/gold/status';
+  static const String goldSubscribe = '/gold/subscribe';
+  static const String goldCancel = '/gold/cancel';
+
+  // Referrals
+  static const String referralCode = '/referrals/code';
+  static const String referralApply = '/referrals/apply';
+  static const String referrals = '/referrals';
+
+  // Scheduled Orders
+  static const String scheduledOrders = '/orders/scheduled';
+
+  // FCM Token
+  static const String fcmToken = '/users/me/fcm-token';
+
   // Partner
   static const String partnerDashboard = '/partner/dashboard';
   static const String partnerMenu = '/partner/menu';
@@ -51,7 +71,10 @@ class ApiConfig {
   static const String deliveryDashboard = '/delivery/dashboard';
   static const String deliveryEarnings = '/delivery/earnings';
   static const String deliveryPerformance = '/delivery/performance';
+  static const String deliveryProfile = '/delivery/profile';
   static const String deliveryStatus = '/delivery/status';
   static const String deliveryLocation = '/delivery/location';
   static const String deliveryOrders = '/delivery/orders';
+  static const String deliveryPayouts = '/delivery/payouts';
+  static const String deliveryPayoutRequest = '/delivery/payouts/request';
 }

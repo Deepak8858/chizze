@@ -14,6 +14,7 @@ class ApiClient {
   late final Dio _dio;
   String? _currentToken;
   Future<String?> Function()? _refreshCallback;
+  bool _isRefreshing = false;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
@@ -35,7 +36,10 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onError: (DioException error, ErrorInterceptorHandler handler) async {
-          if (error.response?.statusCode == 401 && _refreshCallback != null) {
+          if (error.response?.statusCode == 401 &&
+              _refreshCallback != null &&
+              !_isRefreshing) {
+            _isRefreshing = true;
             debugPrint('[ApiClient] 401 received, attempting token refresh...');
             try {
               final newToken = await _refreshCallback!();
@@ -49,6 +53,8 @@ class ApiClient {
               }
             } catch (e) {
               debugPrint('[ApiClient] Token refresh failed: $e');
+            } finally {
+              _isRefreshing = false;
             }
           }
           handler.next(error);
