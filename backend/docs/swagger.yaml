@@ -1,0 +1,2869 @@
+basePath: /api/v1
+definitions:
+  github_com_chizze_backend_internal_models.ApplyReferralRequest:
+    properties:
+      referral_code:
+        type: string
+    required:
+    - referral_code
+    type: object
+  github_com_chizze_backend_internal_models.CancelOrderRequest:
+    properties:
+      reason:
+        type: string
+    required:
+    - reason
+    type: object
+  github_com_chizze_backend_internal_models.CreateFavoriteRequest:
+    properties:
+      restaurant_id:
+        type: string
+    required:
+    - restaurant_id
+    type: object
+  github_com_chizze_backend_internal_models.CreateReviewRequest:
+    properties:
+      delivery_rating:
+        maximum: 5
+        minimum: 1
+        type: integer
+      food_rating:
+        maximum: 5
+        minimum: 1
+        type: integer
+      review_text:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    required:
+    - delivery_rating
+    - food_rating
+    type: object
+  github_com_chizze_backend_internal_models.CreateScheduledOrderRequest:
+    properties:
+      address_id:
+        type: string
+      coupon_code:
+        type: string
+      items:
+        items:
+          properties:
+            customizations:
+              additionalProperties: true
+              type: object
+            menu_item_id:
+              type: string
+            quantity:
+              type: integer
+          type: object
+        type: array
+      restaurant_id:
+        type: string
+      scheduled_for:
+        description: ISO 8601
+        type: string
+    required:
+    - address_id
+    - items
+    - restaurant_id
+    - scheduled_for
+    type: object
+  github_com_chizze_backend_internal_models.GoldPlan:
+    properties:
+      description:
+        type: string
+      label:
+        type: string
+      original_price:
+        type: number
+      price:
+        type: number
+      save_percent:
+        type: integer
+      type:
+        description: monthly | quarterly | annual
+        type: string
+    type: object
+  github_com_chizze_backend_internal_models.OrderItem:
+    properties:
+      customizations:
+        type: string
+      is_veg:
+        type: boolean
+      item_id:
+        type: string
+      name:
+        type: string
+      price:
+        type: number
+      quantity:
+        type: integer
+    type: object
+  github_com_chizze_backend_internal_models.PlaceOrderRequest:
+    properties:
+      coupon_code:
+        type: string
+      delivery_address_id:
+        type: string
+      delivery_instructions:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.OrderItem'
+        minItems: 1
+        type: array
+      payment_method:
+        type: string
+      restaurant_id:
+        type: string
+      special_instructions:
+        type: string
+      tip:
+        type: number
+    required:
+    - delivery_address_id
+    - items
+    - payment_method
+    - restaurant_id
+    type: object
+  github_com_chizze_backend_internal_models.ReplyReviewRequest:
+    properties:
+      reply:
+        type: string
+    required:
+    - reply
+    type: object
+  github_com_chizze_backend_internal_models.RequestPayoutRequest:
+    properties:
+      amount:
+        type: number
+      method:
+        enum:
+        - bank_transfer
+        - upi
+        type: string
+    required:
+    - amount
+    - method
+    type: object
+  github_com_chizze_backend_internal_models.SubscribeGoldRequest:
+    properties:
+      payment_id:
+        type: string
+      plan_type:
+        type: string
+    required:
+    - payment_id
+    - plan_type
+    type: object
+  github_com_chizze_backend_internal_models.UpdateDeliveryProfileRequest:
+    properties:
+      bank_account_id:
+        type: string
+      vehicle_number:
+        type: string
+      vehicle_type:
+        type: string
+    type: object
+  github_com_chizze_backend_internal_models.ValidateCouponRequest:
+    properties:
+      code:
+        type: string
+      order_total:
+        type: number
+    required:
+    - code
+    - order_total
+    type: object
+  github_com_chizze_backend_internal_services.VerifyPaymentRequest:
+    properties:
+      razorpay_order_id:
+        type: string
+      razorpay_payment_id:
+        type: string
+      razorpay_signature:
+        type: string
+    required:
+    - razorpay_order_id
+    - razorpay_payment_id
+    - razorpay_signature
+    type: object
+host: api.devdeepak.me
+info:
+  contact:
+    email: support@chizze.app
+    name: Chizze Support
+    url: https://chizze.app/support
+  description: Backend API for Chizze — a food delivery platform with customer, restaurant
+    partner, and delivery partner roles.
+  license:
+    name: Proprietary
+    url: https://chizze.app/license
+  termsOfService: https://chizze.app/terms
+  title: Chizze Food Delivery API
+  version: "1.0"
+paths:
+  /api/v1/auth/exchange:
+    post:
+      consumes:
+      - application/json
+      description: Validates an Appwrite client JWT and issues a Chizze API JWT. Creates
+        user document if not exists.
+      parameters:
+      - description: JSON with jwt (string, required) and role (string, optional)
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: token, user_id, role, is_new
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Exchange Appwrite JWT for Chizze API token
+      tags:
+      - Auth
+  /api/v1/auth/logout:
+    delete:
+      description: Invalidates the user's session by blacklisting their token in Redis
+        for 7 days
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Logout user
+      tags:
+      - Auth
+  /api/v1/auth/refresh:
+    post:
+      description: Re-issues a new JWT from a valid existing token. Token must not
+        be blacklisted.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: token, user_id, role
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Refresh JWT token
+      tags:
+      - Auth
+  /api/v1/auth/send-otp:
+    post:
+      consumes:
+      - application/json
+      description: Sends an OTP to the given phone number with rate limiting (max
+        3 per 10 minutes)
+      parameters:
+      - description: 'JSON with phone (string, required, format: +91XXXXXXXXXX)'
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message, phone
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "429":
+          description: Too Many Requests
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Send OTP to phone number
+      tags:
+      - Auth
+  /api/v1/auth/verify-otp:
+    post:
+      consumes:
+      - application/json
+      description: Verifies OTP for a phone number and returns a JWT token
+      parameters:
+      - description: JSON with phone (string), otp (string), user_id (string) — all
+          required
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message, token, user_id, role
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Verify OTP and issue token
+      tags:
+      - Auth
+  /api/v1/cart/validate-coupon:
+    post:
+      consumes:
+      - application/json
+      description: Checks if a coupon code is valid for the given order total and
+        returns the discount amount
+      parameters:
+      - description: Coupon code and order total
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.ValidateCouponRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Validate a coupon
+      tags:
+      - Coupons
+  /api/v1/coupons:
+    get:
+      consumes:
+      - application/json
+      description: Returns all currently active coupons
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List available coupons
+      tags:
+      - Coupons
+  /api/v1/delivery/dashboard:
+    get:
+      consumes:
+      - application/json
+      description: Returns today's earnings, deliveries, distance, weekly progress,
+        and active order info
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get delivery dashboard
+      tags:
+      - Delivery
+  /api/v1/delivery/earnings:
+    get:
+      consumes:
+      - application/json
+      description: Returns earnings breakdown with weekly data, recent trips, and
+        monthly totals
+      parameters:
+      - default: week
+        description: 'Time period: day, week, or month'
+        in: query
+        name: period
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get delivery earnings
+      tags:
+      - Delivery
+  /api/v1/delivery/location:
+    put:
+      consumes:
+      - application/json
+      description: Pushes the delivery partner's current GPS location, heading, and
+        speed; broadcasts to customers tracking active deliveries
+      parameters:
+      - description: Location data
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            heading:
+              type: number
+            latitude:
+              type: number
+            longitude:
+              type: number
+            speed:
+              type: number
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update delivery partner location
+      tags:
+      - Delivery
+  /api/v1/delivery/orders:
+    get:
+      consumes:
+      - application/json
+      description: Returns orders assigned to the partner or available for pickup
+        depending on mode query param
+      parameters:
+      - default: assigned
+        description: 'Filter mode: assigned or available'
+        in: query
+        name: mode
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List active delivery orders
+      tags:
+      - Delivery
+  /api/v1/delivery/orders/{id}/accept:
+    put:
+      consumes:
+      - application/json
+      description: Assigns the delivery partner to an order using a distributed lock
+        to prevent double-acceptance
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Accept a delivery order
+      tags:
+      - Delivery
+  /api/v1/delivery/orders/{id}/reject:
+    put:
+      consumes:
+      - application/json
+      description: Rejects an order assignment and unassigns the delivery partner
+        from the order
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reject a delivery order
+      tags:
+      - Delivery
+  /api/v1/delivery/payouts:
+    get:
+      consumes:
+      - application/json
+      description: Returns paginated payout history for the authenticated delivery
+        partner
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List payouts
+      tags:
+      - Delivery
+  /api/v1/delivery/payouts/request:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new payout request; minimum ₹100, one pending request
+        at a time
+      parameters:
+      - description: Payout amount and method
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.RequestPayoutRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Request a payout
+      tags:
+      - Delivery
+  /api/v1/delivery/performance:
+    get:
+      consumes:
+      - application/json
+      description: Returns completion rate, cancellation rate, avg delivery time,
+        and daily trend for the last 7 days
+      parameters:
+      - default: week
+        description: Time period
+        in: query
+        name: period
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get delivery performance
+      tags:
+      - Delivery
+  /api/v1/delivery/profile:
+    get:
+      consumes:
+      - application/json
+      description: Returns the full profile of the authenticated delivery partner
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get delivery partner profile
+      tags:
+      - Delivery
+    put:
+      consumes:
+      - application/json
+      description: Updates delivery partner profile fields such as vehicle type, vehicle
+        number, and bank account
+      parameters:
+      - description: Profile fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.UpdateDeliveryProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update delivery partner profile
+      tags:
+      - Delivery
+  /api/v1/delivery/status:
+    put:
+      consumes:
+      - application/json
+      description: Sets delivery partner online or offline and updates Redis geo set
+        accordingly
+      parameters:
+      - description: Online status
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            is_online:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Toggle online status
+      tags:
+      - Delivery
+  /api/v1/gold/cancel:
+    put:
+      consumes:
+      - application/json
+      description: Cancels the authenticated user's active Gold membership subscription
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancel Gold membership
+      tags:
+      - Gold
+  /api/v1/gold/plans:
+    get:
+      consumes:
+      - application/json
+      description: Returns all available Chizze Gold membership plans
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_chizze_backend_internal_models.GoldPlan'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Get Gold membership plans
+      tags:
+      - Gold
+  /api/v1/gold/status:
+    get:
+      consumes:
+      - application/json
+      description: Returns the authenticated user's current Gold membership status
+        and subscription details
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get Gold membership status
+      tags:
+      - Gold
+  /api/v1/gold/subscribe:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new Chizze Gold membership subscription for the authenticated
+        user
+      parameters:
+      - description: Subscription plan and payment details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.SubscribeGoldRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Subscribe to Gold membership
+      tags:
+      - Gold
+  /api/v1/notifications:
+    get:
+      consumes:
+      - application/json
+      description: Returns the authenticated user's notifications with pagination
+      parameters:
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List notifications
+      tags:
+      - Notifications
+  /api/v1/notifications/{id}/read:
+    put:
+      consumes:
+      - application/json
+      description: Marks a single notification as read with ownership verification
+      parameters:
+      - description: Notification ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Mark notification as read
+      tags:
+      - Notifications
+  /api/v1/notifications/read-all:
+    put:
+      consumes:
+      - application/json
+      description: Marks all of the authenticated user's unread notifications as read
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Mark all notifications as read
+      tags:
+      - Notifications
+  /api/v1/orders:
+    get:
+      consumes:
+      - application/json
+      description: Returns paginated order history filtered by the current user's
+        role
+      parameters:
+      - description: Filter by order status
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List orders
+      tags:
+      - Orders
+    post:
+      consumes:
+      - application/json
+      description: Creates a new order with server-side price verification, fee calculation,
+        and coupon application
+      parameters:
+      - description: Order details
+        in: body
+        name: order
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.PlaceOrderRequest'
+      - description: Idempotency key to prevent duplicate orders
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Place a new order
+      tags:
+      - Orders
+  /api/v1/orders/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Returns order details with role-based ownership check
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get order details
+      tags:
+      - Orders
+  /api/v1/orders/{id}/cancel:
+    put:
+      consumes:
+      - application/json
+      description: Cancels an order with ownership verification; only the customer
+        who placed the order can cancel
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Cancellation reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.CancelOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancel an order
+      tags:
+      - Orders
+  /api/v1/orders/{id}/review:
+    post:
+      consumes:
+      - application/json
+      description: Submits a review for a delivered order. Validates ownership, delivery
+        status, and duplicate checks.
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Review data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.CreateReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a review
+      tags:
+      - Reviews
+  /api/v1/orders/scheduled:
+    get:
+      consumes:
+      - application/json
+      description: Returns the authenticated user's scheduled orders
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List scheduled orders
+      tags:
+      - Scheduled Orders
+    post:
+      consumes:
+      - application/json
+      description: Creates a new scheduled order for the authenticated user
+      parameters:
+      - description: Scheduled order data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.CreateScheduledOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a scheduled order
+      tags:
+      - Scheduled Orders
+  /api/v1/orders/scheduled/{id}/cancel:
+    put:
+      consumes:
+      - application/json
+      description: Cancels an existing scheduled order by ID
+      parameters:
+      - description: Scheduled order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancel a scheduled order
+      tags:
+      - Scheduled Orders
+  /api/v1/partner/analytics:
+    get:
+      consumes:
+      - application/json
+      description: Returns revenue trends, top selling items, and peak hours for the
+        given period
+      parameters:
+      - default: week
+        description: 'Time period: day, week, or month'
+        in: query
+        name: period
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get partner analytics
+      tags:
+      - Partners
+  /api/v1/partner/categories:
+    get:
+      consumes:
+      - application/json
+      description: Returns all menu categories for the partner's restaurant
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List menu categories
+      tags:
+      - Partners
+    post:
+      consumes:
+      - application/json
+      description: Creates a new menu category for the partner's restaurant
+      parameters:
+      - description: Category data
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            name:
+              type: string
+            sort_order:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a menu category
+      tags:
+      - Partners
+  /api/v1/partner/categories/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes a menu category with ownership verification
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a menu category
+      tags:
+      - Partners
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing menu category with ownership verification
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Category fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a menu category
+      tags:
+      - Partners
+  /api/v1/partner/dashboard:
+    get:
+      consumes:
+      - application/json
+      description: Returns dashboard metrics including today's revenue, order count,
+        pending orders, and rating
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get partner dashboard
+      tags:
+      - Partners
+  /api/v1/partner/menu:
+    get:
+      consumes:
+      - application/json
+      description: Returns all menu items for the partner's restaurant
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List menu items
+      tags:
+      - Menu
+    post:
+      consumes:
+      - application/json
+      description: Adds a new menu item for the partner's restaurant. Requires name
+        and price.
+      parameters:
+      - description: Menu item data (name, price required)
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a menu item
+      tags:
+      - Menu
+  /api/v1/partner/menu/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Removes a menu item with ownership verification
+      parameters:
+      - description: Menu item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a menu item
+      tags:
+      - Menu
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing menu item with ownership verification
+      parameters:
+      - description: Menu item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Menu item fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a menu item
+      tags:
+      - Menu
+  /api/v1/partner/orders:
+    get:
+      consumes:
+      - application/json
+      description: Returns orders for the partner's restaurant with optional status,
+        date range, and pagination filters
+      parameters:
+      - description: Filter by order status
+        in: query
+        name: status
+        type: string
+      - description: Start date (RFC3339)
+        in: query
+        name: from
+        type: string
+      - description: End date (RFC3339)
+        in: query
+        name: to
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List partner orders
+      tags:
+      - Partners
+  /api/v1/partner/orders/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Updates order status with role-based validation; restaurant owners
+        set confirmed/preparing/ready, delivery partners set picked_up/out_for_delivery/delivered
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New status
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            status:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update order status
+      tags:
+      - Orders
+  /api/v1/partner/performance:
+    get:
+      consumes:
+      - application/json
+      description: Returns preparation time, acceptance rate, and cancellation rate
+        for the last 7 days
+      parameters:
+      - description: Time period
+        in: query
+        name: period
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get partner performance metrics
+      tags:
+      - Partners
+  /api/v1/partner/restaurant/status:
+    put:
+      consumes:
+      - application/json
+      description: Toggles the restaurant's online/offline status. If no body is provided,
+        the current state is inverted.
+      parameters:
+      - description: Optional explicit online state
+        in: body
+        name: body
+        schema:
+          properties:
+            is_online:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Toggle restaurant online status
+      tags:
+      - Partners
+  /api/v1/partner/reviews/{id}/reply:
+    post:
+      consumes:
+      - application/json
+      description: Allows a restaurant owner to reply to a review with ownership verification
+      parameters:
+      - description: Review ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Reply text
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.ReplyReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reply to a review
+      tags:
+      - Reviews
+  /api/v1/payments/initiate:
+    post:
+      consumes:
+      - application/json
+      description: Creates a Razorpay order for the given order and stores a payment
+        record
+      parameters:
+      - description: Order ID to pay for
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            order_id:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Initiate a payment
+      tags:
+      - Payments
+  /api/v1/payments/verify:
+    post:
+      consumes:
+      - application/json
+      description: Validates Razorpay payment signature and updates order payment
+        status to paid
+      parameters:
+      - description: Razorpay payment verification data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_services.VerifyPaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Verify a payment
+      tags:
+      - Payments
+  /api/v1/payments/webhook:
+    post:
+      consumes:
+      - application/json
+      description: Handles Razorpay webhook events for payment.captured, payment.failed,
+        and refund.processed
+      parameters:
+      - description: Razorpay webhook signature
+        in: header
+        name: X-Razorpay-Signature
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Razorpay webhook
+      tags:
+      - Payments
+  /api/v1/referrals:
+    get:
+      consumes:
+      - application/json
+      description: Returns the authenticated user's referral history and total earnings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List referrals
+      tags:
+      - Referrals
+  /api/v1/referrals/apply:
+    post:
+      consumes:
+      - application/json
+      description: Applies a referral code for the authenticated user, granting rewards
+        to both referrer and referee
+      parameters:
+      - description: Referral code to apply
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.ApplyReferralRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Apply a referral code
+      tags:
+      - Referrals
+  /api/v1/referrals/code:
+    get:
+      consumes:
+      - application/json
+      description: Returns the authenticated user's referral code and share link,
+        generating a new code if none exists
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get referral code
+      tags:
+      - Referrals
+  /api/v1/restaurants:
+    get:
+      description: Returns restaurants with optional search, filter, and pagination
+      parameters:
+      - description: Filter by cuisine type
+        in: query
+        name: cuisine
+        type: string
+      - description: Filter vegetarian only (true/false)
+        in: query
+        name: veg_only
+        type: string
+      - description: Sort order (e.g. rating)
+        in: query
+        name: sort
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List restaurants
+      tags:
+      - Restaurants
+  /api/v1/restaurants/{id}:
+    get:
+      description: Returns detailed information about a specific restaurant
+      parameters:
+      - description: Restaurant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get restaurant details
+      tags:
+      - Restaurants
+  /api/v1/restaurants/{id}/menu:
+    get:
+      description: Returns the restaurant's menu items grouped by categories
+      parameters:
+      - description: Restaurant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: categories, uncategorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get restaurant menu
+      tags:
+      - Restaurants
+  /api/v1/restaurants/{id}/reviews:
+    get:
+      description: Returns paginated reviews for a specific restaurant
+      parameters:
+      - description: Restaurant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get restaurant reviews
+      tags:
+      - Restaurants
+  /api/v1/restaurants/nearby:
+    get:
+      description: Returns restaurants within a radius using geo bounding box and
+        Haversine distance refinement
+      parameters:
+      - description: Latitude
+        in: query
+        name: lat
+        required: true
+        type: number
+      - description: Longitude
+        in: query
+        name: lng
+        required: true
+        type: number
+      - description: Search radius in km (default 5, max 50)
+        in: query
+        name: radius
+        type: number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: restaurants, total, center, radius_km
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Find nearby restaurants
+      tags:
+      - Restaurants
+  /api/v1/users/me:
+    get:
+      description: Returns the authenticated user's profile information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - Users
+    put:
+      consumes:
+      - application/json
+      description: 'Updates the authenticated user''s profile. Allowed fields: name,
+        email, phone, profile_image, role, address, latitude, longitude.'
+      parameters:
+      - description: Profile fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update current user profile
+      tags:
+      - Users
+  /api/v1/users/me/addresses:
+    get:
+      description: Returns the authenticated user's saved addresses
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List user addresses
+      tags:
+      - Users
+    post:
+      consumes:
+      - application/json
+      description: Adds a new saved address for the authenticated user
+      parameters:
+      - description: Address data (label, line1, line2, city, state, pincode, latitude,
+          longitude, etc.)
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new address
+      tags:
+      - Users
+  /api/v1/users/me/addresses/{id}:
+    delete:
+      description: Deletes a saved address after verifying ownership
+      parameters:
+      - description: Address ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete an address
+      tags:
+      - Users
+    put:
+      consumes:
+      - application/json
+      description: Updates a saved address after verifying ownership
+      parameters:
+      - description: Address ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated address data
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update an existing address
+      tags:
+      - Users
+  /api/v1/users/me/favorites:
+    get:
+      consumes:
+      - application/json
+      description: Returns the authenticated user's favorite restaurants with restaurant
+        details
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List favorite restaurants
+      tags:
+      - Favorites
+    post:
+      consumes:
+      - application/json
+      description: Adds a restaurant to the authenticated user's favorites
+      parameters:
+      - description: Favorite data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_chizze_backend_internal_models.CreateFavoriteRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add a favorite restaurant
+      tags:
+      - Favorites
+  /api/v1/users/me/favorites/{restaurant_id}:
+    delete:
+      consumes:
+      - application/json
+      description: Removes a restaurant from the authenticated user's favorites
+      parameters:
+      - description: Restaurant ID
+        in: path
+        name: restaurant_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Remove a favorite restaurant
+      tags:
+      - Favorites
+  /api/v1/users/me/fcm-token:
+    put:
+      consumes:
+      - application/json
+      description: Updates the user's Firebase Cloud Messaging token for push notifications
+      parameters:
+      - description: JSON with token (string, required)
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update FCM token
+      tags:
+      - Users
+securityDefinitions:
+  BearerAuth:
+    description: Enter "Bearer {token}"
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
