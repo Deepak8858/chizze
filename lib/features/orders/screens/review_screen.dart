@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/api_config.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../providers/orders_provider.dart';
@@ -21,6 +23,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   int _deliveryRating = 0;
   final _reviewController = TextEditingController();
   final _selectedTags = <String>{};
+  bool _isSubmitting = false;
 
   final _tags = [
     '😋 Great Food',
@@ -174,18 +177,41 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
 
             // ─── Submit ───
             ChizzeButton(
-              label: 'Submit Review',
+              label: _isSubmitting ? 'Submitting...' : 'Submit Review',
               icon: Icons.send_rounded,
-              onPressed: _foodRating > 0
-                  ? () {
-                      // TODO: Submit to Appwrite
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Thanks for your review! 🎉'),
-                          backgroundColor: AppColors.success,
-                        ),
-                      );
-                      context.go('/home');
+              onPressed: _foodRating > 0 && !_isSubmitting
+                  ? () async {
+                      setState(() => _isSubmitting = true);
+                      try {
+                        final api = ref.read(apiClientProvider);
+                        await api.post(
+                          '${ApiConfig.orders}/${widget.orderId}/review',
+                          body: {
+                            'food_rating': _foodRating,
+                            'delivery_rating':
+                                _deliveryRating > 0 ? _deliveryRating : _foodRating,
+                            'review_text': _reviewController.text.trim(),
+                            'tags': _selectedTags.toList(),
+                          },
+                        );
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Thanks for your review! 🎉'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                        context.go('/home');
+                      } catch (e) {
+                        if (!mounted) return;
+                        setState(() => _isSubmitting = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to submit review: $e'),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                      }
                     }
                   : null,
             ),

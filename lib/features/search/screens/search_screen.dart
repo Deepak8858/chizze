@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/api_config.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../home/models/restaurant.dart';
@@ -13,6 +16,17 @@ final searchQueryProvider = StateProvider<String>((ref) => '');
 final searchFilterProvider = StateProvider<SearchFilters>(
   (ref) => const SearchFilters(),
 );
+
+/// Debounced search query — only fires API call after 300ms idle
+final _committedQueryProvider = FutureProvider.autoDispose<String>((ref) async {
+  final query = ref.watch(searchQueryProvider);
+  if (query.isEmpty) return query;
+  var cancelled = false;
+  ref.onDispose(() => cancelled = true);
+  await Future.delayed(const Duration(milliseconds: 300));
+  if (cancelled) throw Exception('debounced');
+  return query;
+});
 
 class SearchFilters {
   final String? cuisine;
@@ -42,59 +56,68 @@ class SearchFilters {
   }
 }
 
-/// Filtered restaurants provider
-final filteredRestaurantsProvider = Provider<List<Restaurant>>((ref) {
-  final query = ref.watch(searchQueryProvider).toLowerCase();
+/// Server-side filtered restaurants provider
+final filteredRestaurantsProvider =
+    FutureProvider.autoDispose<List<Restaurant>>((ref) async {
+  // Wait for debounced query (throws if new keystroke arrives within 300ms)
+  final queryAsync = ref.watch(_committedQueryProvider);
+  final query = queryAsync.valueOrNull ?? '';
   final filters = ref.watch(searchFilterProvider);
-  var restaurants = ref.watch(restaurantProvider).restaurants;
 
-  // Text search
-  if (query.isNotEmpty) {
-    restaurants = restaurants.where((r) {
-      return r.name.toLowerCase().contains(query) ||
-          r.cuisines.any((c) => c.toLowerCase().contains(query)) ||
-          r.description.toLowerCase().contains(query);
-    }).toList();
+  // No query and no active filters → fall back to pre-loaded list
+  if (query.isEmpty &&
+      filters.cuisine == null &&
+      !filters.vegOnly &&
+      filters.minRating == 0) {
+    return ref.watch(restaurantProvider).restaurants;
   }
 
-  // Cuisine filter
-  if (filters.cuisine != null) {
-    restaurants = restaurants
-        .where((r) => r.cuisines.contains(filters.cuisine))
+  // Build server-side query params
+  final queryParams = <String, dynamic>{'per_page': 50};
+  if (query.isNotEmpty) queryParams['q'] = query;
+  if (filters.cuisine != null) queryParams['cuisine'] = filters.cuisine;
+  if (filters.vegOnly) queryParams['veg_only'] = 'true';
+  if (filters.sortBy == 'rating') queryParams['sort'] = 'rating';
+
+  final api = ref.watch(apiClientProvider);
+  final response = await api.get(ApiConfig.restaurants, queryParams: queryParams);
+
+  if (response.success && response.data != null) {
+    final data = response.data;
+    List<dynamic> docs;
+    if (data is Map<String, dynamic>) {
+      docs = (data['data'] as List<dynamic>?) ?? [];
+    } else if (data is List) {
+      docs = data;
+    } else {
+      docs = [];
+    }
+    var restaurants = docs
+        .map((d) => Restaurant.fromMap(d as Map<String, dynamic>))
         .toList();
+
+    // Client-side filters not supported by backend
+    if (filters.minRating > 0) {
+      restaurants =
+          restaurants.where((r) => r.rating >= filters.minRating).toList();
+    }
+
+    // Sorting
+    switch (filters.sortBy) {
+      case 'delivery_time':
+        restaurants.sort(
+          (a, b) => a.avgDeliveryTimeMin.compareTo(b.avgDeliveryTimeMin),
+        );
+      case 'cost_low':
+        restaurants.sort((a, b) => a.priceForTwo.compareTo(b.priceForTwo));
+      case 'cost_high':
+        restaurants.sort((a, b) => b.priceForTwo.compareTo(a.priceForTwo));
+    }
+
+    return restaurants;
   }
 
-  // Veg only filter
-  if (filters.vegOnly) {
-    restaurants = restaurants.where((r) => r.isVegOnly).toList();
-  }
-
-  // Min rating filter
-  if (filters.minRating > 0) {
-    restaurants = restaurants
-        .where((r) => r.rating >= filters.minRating)
-        .toList();
-  }
-
-  // Sorting
-  switch (filters.sortBy) {
-    case 'rating':
-      restaurants.sort((a, b) => b.rating.compareTo(a.rating));
-      break;
-    case 'delivery_time':
-      restaurants.sort(
-        (a, b) => a.avgDeliveryTimeMin.compareTo(b.avgDeliveryTimeMin),
-      );
-      break;
-    case 'cost_low':
-      restaurants.sort((a, b) => a.priceForTwo.compareTo(b.priceForTwo));
-      break;
-    case 'cost_high':
-      restaurants.sort((a, b) => b.priceForTwo.compareTo(a.priceForTwo));
-      break;
-  }
-
-  return restaurants;
+  return [];
 });
 
 /// Search screen with filters
@@ -126,7 +149,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final results = ref.watch(filteredRestaurantsProvider);
+    final asyncResults = ref.watch(filteredRestaurantsProvider);
     final query = ref.watch(searchQueryProvider);
     final filters = ref.watch(searchFilterProvider);
 
@@ -229,17 +252,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
             // ─── Results ───
             Expanded(
-              child: results.isEmpty
-                  ? _buildEmptyState(query)
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.base,
+              child: asyncResults.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+                error: (_, __) => _buildEmptyState(query),
+                data: (results) => results.isEmpty
+                    ? _buildEmptyState(query)
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.base,
+                        ),
+                        itemCount: results.length,
+                        itemBuilder: (context, index) {
+                          return _buildRestaurantCard(results[index], index);
+                        },
                       ),
-                      itemCount: results.length,
-                      itemBuilder: (context, index) {
-                        return _buildRestaurantCard(results[index], index);
-                      },
-                    ),
+              ),
             ),
           ],
         ),

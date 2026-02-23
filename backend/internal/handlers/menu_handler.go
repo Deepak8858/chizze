@@ -10,11 +10,12 @@ import (
 // MenuHandler handles partner menu management
 type MenuHandler struct {
 	appwrite *services.AppwriteService
+	cache    *services.CacheService
 }
 
 // NewMenuHandler creates a menu handler
-func NewMenuHandler(aw *services.AppwriteService) *MenuHandler {
-	return &MenuHandler{appwrite: aw}
+func NewMenuHandler(aw *services.AppwriteService, cache *services.CacheService) *MenuHandler {
+	return &MenuHandler{appwrite: aw, cache: cache}
 }
 
 // getPartnerRestaurant looks up the restaurant owned by the current user

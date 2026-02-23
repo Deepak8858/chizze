@@ -24,8 +24,8 @@ class RiderLocation {
   factory RiderLocation.fromRealtimeData(Map<String, dynamic> data) {
     return RiderLocation(
       riderId: data['rider_id'] ?? data['\$id'] ?? '',
-      latitude: (data['latitude'] ?? 17.4401).toDouble(),
-      longitude: (data['longitude'] ?? 78.3489).toDouble(),
+      latitude: (data['latitude'] ?? 0.0).toDouble(),
+      longitude: (data['longitude'] ?? 0.0).toDouble(),
       heading: (data['heading'] ?? 0).toDouble(),
       speed: (data['speed'] ?? 0).toDouble(),
       updatedAt: DateTime.tryParse(data['\$updatedAt'] ?? '') ?? DateTime.now(),
@@ -72,7 +72,7 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
           latitude: event.latitude!,
           longitude: event.longitude!,
           heading: event.bearing ?? 0,
-          speed: 0,
+          speed: event.speed ?? 0,
           updatedAt: event.timestamp,
         );
       }

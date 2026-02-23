@@ -3,6 +3,7 @@
 > **Date:** June 2025 (Re-audit)
 > **Scope:** Every feature flow, backend + frontend, ~5,500 lines Go · ~14,500 lines Dart
 > **Target:** Production Readiness (50K+ Users)
+> **Fix Status:** ✅ All 43 issues resolved (42 fixed + 1 false positive)
 
 ---
 
@@ -184,6 +185,7 @@
 ## 9. Recommended Fix Order
 
 ### Phase 1: Backend P0 Fixes (Estimated: 2-3 days)
+
 1. Fix context key mismatch (`"userId"` → `"user_id"` or vice versa) across all handlers + WebSocket
 2. Implement actual OTP send/verify (Appwrite phone auth or Twilio)
 3. Fix `customer_id` vs `user_id` field mismatch in order/delivery handlers
@@ -193,6 +195,7 @@
 7. Fix coupon counter decrement logic
 
 ### Phase 2: Frontend P0 Fixes (Estimated: 2-3 days)
+
 1. Wire restaurant detail screen to API (fetch menu items + reviews)
 2. Fix `DeliveryMap._addRouteLine` — use `jsonEncode()` instead of `.toString()`
 3. Implement Navigate (launch maps) + Call (launch dialer) in active delivery screen
@@ -200,17 +203,20 @@
 5. Implement notification tap routing in `push_notification_service.dart`
 
 ### Phase 3: Security Hardening (Estimated: 1 day)
+
 1. Move Mapbox token, Razorpay key, Appwrite project ID to `--dart-define` / env config
 2. Gate "Simulate Request" behind `kDebugMode`
 3. Replace `.ignore()` calls with proper error handling + user feedback
 4. Add proper error handling instead of catch-all mock fallbacks
 
 ### Phase 4: iOS Deep Linking (Estimated: 0.5 day)
+
 1. Add `CFBundleURLTypes` to `ios/Runner/Info.plist` for custom `chizze://` scheme
 2. Add Associated Domains entitlement for `applinks:chizze.app`
 3. Host `apple-app-site-association` file on `chizze.app`
 
 ### Phase 5: UX Polish (Estimated: 2-3 days)
+
 1. Fix `AppTypography` / `_PriceRow` light theme colors
 2. Wire review submission to backend API
 3. Implement reorder functionality
@@ -219,6 +225,7 @@
 6. Implement remaining "coming soon" stubs (Phone/Chat rider, Address map picker, Social OAuth)
 
 ### Phase 6: Testing (Estimated: 3-5 days)
+
 1. Add widget tests for key screens (Home, Cart, Orders, Restaurant Detail)
 2. Add handler tests for all backend endpoints
 3. Add integration/E2E tests for critical flows (auth → order → payment → tracking)

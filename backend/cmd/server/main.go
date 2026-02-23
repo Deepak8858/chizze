@@ -84,6 +84,7 @@ func main() {
 	orderService := services.NewOrderService(awService)
 	paymentService := services.NewPaymentService(cfg)
 	geoService := services.NewGeoService()
+	cacheService := services.NewCacheService(redisClient)
 
 	// ─── Initialize WebSocket Hub ───
 	hub := websocket.NewHub()
@@ -92,14 +93,14 @@ func main() {
 
 	// ─── Initialize Handlers ───
 	authHandler := handlers.NewAuthHandler(awService, redisClient, cfg)
-	userHandler := handlers.NewUserHandler(awService)
-	restaurantHandler := handlers.NewRestaurantHandler(awService, geoService)
-	menuHandler := handlers.NewMenuHandler(awService)
+	userHandler := handlers.NewUserHandler(awService, cacheService)
+	restaurantHandler := handlers.NewRestaurantHandler(awService, geoService, cacheService)
+	menuHandler := handlers.NewMenuHandler(awService, cacheService)
 	orderHandler := handlers.NewOrderHandler(awService, orderService, geoService, redisClient, broadcaster)
 	paymentHandler := handlers.NewPaymentHandler(awService, paymentService)
 	deliveryHandler := handlers.NewDeliveryHandler(awService, geoService, redisClient, broadcaster)
 	reviewHandler := handlers.NewReviewHandler(awService)
-	couponHandler := handlers.NewCouponHandler(awService)
+	couponHandler := handlers.NewCouponHandler(awService, cacheService)
 	notifHandler := handlers.NewNotificationHandler(awService)
 	partnerHandler := handlers.NewPartnerHandler(awService)
 	favoriteHandler := handlers.NewFavoriteHandler(awService)

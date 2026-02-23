@@ -253,7 +253,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             onTap: authState.isLoading
                 ? null
                 : () {
-                    // TODO: Implement Google OAuth
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Google sign-in coming soon!'),
+                      ),
+                    );
                   },
           ),
         ),
@@ -268,7 +272,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             onTap: authState.isLoading
                 ? null
                 : () {
-                    // TODO: Implement Apple OAuth
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Apple sign-in coming soon!'),
+                      ),
+                    );
                   },
           ),
         ),

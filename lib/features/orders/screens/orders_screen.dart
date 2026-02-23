@@ -6,6 +6,7 @@ import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/shimmer_loader.dart';
+import '../../cart/providers/cart_provider.dart';
 import '../models/order.dart';
 import '../providers/orders_provider.dart';
 
@@ -201,9 +202,17 @@ class OrdersScreen extends ConsumerWidget {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Reorder coming soon!')),
+                        ref.read(cartProvider.notifier).reorderFromOrder(
+                          restaurantId: order.restaurantId,
+                          restaurantName: order.restaurantName,
+                          items: order.items,
                         );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Items added to cart!'),
+                          ),
+                        );
+                        context.push('/cart');
                       },
                       icon: const Icon(Icons.replay_rounded, size: 16),
                       label: const Text('Reorder'),

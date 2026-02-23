@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
@@ -379,16 +380,25 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
           IconButton(
             icon: const Icon(Icons.phone_rounded, color: AppColors.success),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Calling partner...')),
-              );
+              final phone = order.deliveryPartnerPhone;
+              if (phone != null && phone.isNotEmpty) {
+                launchUrl(Uri.parse('tel:$phone'));
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Phone number not available yet'),
+                  ),
+                );
+              }
             },
           ),
           IconButton(
             icon: const Icon(Icons.chat_rounded, color: AppColors.info),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Chat coming soon!')),
+                const SnackBar(
+                  content: Text('In-app chat coming soon! Use the phone button to call your rider.'),
+                ),
               );
             },
           ),

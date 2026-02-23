@@ -22,11 +22,12 @@ var allowedProfileFields = map[string]bool{
 // UserHandler handles user profile and address endpoints
 type UserHandler struct {
 	appwrite *services.AppwriteService
+	cache    *services.CacheService
 }
 
 // NewUserHandler creates a user handler
-func NewUserHandler(aw *services.AppwriteService) *UserHandler {
-	return &UserHandler{appwrite: aw}
+func NewUserHandler(aw *services.AppwriteService, cache *services.CacheService) *UserHandler {
+	return &UserHandler{appwrite: aw, cache: cache}
 }
 
 // GetProfile returns current user profile
@@ -40,11 +41,21 @@ func NewUserHandler(aw *services.AppwriteService) *UserHandler {
 // @Router /api/v1/users/me [get]
 func (h *UserHandler) GetProfile(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+
+	// Try cache first
+	var cached map[string]interface{}
+	if found, _ := h.cache.GetJSON(c.Request.Context(), services.UserProfileKey(userID), &cached); found {
+		utils.Success(c, cached)
+		return
+	}
+
 	user, err := h.appwrite.GetUser(userID)
 	if err != nil {
 		utils.InternalError(c, "Failed to fetch profile")
 		return
 	}
+
+	_ = h.cache.SetJSON(c.Request.Context(), services.UserProfileKey(userID), user, services.UserProfileTTL)
 	utils.Success(c, user)
 }
 
@@ -85,8 +96,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	if err != nil {
 		utils.InternalError(c, "Failed to update profile")
 		return
-	}
-	utils.Success(c, updated)
+	}	h.cache.Invalidate(c.Request.Context(), services.UserProfileKey(userID))	utils.Success(c, updated)
 }
 
 // ListAddresses returns user's saved addresses

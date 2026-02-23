@@ -65,6 +65,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   StreamSubscription? _locationStreamSub;
   Timer? _locationTimer;
   bool _isLoadingGuard = false;
+  double _lastHeading = 0.0;
+  double _lastSpeed = 0.0;
 
   DeliveryNotifier(this._api, this._realtime, this._location)
     : super(DeliveryState(partner: DeliveryPartner.empty)) {
@@ -97,6 +99,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     // Use continuous position stream from geolocator (10m distance filter)
     _locationStreamSub = _location.getPositionStream().listen((loc) {
       // Update local state
+      _lastHeading = loc.heading;
+      _lastSpeed = loc.speed;
       state = state.copyWith(
         partner: state.partner.copyWith(
           currentLatitude: loc.latitude,
@@ -140,8 +144,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           body: {
             'latitude': state.partner.currentLatitude,
             'longitude': state.partner.currentLongitude,
-            'heading': 0.0,
-            'speed': 0.0,
+            'heading': _lastHeading,
+            'speed': _lastSpeed,
           },
         )
         .then((r) {

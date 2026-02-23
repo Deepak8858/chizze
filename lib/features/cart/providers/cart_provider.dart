@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../orders/models/order.dart';
 import '../../restaurant/models/menu_item.dart';
 
 /// Cart item — a menu item with quantity and selected customizations
@@ -194,6 +195,35 @@ class CartNotifier extends StateNotifier<CartState> {
   /// Clear cart
   void clearCart() {
     state = const CartState();
+  }
+
+  /// Reorder items from a past order
+  void reorderFromOrder({
+    required String restaurantId,
+    required String restaurantName,
+    required List<OrderItem> items,
+  }) {
+    // Clear cart and set restaurant
+    state = CartState(
+      restaurantId: restaurantId,
+      restaurantName: restaurantName,
+    );
+    for (final item in items) {
+      addItem(CartItem(
+        menuItem: MenuItem(
+          id: item.id,
+          restaurantId: restaurantId,
+          categoryId: '',
+          name: item.name,
+          description: '',
+          price: item.price,
+          isVeg: item.isVeg,
+        ),
+        restaurantId: restaurantId,
+        restaurantName: restaurantName,
+        quantity: item.quantity,
+      ));
+    }
   }
 }
 

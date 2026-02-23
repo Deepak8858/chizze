@@ -15,11 +15,12 @@ import (
 type RestaurantHandler struct {
 	appwrite *services.AppwriteService
 	geo      *services.GeoService
+	cache    *services.CacheService
 }
 
 // NewRestaurantHandler creates a restaurant handler
-func NewRestaurantHandler(aw *services.AppwriteService, geo *services.GeoService) *RestaurantHandler {
-	return &RestaurantHandler{appwrite: aw, geo: geo}
+func NewRestaurantHandler(aw *services.AppwriteService, geo *services.GeoService, cache *services.CacheService) *RestaurantHandler {
+	return &RestaurantHandler{appwrite: aw, geo: geo, cache: cache}
 }
 
 // List returns restaurants with search/filter/pagination
@@ -43,6 +44,9 @@ func (h *RestaurantHandler) List(c *gin.Context) {
 		appwrite.QueryOffset(pg.Offset()),
 	}
 
+	if q := c.Query("q"); q != "" {
+		queries = append(queries, appwrite.QuerySearch("name", q))
+	}
 	if cuisine := c.Query("cuisine"); cuisine != "" {
 		queries = append(queries, appwrite.QuerySearch("cuisines", cuisine))
 	}
@@ -139,11 +143,21 @@ func (h *RestaurantHandler) Nearby(c *gin.Context) {
 // @Router /api/v1/restaurants/{id} [get]
 func (h *RestaurantHandler) GetDetail(c *gin.Context) {
 	id := c.Param("id")
+
+	// Try cache first
+	var cached map[string]interface{}
+	if found, _ := h.cache.GetJSON(c.Request.Context(), services.RestaurantDetailKey(id), &cached); found {
+		utils.Success(c, cached)
+		return
+	}
+
 	restaurant, err := h.appwrite.GetRestaurant(id)
 	if err != nil {
 		utils.NotFound(c, "Restaurant not found")
 		return
 	}
+
+	_ = h.cache.SetJSON(c.Request.Context(), services.RestaurantDetailKey(id), restaurant, services.RestaurantDetailTTL)
 	utils.Success(c, restaurant)
 }
 

@@ -13,11 +13,12 @@ import (
 // CouponHandler handles coupon endpoints
 type CouponHandler struct {
 	appwrite *services.AppwriteService
+	cache    *services.CacheService
 }
 
 // NewCouponHandler creates a coupon handler
-func NewCouponHandler(aw *services.AppwriteService) *CouponHandler {
-	return &CouponHandler{appwrite: aw}
+func NewCouponHandler(aw *services.AppwriteService, cache *services.CacheService) *CouponHandler {
+	return &CouponHandler{appwrite: aw, cache: cache}
 }
 
 // parseCouponDoc safely parses an Appwrite document into a Coupon struct
@@ -62,6 +63,13 @@ func parseCouponDoc(doc map[string]interface{}) *models.Coupon {
 // @Failure      500  {object}  map[string]interface{}
 // @Router       /api/v1/coupons [get]
 func (h *CouponHandler) ListAvailable(c *gin.Context) {
+	// Try cache first
+	var cached []map[string]interface{}
+	if found, _ := h.cache.GetJSON(c.Request.Context(), services.CouponListKey(), &cached); found {
+		utils.Success(c, cached)
+		return
+	}
+
 	result, err := h.appwrite.ListCoupons([]string{
 		appwrite.QueryEqual("is_active", true),
 	})
@@ -69,6 +77,8 @@ func (h *CouponHandler) ListAvailable(c *gin.Context) {
 		utils.InternalError(c, "Failed to fetch coupons")
 		return
 	}
+
+	_ = h.cache.SetJSON(c.Request.Context(), services.CouponListKey(), result.Documents, services.CouponListTTL)
 	utils.Success(c, result.Documents)
 }
 

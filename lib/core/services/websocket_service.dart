@@ -69,6 +69,7 @@ class WsEvent {
   double? get latitude => (payload['lat'] as num?)?.toDouble();
   double? get longitude => (payload['lng'] as num?)?.toDouble();
   double? get bearing => (payload['bearing'] as num?)?.toDouble();
+  double? get speed => (payload['speed'] as num?)?.toDouble();
 }
 
 // ─── Connection state ───
@@ -155,7 +156,6 @@ class WebSocketService {
       );
 
       _setState(WsConnectionState.connected);
-      _reconnectAttempts = 0;
       _startHeartbeat();
       debugPrint('[WS] Connected');
     } catch (e) {
@@ -189,6 +189,7 @@ class WebSocketService {
   // ─── Internal ───
 
   void _onMessage(dynamic raw) {
+    _reconnectAttempts = 0; // Connection confirmed working
     try {
       final json = jsonDecode(raw as String) as Map<String, dynamic>;
       final event = WsEvent.fromJson(json);

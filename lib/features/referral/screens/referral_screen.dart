@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../providers/referral_provider.dart';
@@ -205,18 +206,9 @@ class _ReferralScreenState extends ConsumerState<ReferralScreen> {
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () {
-                // Share via system share sheet
-                Clipboard.setData(
-                  ClipboardData(
-                    text:
-                        'Use my referral code ${state.referralCode ?? ''} on Chizze and get ₹100 off your first order! 🍕',
-                  ),
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Share text copied to clipboard!'),
-                    duration: Duration(seconds: 2),
-                  ),
+                Share.share(
+                  'Use my referral code ${state.referralCode ?? ''} on Chizze and get ₹100 off your first order! 🍕',
+                  subject: 'Join Chizze!',
                 );
               },
               icon: const Icon(Icons.share_rounded, size: 18),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:geocoding/geocoding.dart' as geocoding;
+import 'package:geolocator/geolocator.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../providers/address_provider.dart';
@@ -277,28 +279,77 @@ class AddressManagementScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
 
-              // Map placeholder
-              Container(
-                width: double.infinity,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                  border: Border.all(color: AppColors.divider),
-                ),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('🗺️', style: TextStyle(fontSize: 28)),
-                    SizedBox(height: 4),
-                    Text(
-                      'Pick on Map (coming soon)',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textTertiary,
+              // Use current location
+              InkWell(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                onTap: () async {
+                  try {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Getting location...')),
+                    );
+                    LocationPermission perm = await Geolocator.checkPermission();
+                    if (perm == LocationPermission.denied) {
+                      perm = await Geolocator.requestPermission();
+                    }
+                    if (perm == LocationPermission.denied ||
+                        perm == LocationPermission.deniedForever) {
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Location permission denied')),
+                        );
+                      }
+                      return;
+                    }
+                    final pos = await Geolocator.getCurrentPosition(
+                      locationSettings: const LocationSettings(
+                        accuracy: LocationAccuracy.high,
                       ),
-                    ),
-                  ],
+                    );
+                    final placemarks = await geocoding.placemarkFromCoordinates(
+                      pos.latitude,
+                      pos.longitude,
+                    );
+                    if (placemarks.isNotEmpty) {
+                      final p = placemarks.first;
+                      final address = [
+                        p.street,
+                        p.subLocality,
+                        p.locality,
+                        p.postalCode,
+                      ].where((s) => s != null && s.isNotEmpty).join(', ');
+                      addrCtrl.text = address;
+                    }
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text('Failed to get location: $e')),
+                      );
+                    }
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    border: Border.all(color: AppColors.divider),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.my_location_rounded, size: 28, color: AppColors.primary),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Use Current Location',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
