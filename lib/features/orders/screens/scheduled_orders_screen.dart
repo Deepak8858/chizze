@@ -47,7 +47,7 @@ class ScheduledOrdersScreen extends ConsumerWidget {
       body: state.isLoading
           ? ListSkeleton(
               itemCount: 4,
-              itemBuilder: (_, __) => const OrderCardSkeleton(),
+              itemBuilder: (_, _) => const OrderCardSkeleton(),
             )
           : state.orders.isEmpty
               ? _buildEmpty(context)

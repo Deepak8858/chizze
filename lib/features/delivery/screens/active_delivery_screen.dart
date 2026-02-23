@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
@@ -56,7 +57,9 @@ class ActiveDeliveryScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.phone_rounded),
-            onPressed: () {},
+            onPressed: () {
+              launchUrl(Uri(scheme: 'tel', path: '+918008008000'));
+            },
             tooltip: 'Call Support',
           ),
         ],
@@ -251,7 +254,24 @@ class ActiveDeliveryScreen extends ConsumerWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {},
+                  onPressed: () {
+                    final lat = isRestaurantStep
+                        ? request.restaurantLatitude
+                        : request.customerLatitude;
+                    final lng = isRestaurantStep
+                        ? request.restaurantLongitude
+                        : request.customerLongitude;
+                    final uri = Uri.parse(
+                      'google.navigation:q=$lat,$lng&mode=d',
+                    );
+                    launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
+                      // Fallback to Google Maps web
+                      return launchUrl(
+                        Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng'),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    });
+                  },
                   icon: const Icon(Icons.navigation_rounded, size: 16),
                   label: const Text('Navigate'),
                 ),
@@ -259,7 +279,11 @@ class ActiveDeliveryScreen extends ConsumerWidget {
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {},
+                  onPressed: () {
+                    // Call restaurant or customer support line
+                    final uri = Uri(scheme: 'tel', path: '+918008008000');
+                    launchUrl(uri);
+                  },
                   icon: const Icon(Icons.phone_rounded, size: 16),
                   label: Text(isRestaurantStep ? 'Call' : 'Call'),
                 ),

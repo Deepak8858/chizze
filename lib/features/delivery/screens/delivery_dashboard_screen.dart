@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -550,8 +551,9 @@ class _DeliveryDashboardScreenState
             style: AppTypography.caption,
           ),
           const SizedBox(height: AppSpacing.md),
-          // Debug button to simulate request
-          TextButton.icon(
+          // Debug button to simulate request — only in dev builds
+          if (kDebugMode)
+            TextButton.icon(
             onPressed: () =>
                 ref.read(deliveryProvider.notifier).simulateNewRequest(),
             icon: const Icon(Icons.refresh_rounded, size: 16),

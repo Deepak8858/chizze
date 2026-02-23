@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
+import '../../../shared/widgets/shimmer_loader.dart';
 import '../../../features/orders/models/order.dart';
 import '../providers/partner_provider.dart';
 import '../models/partner_order.dart';
@@ -21,7 +22,9 @@ class PartnerDashboardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: partnerState.isLoading
+            ? const EarningsSkeleton()
+            : SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,7 +95,11 @@ class PartnerDashboardScreen extends ConsumerWidget {
         ),
 
         // Online/Offline toggle
-        GestureDetector(
+        Semantics(
+          toggled: partnerState.isOnline,
+          label: partnerState.isOnline ? 'Online, tap to go offline' : 'Offline, tap to go online',
+          button: true,
+          child: GestureDetector(
           onTap: () => ref.read(partnerProvider.notifier).toggleOnline(),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
@@ -135,6 +142,7 @@ class PartnerDashboardScreen extends ConsumerWidget {
               ],
             ),
           ),
+        ),
         ),
       ],
     ).animate().fadeIn(duration: 400.ms);
@@ -462,10 +470,12 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
+    return Semantics(
+      label: '$label: $value',
+      child: GlassCard(
       child: Column(
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 24)),
+          ExcludeSemantics(child: Text(emoji, style: const TextStyle(fontSize: 24))),
           const SizedBox(height: AppSpacing.sm),
           Text(
             value,
@@ -479,6 +489,7 @@ class _MetricCard extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -499,8 +510,12 @@ class _QuickOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final order = partnerOrder.order;
+    final itemsSummary = order.items.map((i) => '${i.name} times ${i.quantity}').join(', ');
 
-    return GestureDetector(
+    return Semantics(
+      label: 'Order ${order.orderNumber}, $itemsSummary, '
+          'total \u20b9${order.grandTotal.toInt()}, status ${order.status.label}',
+      child: GestureDetector(
       onTap: onTap,
       child: GlassCard(
         child: Column(
@@ -508,7 +523,7 @@ class _QuickOrderCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(order.status.emoji, style: const TextStyle(fontSize: 20)),
+                ExcludeSemantics(child: Text(order.status.emoji, style: const TextStyle(fontSize: 20))),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
@@ -596,6 +611,7 @@ class _QuickOrderCard extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 

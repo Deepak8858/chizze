@@ -3,7 +3,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../router/app_router.dart';
 import 'api_client.dart';
 import 'api_config.dart';
 
@@ -79,13 +81,17 @@ class PushNotificationService {
       // Handle notification taps (app was in background)
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         debugPrint('[Push] Notification opened: ${message.data}');
-        // TODO: Navigate based on message.data['route']
+        _handleNotificationRoute(message.data['route']);
       });
 
       // Check if app was launched from a notification
       final initial = await messaging.getInitialMessage();
       if (initial != null) {
         debugPrint('[Push] App launched from notification: ${initial.data}');
+        // Delay to let the router initialise
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _handleNotificationRoute(initial.data['route']);
+        });
       }
 
       _firebaseAvailable = true;
@@ -109,7 +115,26 @@ class PushNotificationService {
       android: androidSettings,
       iOS: iosSettings,
     );
-    await _localNotifications.initialize(settings);
+    await _localNotifications.initialize(
+      settings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        debugPrint('[Push] Local notification tapped: ${response.payload}');
+        _handleNotificationRoute(response.payload);
+      },
+    );
+  }
+
+  /// Navigate to the route encoded in a notification payload.
+  /// Supported routes: /order-tracking/:id, /orders, /notifications, etc.
+  void _handleNotificationRoute(String? route) {
+    if (route == null || route.isEmpty) return;
+    final context = rootNavigatorKey.currentContext;
+    if (context == null) {
+      debugPrint('[Push] No navigator context — cannot route to $route');
+      return;
+    }
+    debugPrint('[Push] Navigating to: $route');
+    GoRouter.of(context).go(route);
   }
 
   // ─── Device Token ───

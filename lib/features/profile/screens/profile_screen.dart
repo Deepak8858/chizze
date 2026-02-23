@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../core/auth/auth_provider.dart';
@@ -96,17 +97,20 @@ class ProfileScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.xl),
 
               _buildSection('More', [
-                const _SettingsTile(
+                _SettingsTile(
                   icon: Icons.headset_mic_outlined,
                   label: 'Help & Support',
+                  onTap: () => launchUrl(Uri.parse('mailto:support@chizze.app')),
                 ),
-                const _SettingsTile(
+                _SettingsTile(
                   icon: Icons.info_outline_rounded,
                   label: 'About Chizze',
+                  onTap: () => launchUrl(Uri.parse('https://chizze.app/about')),
                 ),
-                const _SettingsTile(
+                _SettingsTile(
                   icon: Icons.privacy_tip_outlined,
                   label: 'Privacy Policy',
+                  onTap: () => launchUrl(Uri.parse('https://chizze.app/privacy')),
                 ),
               ]),
               const SizedBox(height: AppSpacing.xxl),

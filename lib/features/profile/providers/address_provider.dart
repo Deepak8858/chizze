@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
@@ -111,15 +112,33 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
             'is_default': address.isDefault,
           },
         )
-        .ignore();
+        .then((r) {
+      if (!r.success) {
+        debugPrint('[Address] add failed: ${r.error}');
+        state = state.where((a) => a.id != address.id).toList();
+      }
+    }).catchError((e) {
+      debugPrint('[Address] add error: $e');
+      state = state.where((a) => a.id != address.id).toList();
+    });
   }
 
   void removeAddress(String id) {
+    final removed = state.where((a) => a.id == id).toList();
     state = state.where((a) => a.id != id).toList();
-    _api.delete('${ApiConfig.addresses}/$id').ignore();
+    _api.delete('${ApiConfig.addresses}/$id').then((r) {
+      if (!r.success) {
+        debugPrint('[Address] remove failed: ${r.error}');
+        state = [...state, ...removed];
+      }
+    }).catchError((e) {
+      debugPrint('[Address] remove error: $e');
+      state = [...state, ...removed];
+    });
   }
 
   void updateAddress(SavedAddress updated) {
+    final old = state.firstWhere((a) => a.id == updated.id, orElse: () => updated);
     state = state.map((a) => a.id == updated.id ? updated : a).toList();
     _api
         .put(
@@ -130,11 +149,33 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
             'landmark': updated.landmark,
           },
         )
-        .ignore();
+        .then((r) {
+      if (!r.success) {
+        debugPrint('[Address] update failed: ${r.error}');
+        state = state.map((a) => a.id == updated.id ? old : a).toList();
+      }
+    }).catchError((e) {
+      debugPrint('[Address] update error: $e');
+      state = state.map((a) => a.id == updated.id ? old : a).toList();
+    });
   }
 
   void setDefault(String id) {
+    final prev = List<SavedAddress>.of(state);
     state = state.map((a) => a.copyWith(isDefault: a.id == id)).toList();
+    // Persist default flag to backend for each address
+    for (final addr in state) {
+      _api.put('${ApiConfig.addresses}/${addr.id}', body: {
+        'is_default': addr.id == id,
+      }).then((r) {
+        if (!r.success) {
+          debugPrint('[Address] setDefault update failed for ${addr.id}: ${r.error}');
+        }
+      }).catchError((e) {
+        debugPrint('[Address] setDefault error for ${addr.id}: $e');
+        state = prev;
+      });
+    }
   }
 
   // Mock addresses removed — using real data from API only

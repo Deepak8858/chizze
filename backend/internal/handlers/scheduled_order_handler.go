@@ -3,6 +3,7 @@ package handlers
 import (
 	"time"
 
+	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/pkg/utils"
@@ -30,7 +31,7 @@ func NewScheduledOrderHandler(aw *services.AppwriteService) *ScheduledOrderHandl
 // @Security     BearerAuth
 // @Router       /api/v1/orders/scheduled [get]
 func (h *ScheduledOrderHandler) List(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	result, err := h.appwrite.ListScheduledOrders(userID)
 	if err != nil {
@@ -54,7 +55,7 @@ func (h *ScheduledOrderHandler) List(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/v1/orders/scheduled [post]
 func (h *ScheduledOrderHandler) Create(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	var req models.CreateScheduledOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,9 +27,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   bool _isVerifying = false;
+  Timer? _autoSubmitTimer;
 
   @override
   void dispose() {
+    _autoSubmitTimer?.cancel();
     for (final c in _controllers) {
       c.dispose();
     }
@@ -48,9 +51,14 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       _focusNodes[index - 1].requestFocus();
     }
 
-    // Auto-submit when all 6 digits are entered
+    // Auto-submit when all 6 digits are entered (debounced)
     if (_otp.length == 6 && !_isVerifying) {
-      _verifyOTP();
+      _autoSubmitTimer?.cancel();
+      _autoSubmitTimer = Timer(const Duration(milliseconds: 300), () {
+        if (_otp.length == 6 && !_isVerifying) {
+          _verifyOTP();
+        }
+      });
     }
   }
 

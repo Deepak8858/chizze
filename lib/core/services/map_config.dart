@@ -1,9 +1,10 @@
 /// Mapbox configuration constants
 class MapConfig {
-  /// Mapbox public access token
-  /// Replace with your own token from https://account.mapbox.com/access-tokens/
-  static const String accessToken =
-      'pk.eyJ1IjoiZGVlcGFrNzIzOCIsImEiOiJjbWxnZjAwMTMwOWo5M2xzaHF3eTd1eTd6In0.cNbgPuE749GMnCztExzPgg';
+  /// Mapbox public access token — injected via --dart-define=MAPBOX_ACCESS_TOKEN=...
+  static const String accessToken = String.fromEnvironment(
+    'MAPBOX_ACCESS_TOKEN',
+    defaultValue: 'pk.eyJ1IjoiZGVlcGFrNzIzOCIsImEiOiJjbWxnZjAwMTMwOWo5M2xzaHF3eTd1eTd6In0.cNbgPuE749GMnCztExzPgg',
+  );
 
   /// Dark map style URL — matches Chizze dark theme
   static const String darkStyleUrl = 'mapbox://styles/mapbox/dark-v11';

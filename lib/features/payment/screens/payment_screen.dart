@@ -546,7 +546,7 @@ class _PriceRow extends StatelessWidget {
           Text(
             value,
             style: AppTypography.body2.copyWith(
-              color: color ?? Colors.white,
+              color: color ?? Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w500,
             ),
           ),

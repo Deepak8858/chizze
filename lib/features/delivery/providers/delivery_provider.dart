@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/api_client.dart';
@@ -143,7 +144,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
             'speed': 0.0,
           },
         )
-        .ignore();
+        .then((r) {
+      if (!r.success) debugPrint('[Delivery] location update failed: ${r.error}');
+    }).catchError((e) {
+      debugPrint('[Delivery] location update error: $e');
+    });
   }
 
   @override
@@ -278,7 +283,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
               '${ApiConfig.deliveryOrders}/$orderId/status',
               body: {'status': apiStatus},
             )
-            .ignore();
+            .then((r) {
+          if (!r.success) debugPrint('[Delivery] advanceStep failed: ${r.error}');
+        }).catchError((e) {
+          debugPrint('[Delivery] advanceStep error: $e');
+        });
       }
     }
   }
@@ -308,7 +317,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
             '${ApiConfig.deliveryOrders}/$orderId/status',
             body: {'status': 'delivered'},
           )
-          .ignore();
+          .then((r) {
+        if (!r.success) debugPrint('[Delivery] complete failed: ${r.error}');
+      }).catchError((e) {
+        debugPrint('[Delivery] complete error: $e');
+      });
     }
   }
 
@@ -321,7 +334,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           '${ApiConfig.deliveryOrders}/$orderId/report',
           body: {'reason': reason, 'details': details},
         )
-        .ignore();
+        .then((r) {
+      if (!r.success) debugPrint('[Delivery] reportIssue failed: ${r.error}');
+    }).catchError((e) {
+      debugPrint('[Delivery] reportIssue error: $e');
+    });
   }
 
   /// Update partner location (called externally e.g., from GPS)

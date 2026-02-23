@@ -6,6 +6,7 @@ import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
+import '../../../shared/widgets/shimmer_loader.dart';
 import '../providers/restaurant_provider.dart';
 import '../models/restaurant.dart';
 import '../../favorites/providers/favorites_provider.dart';
@@ -88,16 +89,27 @@ class HomeScreen extends ConsumerWidget {
             ),
 
             // ─── Restaurant Cards ───
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) =>
-                      _buildRestaurantCard(context, ref, restaurants[index], index),
-                  childCount: restaurants.length,
+            if (restaurantState.isLoading && restaurants.isEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, _) => const RestaurantCardSkeleton(),
+                    childCount: 4,
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) =>
+                        _buildRestaurantCard(context, ref, restaurants[index], index),
+                    childCount: restaurants.length,
+                  ),
                 ),
               ),
-            ),
 
             // Bottom spacing
             const SliverToBoxAdapter(

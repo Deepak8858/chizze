@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/shimmer_loader.dart';
 import '../providers/analytics_provider.dart';
 
 /// Partner analytics — revenue chart, top items, peak hours
@@ -17,7 +18,9 @@ class AnalyticsScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Analytics')),
-      body: SingleChildScrollView(
+      body: analytics.isLoading
+          ? const EarningsSkeleton()
+          : SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

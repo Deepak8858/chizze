@@ -5,9 +5,15 @@
 ///   flutter run --dart-define=ENV=staging --dart-define=API_URL=https://staging.chizze.in/api/v1
 ///   flutter build apk --dart-define=ENV=production --dart-define=API_URL=https://api.chizze.in/api/v1
 class Environment {
-  static const String appwriteProjectId = '6993347c0006ead7404d';
+  static const String appwriteProjectId = String.fromEnvironment(
+    'APPWRITE_PROJECT_ID',
+    defaultValue: '6993347c0006ead7404d',
+  );
   static const String appwriteProjectName = 'chizze-restaurent';
-  static const String appwritePublicEndpoint = 'https://sgp.cloud.appwrite.io/v1';
+  static const String appwritePublicEndpoint = String.fromEnvironment(
+    'APPWRITE_ENDPOINT',
+    defaultValue: 'https://sgp.cloud.appwrite.io/v1',
+  );
 
   /// Current environment (dev | staging | production)
   static const String env = String.fromEnvironment('ENV', defaultValue: 'dev');

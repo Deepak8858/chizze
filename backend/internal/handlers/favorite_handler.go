@@ -3,6 +3,7 @@ package handlers
 import (
 	"time"
 
+	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/pkg/utils"
@@ -30,7 +31,7 @@ func NewFavoriteHandler(aw *services.AppwriteService) *FavoriteHandler {
 // @Security     BearerAuth
 // @Router       /api/v1/users/me/favorites [get]
 func (h *FavoriteHandler) List(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	result, err := h.appwrite.ListFavorites(userID)
 	if err != nil {
@@ -74,7 +75,7 @@ func (h *FavoriteHandler) List(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/v1/users/me/favorites [post]
 func (h *FavoriteHandler) Add(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	var req models.CreateFavoriteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -124,7 +125,7 @@ func (h *FavoriteHandler) Add(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/v1/users/me/favorites/{restaurant_id} [delete]
 func (h *FavoriteHandler) Remove(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 	restaurantID := c.Param("restaurant_id")
 
 	// Find the favorite document

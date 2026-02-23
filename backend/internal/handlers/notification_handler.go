@@ -33,9 +33,8 @@ func NewNotificationHandler(aw *services.AppwriteService) *NotificationHandler {
 func (h *NotificationHandler) List(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	pg := models.ParsePagination(c)
-	_ = pg // ListNotifications uses its own query currently
 
-	result, err := h.appwrite.ListNotifications(userID)
+	result, err := h.appwrite.ListNotifications(userID, pg.PerPage, pg.Offset())
 	if err != nil {
 		utils.InternalError(c, "Failed to fetch notifications")
 		return
@@ -94,7 +93,7 @@ func (h *NotificationHandler) MarkRead(c *gin.Context) {
 // @Router       /api/v1/notifications/read-all [put]
 func (h *NotificationHandler) MarkAllRead(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	result, err := h.appwrite.ListNotifications(userID)
+	result, err := h.appwrite.ListNotifications(userID, 500, 0)
 	if err != nil {
 		utils.InternalError(c, "Failed to fetch notifications")
 		return

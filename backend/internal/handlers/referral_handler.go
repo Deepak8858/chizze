@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"time"
 
+	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/pkg/utils"
@@ -32,7 +34,7 @@ func NewReferralHandler(aw *services.AppwriteService) *ReferralHandler {
 // @Security     BearerAuth
 // @Router       /api/v1/referrals/code [get]
 func (h *ReferralHandler) GetCode(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	user, err := h.appwrite.GetUser(userID)
 	if err != nil {
@@ -73,7 +75,7 @@ func (h *ReferralHandler) GetCode(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/v1/referrals/apply [post]
 func (h *ReferralHandler) Apply(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	var req models.ApplyReferralRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -125,9 +127,11 @@ func (h *ReferralHandler) Apply(c *gin.Context) {
 	}
 
 	// Update referred user
-	_, _ = h.appwrite.UpdateUser(userID, map[string]interface{}{
+	if _, err := h.appwrite.UpdateUser(userID, map[string]interface{}{
 		"referred_by": req.ReferralCode,
-	})
+	}); err != nil {
+		log.Printf("[referral] failed to update referred_by for %s: %v", userID, err)
+	}
 
 	utils.Success(c, gin.H{
 		"message": "Referral applied! You and your friend both get ₹100 off your next order",
@@ -146,7 +150,7 @@ func (h *ReferralHandler) Apply(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/v1/referrals [get]
 func (h *ReferralHandler) ListReferrals(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	result, err := h.appwrite.ListReferrals(userID)
 	if err != nil {

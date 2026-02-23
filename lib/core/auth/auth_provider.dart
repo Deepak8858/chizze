@@ -112,11 +112,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _apiClient.setAuthToken(token);
         await _apiClient.persistToken(token);
         await _persistRole(role);
-        // Check onboarded flag
+        // Re-sync onboarded flag from backend for reinstall resilience
+        if (!isNew) {
+          await _secureStorage.write(key: _kOnboardedKey, value: 'true');
+        }
         final onboarded = await _secureStorage.read(key: _kOnboardedKey);
         state = state.copyWith(
           userRole: role,
-          isNewUser: isNew || onboarded != 'true',
+          isNewUser: isNew && onboarded != 'true',
         );
         debugPrint('[Auth] Backend JWT set & persisted, role=$role, isNew=$isNew');
       }

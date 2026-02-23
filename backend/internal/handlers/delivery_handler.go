@@ -176,7 +176,7 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 		})
 		if err == nil && activeOrders != nil {
 			for _, o := range activeOrders.Documents {
-				custID, _ := o["user_id"].(string)
+				custID, _ := o["customer_id"].(string)
 				oID, _ := o["$id"].(string)
 				if custID != "" {
 					h.broadcaster.BroadcastDeliveryLocation(custID, oID, req.Latitude, req.Longitude, req.Heading)
@@ -262,7 +262,7 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 	}
 
 	// Notify customer that a delivery partner accepted their order
-	customerID, _ := order["user_id"].(string)
+	customerID, _ := order["customer_id"].(string)
 	orderNumber, _ := order["order_number"].(string)
 	if customerID != "" {
 		_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{

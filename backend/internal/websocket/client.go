@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -33,7 +35,25 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for now
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true // Allow connections without Origin (e.g., mobile apps)
+		}
+		allowed := os.Getenv("ALLOWED_ORIGINS")
+		if allowed == "" || allowed == "*" {
+			// In debug/dev mode, allow all
+			if os.Getenv("GIN_MODE") != "release" {
+				return true
+			}
+			return false // Deny all in production if not configured
+		}
+		for _, o := range strings.Split(allowed, ",") {
+			if strings.TrimSpace(o) == origin {
+				return true
+			}
+		}
+		log.Printf("[ws] rejected origin: %s", origin)
+		return false
 	},
 }
 
@@ -120,7 +140,7 @@ func (c *Client) writePump() {
 // ServeWs handles websocket requests from the peer.
 func ServeWs(hub *Hub, c *gin.Context) {
 	// Get user ID from context (set by auth middleware)
-	userID, exists := c.Get("user_id")
+	userID, exists := c.Get("userId")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return

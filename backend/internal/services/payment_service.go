@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/chizze/backend/internal/config"
+	"github.com/sony/gobreaker"
 )
 
 // PaymentService handles Razorpay operations
@@ -20,9 +21,10 @@ type PaymentService struct {
 	keySecret     string
 	webhookSecret string
 	httpClient    *http.Client
+	breaker       *gobreaker.CircuitBreaker
 }
 
-// NewPaymentService creates a payment service
+// NewPaymentService creates a payment service with circuit breaker protection
 func NewPaymentService(cfg *config.Config) *PaymentService {
 	webhookSec := cfg.RazorpayWebhookSecret
 	if webhookSec == "" {
@@ -33,6 +35,20 @@ func NewPaymentService(cfg *config.Config) *PaymentService {
 		keySecret:     cfg.RazorpayKeySecret,
 		webhookSecret: webhookSec,
 		httpClient:    &http.Client{Timeout: 15 * time.Second},
+		breaker: gobreaker.NewCircuitBreaker(gobreaker.Settings{
+			Name:        "razorpay",
+			MaxRequests: 3,                // half-open: allow 3 probe requests
+			Interval:    30 * time.Second, // closed-state window for counting failures
+			Timeout:     20 * time.Second, // open → half-open after 20s (Razorpay can be slow)
+			ReadyToTrip: func(counts gobreaker.Counts) bool {
+				// Trip if ≥3 consecutive failures OR failure ratio >60% with ≥5 requests
+				return counts.ConsecutiveFailures >= 3 ||
+					(counts.Requests >= 5 && float64(counts.TotalFailures)/float64(counts.Requests) > 0.6)
+			},
+			OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
+				fmt.Printf("[circuit-breaker] %s: %s → %s\n", name, from.String(), to.String())
+			},
+		}),
 	}
 }
 
@@ -51,7 +67,7 @@ type RazorpayOrderResponse struct {
 	Receipt  string `json:"receipt"`
 }
 
-// CreateRazorpayOrder creates an order on Razorpay
+// CreateRazorpayOrder creates an order on Razorpay (circuit-breaker protected)
 func (s *PaymentService) CreateRazorpayOrder(amountPaise int64, currency, receipt string) (*RazorpayOrderResponse, error) {
 	payload := map[string]interface{}{
 		"amount":   amountPaise,
@@ -64,34 +80,43 @@ func (s *PaymentService) CreateRazorpayOrder(amountPaise int64, currency, receip
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://api.razorpay.com/v1/orders", bytes.NewReader(body))
+	result, err := s.breaker.Execute(func() (interface{}, error) {
+		req, err := http.NewRequest("POST", "https://api.razorpay.com/v1/orders", bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.SetBasicAuth(s.keyID, s.keySecret)
+
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("razorpay request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read response: %w", err)
+		}
+
+		// 4xx errors are client issues, not circuit-breaker failures
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			return nil, fmt.Errorf("razorpay client error %d: %s", resp.StatusCode, string(respBody))
+		}
+		if resp.StatusCode >= 500 {
+			return nil, fmt.Errorf("razorpay server error %d: %s", resp.StatusCode, string(respBody))
+		}
+
+		var order RazorpayOrderResponse
+		if err := json.Unmarshal(respBody, &order); err != nil {
+			return nil, fmt.Errorf("unmarshal response: %w", err)
+		}
+		return &order, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(s.keyID, s.keySecret)
-
-	client := s.httpClient
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("razorpay request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("razorpay error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var order RazorpayOrderResponse
-	if err := json.Unmarshal(respBody, &order); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
-	}
-	return &order, nil
+	return result.(*RazorpayOrderResponse), nil
 }
 
 // VerifySignature validates Razorpay payment callback

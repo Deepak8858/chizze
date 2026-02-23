@@ -65,7 +65,7 @@ func Load() *Config {
 		RazorpayKeyID:        getEnv("RAZORPAY_KEY_ID", ""),
 		RazorpayKeySecret:    getEnv("RAZORPAY_KEY_SECRET", ""),
 		RazorpayWebhookSecret: getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
-		RedisURL:           getEnv("REDIS_URL", "redis://:Dream%408858@165.232.177.81:6379"),
+		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
 		JWTSecret:          getEnv("JWT_SECRET", "chizze-dev-secret"),
 		AllowedOrigins:     getEnv("ALLOWED_ORIGINS", "*"),
 		GinMode:            getEnv("GIN_MODE", "debug"),
@@ -83,6 +83,10 @@ func Load() *Config {
 
 	if cfg.IsProduction() && cfg.JWTSecret == "chizze-dev-secret" {
 		log.Fatal("FATAL: JWT_SECRET must be changed from default in production mode")
+	}
+
+	if cfg.IsProduction() && cfg.RedisURL == "redis://localhost:6379" {
+		log.Fatal("FATAL: REDIS_URL must be set to a real Redis instance in production mode")
 	}
 
 	return cfg

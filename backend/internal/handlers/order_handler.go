@@ -97,12 +97,28 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		return
 	}
 
-	// --- 3. Server-side price verification for each item ---
+	// --- 3. Server-side price verification (batch fetch to avoid N+1) ---
+	itemIDs := make([]string, len(req.Items))
+	for i, item := range req.Items {
+		itemIDs[i] = item.ItemID
+	}
+	menuResult, err := h.appwrite.ListMenuItemsByIDs(itemIDs)
+	if err != nil {
+		utils.BadRequest(c, "Failed to fetch menu items")
+		return
+	}
+	// Index fetched items by ID for O(1) lookup
+	menuByID := make(map[string]map[string]interface{}, len(menuResult.Documents))
+	for _, doc := range menuResult.Documents {
+		id, _ := doc["$id"].(string)
+		menuByID[id] = doc
+	}
+
 	itemTotal := 0.0
 	verifiedItems := make([]map[string]interface{}, 0, len(req.Items))
 	for _, item := range req.Items {
-		menuItem, err := h.appwrite.GetMenuItem(item.ItemID)
-		if err != nil {
+		menuItem, ok := menuByID[item.ItemID]
+		if !ok {
 			utils.BadRequest(c, "Menu item not found: "+item.ItemID)
 			return
 		}
@@ -183,7 +199,8 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 						_ = h.redis.Expire(ctx, lockKey, 30*24*time.Hour)
 					}
 					if int(newCount) > c.UsageLimit {
-						// Rolled past limit — revert and reject coupon
+						// Rolled past limit — revert counter and reject coupon
+						h.redis.Decr(ctx, lockKey)
 						discount = 0
 					} else {
 						_, _ = h.appwrite.UpdateCoupon(couponID, map[string]interface{}{
@@ -556,7 +573,7 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	}
 
 	// Send notifications on delivery status changes
-	customerID, _ := order["user_id"].(string)
+	customerID, _ := order["customer_id"].(string)
 	orderNumber, _ := order["order_number"].(string)
 	if customerID != "" {
 		var notifTitle, notifBody string

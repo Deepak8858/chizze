@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
@@ -68,8 +70,22 @@ class UserProfile {
 class UserProfileNotifier extends StateNotifier<UserProfile> {
   final ApiClient _api;
 
+  static const _keyIsVeg = 'chizze_pref_is_veg';
+  static const _keyDarkMode = 'chizze_pref_dark_mode';
+  static const _keyDefaultAddress = 'chizze_pref_default_address';
+
   UserProfileNotifier(this._api) : super(UserProfile.empty) {
-    fetchProfile();
+    _loadPrefsAndFetch();
+  }
+
+  Future<void> _loadPrefsAndFetch() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = state.copyWith(
+      isVeg: prefs.getBool(_keyIsVeg) ?? false,
+      darkMode: prefs.getBool(_keyDarkMode) ?? true,
+      defaultAddressId: prefs.getString(_keyDefaultAddress) ?? '',
+    );
+    await fetchProfile();
   }
 
   /// Fetch profile from API
@@ -97,23 +113,50 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
   }
 
   void updateName(String name) {
+    final oldName = state.name;
     state = state.copyWith(name: name);
-    _api.put(ApiConfig.profile, body: {'name': name}).ignore();
+    _api.put(ApiConfig.profile, body: {'name': name}).then((r) {
+      if (!r.success) {
+        debugPrint('[Profile] updateName failed: ${r.error}');
+        state = state.copyWith(name: oldName);
+      }
+    }).catchError((e) {
+      debugPrint('[Profile] updateName error: $e');
+      state = state.copyWith(name: oldName);
+    });
   }
 
   void updateEmail(String email) {
+    final oldEmail = state.email;
     state = state.copyWith(email: email);
-    _api.put(ApiConfig.profile, body: {'email': email}).ignore();
+    _api.put(ApiConfig.profile, body: {'email': email}).then((r) {
+      if (!r.success) {
+        debugPrint('[Profile] updateEmail failed: ${r.error}');
+        state = state.copyWith(email: oldEmail);
+      }
+    }).catchError((e) {
+      debugPrint('[Profile] updateEmail error: $e');
+      state = state.copyWith(email: oldEmail);
+    });
   }
 
-  void toggleVeg() {
+  void toggleVeg() async {
     state = state.copyWith(isVeg: !state.isVeg);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyIsVeg, state.isVeg);
   }
 
-  void toggleDarkMode() => state = state.copyWith(darkMode: !state.darkMode);
+  void toggleDarkMode() async {
+    state = state.copyWith(darkMode: !state.darkMode);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyDarkMode, state.darkMode);
+  }
 
-  void setDefaultAddress(String id) =>
-      state = state.copyWith(defaultAddressId: id);
+  void setDefaultAddress(String id) async {
+    state = state.copyWith(defaultAddressId: id);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyDefaultAddress, id);
+  }
 }
 
 final userProfileProvider =

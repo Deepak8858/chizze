@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
@@ -137,12 +138,20 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
     state = state
         .map((n) => n.id == id ? n.copyWith(isRead: true) : n)
         .toList();
-    _api.put('${ApiConfig.notifications}/$id/read').ignore();
+    _api.put('${ApiConfig.notifications}/$id/read').then((r) {
+      if (!r.success) debugPrint('[Notifications] markRead failed: ${r.error}');
+    }).catchError((e) {
+      debugPrint('[Notifications] markRead error: $e');
+    });
   }
 
   void markAllRead() {
     state = state.map((n) => n.copyWith(isRead: true)).toList();
-    _api.put('${ApiConfig.notifications}/read-all').ignore();
+    _api.put('${ApiConfig.notifications}/read-all').then((r) {
+      if (!r.success) debugPrint('[Notifications] markAllRead failed: ${r.error}');
+    }).catchError((e) {
+      debugPrint('[Notifications] markAllRead error: $e');
+    });
   }
 
   void clear() => state = [];

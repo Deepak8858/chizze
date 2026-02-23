@@ -66,12 +66,16 @@ final _routerNotifierProvider = Provider<_RouterNotifier>((ref) {
   return notifier;
 });
 
+/// Global navigator key — used by push notification service for deep navigation
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 /// GoRouter provider — creates the router ONCE with refreshListenable.
 /// Navigation state is preserved across auth loading changes.
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(_routerNotifierProvider);
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     debugLogDiagnostics: true,
     refreshListenable: notifier,

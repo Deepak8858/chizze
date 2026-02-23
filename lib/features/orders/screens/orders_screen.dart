@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
+import '../../../shared/widgets/shimmer_loader.dart';
 import '../models/order.dart';
 import '../providers/orders_provider.dart';
 
@@ -34,40 +35,50 @@ class OrdersScreen extends ConsumerWidget {
         body: TabBarView(
           children: [
             // Active orders
-            activeOrders.isEmpty
-                ? _buildEmptyState(
-                    'No active orders',
-                    'Your current orders will appear here',
-                    Icons.delivery_dining_rounded,
+            ordersState.isLoading
+                ? ListSkeleton(
+                    itemCount: 3,
+                    itemBuilder: (_, _) => const OrderCardSkeleton(),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(AppSpacing.xl),
-                    itemCount: activeOrders.length,
-                    itemBuilder: (context, index) => _buildOrderCard(
-                      context,
-                      activeOrders[index],
-                      index,
-                      isActive: true,
-                    ),
-                  ),
+                : activeOrders.isEmpty
+                    ? _buildEmptyState(
+                        'No active orders',
+                        'Your current orders will appear here',
+                        Icons.delivery_dining_rounded,
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        itemCount: activeOrders.length,
+                        itemBuilder: (context, index) => _buildOrderCard(
+                          context,
+                          activeOrders[index],
+                          index,
+                          isActive: true,
+                        ),
+                      ),
 
             // Past orders
-            pastOrders.isEmpty
-                ? _buildEmptyState(
-                    'No past orders',
-                    'Your order history will appear here',
-                    Icons.receipt_long_rounded,
+            ordersState.isLoading
+                ? ListSkeleton(
+                    itemCount: 4,
+                    itemBuilder: (_, _) => const OrderCardSkeleton(),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(AppSpacing.xl),
-                    itemCount: pastOrders.length,
-                    itemBuilder: (context, index) => _buildOrderCard(
-                      context,
-                      pastOrders[index],
-                      index,
-                      isActive: false,
-                    ),
-                  ),
+                : pastOrders.isEmpty
+                    ? _buildEmptyState(
+                        'No past orders',
+                        'Your order history will appear here',
+                        Icons.receipt_long_rounded,
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        itemCount: pastOrders.length,
+                        itemBuilder: (context, index) => _buildOrderCard(
+                          context,
+                          pastOrders[index],
+                          index,
+                          isActive: false,
+                        ),
+                      ),
           ],
         ),
       ),
@@ -88,9 +99,17 @@ class OrdersScreen extends ConsumerWidget {
     int index, {
     required bool isActive,
   }) {
+    final itemsSummary = order.items.take(2).map((i) => '${i.name} times ${i.quantity}').join(', ');
+    final cardLabel = '${order.restaurantName}, ${order.orderNumber}, '
+        'status ${order.status.label}, $itemsSummary, '
+        'total ₹${order.grandTotal.toInt()}';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: GlassCard(
+      child: Semantics(
+        label: cardLabel,
+        button: true,
+        child: GlassCard(
         onTap: () {
           if (isActive) {
             context.push('/order-tracking/${order.id}');
@@ -104,7 +123,7 @@ class OrdersScreen extends ConsumerWidget {
             // Header
             Row(
               children: [
-                Text(order.status.emoji, style: const TextStyle(fontSize: 24)),
+                ExcludeSemantics(child: Text(order.status.emoji, style: const TextStyle(fontSize: 24))),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
@@ -217,6 +236,7 @@ class OrdersScreen extends ConsumerWidget {
           ],
         ),
       ),
+    ),
     ).animate(delay: (index * 80).ms).fadeIn().slideY(begin: 0.03);
   }
 

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Chizze typography — Plus Jakarta Sans throughout
+/// Colors are intentionally omitted (null) so the Theme's default text color
+/// is inherited, keeping both dark and light themes correct.
 class AppTypography {
   AppTypography._();
 
@@ -14,7 +16,6 @@ class AppTypography {
     fontSize: 28,
     height: 1.2,
     letterSpacing: -0.5,
-    color: Colors.white,
   );
 
   static TextStyle get h2 => TextStyle(
@@ -23,7 +24,6 @@ class AppTypography {
     fontSize: 22,
     height: 1.3,
     letterSpacing: -0.3,
-    color: Colors.white,
   );
 
   static TextStyle get h3 => TextStyle(
@@ -31,7 +31,6 @@ class AppTypography {
     fontWeight: FontWeight.w600,
     fontSize: 18,
     height: 1.3,
-    color: Colors.white,
   );
 
   // ─── Body ───
@@ -40,7 +39,6 @@ class AppTypography {
     fontWeight: FontWeight.w500,
     fontSize: 16,
     height: 1.5,
-    color: Colors.white,
   );
 
   static TextStyle get body2 => TextStyle(
@@ -76,7 +74,6 @@ class AppTypography {
     fontSize: 16,
     height: 1.0,
     letterSpacing: 0.3,
-    color: Colors.white,
   );
 
   static TextStyle get buttonSmall => TextStyle(
@@ -85,7 +82,6 @@ class AppTypography {
     fontSize: 14,
     height: 1.0,
     letterSpacing: 0.3,
-    color: Colors.white,
   );
 
   // ─── Special ───
@@ -94,7 +90,6 @@ class AppTypography {
     fontWeight: FontWeight.w700,
     fontSize: 16,
     height: 1.2,
-    color: Colors.white,
   );
 
   static TextStyle get priceLarge => TextStyle(
@@ -102,7 +97,6 @@ class AppTypography {
     fontWeight: FontWeight.w800,
     fontSize: 24,
     height: 1.2,
-    color: Colors.white,
   );
 
   static TextStyle get badge => TextStyle(
@@ -110,27 +104,11 @@ class AppTypography {
     fontWeight: FontWeight.w600,
     fontSize: 11,
     height: 1.0,
-    color: Colors.white,
+    color: Colors.white, // badges always on colored backgrounds
   );
 
   /// Get Google Fonts fallback text theme for the full app
   static TextTheme get textTheme => GoogleFonts.plusJakartaSansTextTheme(
-    const TextTheme(
-      displayLarge: TextStyle(color: Colors.white),
-      displayMedium: TextStyle(color: Colors.white),
-      displaySmall: TextStyle(color: Colors.white),
-      headlineLarge: TextStyle(color: Colors.white),
-      headlineMedium: TextStyle(color: Colors.white),
-      headlineSmall: TextStyle(color: Colors.white),
-      titleLarge: TextStyle(color: Colors.white),
-      titleMedium: TextStyle(color: Colors.white),
-      titleSmall: TextStyle(color: Colors.white),
-      bodyLarge: TextStyle(color: Colors.white),
-      bodyMedium: TextStyle(color: Color(0xFFA0A0A0)),
-      bodySmall: TextStyle(color: Color(0xFF666666)),
-      labelLarge: TextStyle(color: Colors.white),
-      labelMedium: TextStyle(color: Color(0xFFA0A0A0)),
-      labelSmall: TextStyle(color: Color(0xFF666666)),
-    ),
+    const TextTheme(),
   );
 }

@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/services/api_client.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
+import '../../../shared/widgets/shimmer_loader.dart';
 import '../../home/models/restaurant.dart';
 import '../../home/providers/restaurant_provider.dart';
 import '../models/menu_item.dart';
@@ -24,10 +26,11 @@ class RestaurantDetailScreen extends ConsumerStatefulWidget {
 class _RestaurantDetailScreenState
     extends ConsumerState<RestaurantDetailScreen> {
   Restaurant? _restaurant;
-  late final List<MenuCategory> categories;
-  late final List<MenuItem> menuItems;
+  List<MenuCategory> categories = const [];
+  List<MenuItem> menuItems = const [];
   bool _vegFilter = false;
   bool _initialized = false;
+  bool _isMenuLoading = false;
 
   Restaurant get restaurant => _restaurant!;
 
@@ -40,9 +43,56 @@ class _RestaurantDetailScreenState
       (r) => r?.id == widget.restaurantId,
       orElse: () => null,
     );
-    // Menu items from API — empty until data is available
-    categories = const [];
-    menuItems = const [];
+    // Fetch menu from API
+    _fetchMenu();
+  }
+
+  Future<void> _fetchMenu() async {
+    setState(() => _isMenuLoading = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      final response = await api.get('/restaurants/${widget.restaurantId}/menu');
+      if (response.success && response.data != null) {
+        final data = response.data as Map<String, dynamic>;
+        final cats = <MenuCategory>[];
+        final items = <MenuItem>[];
+
+        // Parse grouped categories with their items
+        final categoriesList = data['categories'] as List<dynamic>? ?? [];
+        for (final cat in categoriesList) {
+          final catMap = cat as Map<String, dynamic>;
+          cats.add(MenuCategory(
+            id: catMap['id'] ?? '',
+            restaurantId: widget.restaurantId,
+            name: catMap['name'] ?? '',
+            sortOrder: (catMap['sort_order'] ?? 0).toInt(),
+          ));
+          final catItems = catMap['items'] as List<dynamic>? ?? [];
+          for (final item in catItems) {
+            items.add(MenuItem.fromMap(item as Map<String, dynamic>));
+          }
+        }
+
+        // Also add any uncategorized items
+        final uncategorized = data['uncategorized'] as List<dynamic>? ?? [];
+        for (final item in uncategorized) {
+          items.add(MenuItem.fromMap(item as Map<String, dynamic>));
+        }
+
+        if (mounted) {
+          setState(() {
+            categories = cats;
+            menuItems = items;
+            _isMenuLoading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isMenuLoading = false);
+      }
+    } catch (e) {
+      debugPrint('[RestaurantDetail] Failed to fetch menu: $e');
+      if (mounted) setState(() => _isMenuLoading = false);
+    }
   }
 
   List<MenuItem> get filteredItems {
@@ -56,18 +106,38 @@ class _RestaurantDetailScreenState
     final cartState = ref.watch(cartProvider);
 
     if (_restaurant == null) {
+      final isLoading = ref.watch(restaurantProvider).isLoading;
       return Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
           backgroundColor: AppColors.background,
           title: const Text('Restaurant'),
         ),
-        body: const Center(
-          child: Text(
-            'Restaurant not found',
-            style: TextStyle(color: Colors.white70, fontSize: 16),
-          ),
-        ),
+        body: isLoading
+            ? Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    ShimmerLoader(height: 200, borderRadius: AppSpacing.radiusLg),
+                    SizedBox(height: AppSpacing.xl),
+                    ShimmerLoader(height: 24, width: 220),
+                    SizedBox(height: AppSpacing.md),
+                    ShimmerLoader(height: 16, width: 160),
+                    SizedBox(height: AppSpacing.xxl),
+                    ShimmerLoader(height: 18, width: 120),
+                    SizedBox(height: AppSpacing.md),
+                    RestaurantCardSkeleton(),
+                    RestaurantCardSkeleton(),
+                  ],
+                ),
+              )
+            : const Center(
+                child: Text(
+                  'Restaurant not found',
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+              ),
       );
     }
 
@@ -87,7 +157,31 @@ class _RestaurantDetailScreenState
               SliverToBoxAdapter(child: _buildVegToggle()),
 
               // ─── Menu Sections ───
-              ..._buildMenuSections(),
+              if (_isMenuLoading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(AppSpacing.xxl),
+                    child: Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    ),
+                  ),
+                )
+              else if (categories.isEmpty && menuItems.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.xxl),
+                    child: Center(
+                      child: Text(
+                        'Menu not available',
+                        style: AppTypography.body2.copyWith(
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ..._buildMenuSections(),
 
               // Bottom padding for cart bar
               SliverToBoxAdapter(

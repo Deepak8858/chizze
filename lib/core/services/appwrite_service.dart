@@ -1,10 +1,16 @@
 import 'package:appwrite/appwrite.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Appwrite Cloud configuration
+/// Appwrite Cloud configuration — injected via --dart-define
 class AppwriteConfig {
-  static const String endpoint = 'https://sgp.cloud.appwrite.io/v1';
-  static const String projectId = '6993347c0006ead7404d';
+  static const String endpoint = String.fromEnvironment(
+    'APPWRITE_ENDPOINT',
+    defaultValue: 'https://sgp.cloud.appwrite.io/v1',
+  );
+  static const String projectId = String.fromEnvironment(
+    'APPWRITE_PROJECT_ID',
+    defaultValue: '6993347c0006ead7404d',
+  );
 }
 
 /// Appwrite Client — singleton across the app

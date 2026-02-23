@@ -65,7 +65,7 @@ class FavoritesScreen extends ConsumerWidget {
               SliverFillRemaining(
                 child: ListSkeleton(
                   itemCount: 4,
-                  itemBuilder: (_, __) => const RestaurantCardSkeleton(),
+                  itemBuilder: (_, _) => const RestaurantCardSkeleton(),
                 ),
               )
             else if (state.favorites.isEmpty)

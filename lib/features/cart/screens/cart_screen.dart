@@ -106,14 +106,26 @@ class CartScreen extends ConsumerWidget {
   }
 
   Widget _buildCartItemCard(WidgetRef ref, CartItem item, int index) {
+    final customizations = item.selectedCustomizations.entries
+        .expand((e) => e.value.map((o) => o.name))
+        .join(', ');
+    final itemLabel = '${item.menuItem.name}, '
+        '${item.menuItem.isVeg ? "vegetarian" : "non-vegetarian"}, '
+        'quantity ${item.quantity}, '
+        'price \u20b9${item.totalPrice.toInt()}'
+        '${customizations.isNotEmpty ? ", $customizations" : ""}';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: GlassCard(
+      child: Semantics(
+        label: itemLabel,
+        child: GlassCard(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Veg badge
-            Container(
+            ExcludeSemantics(
+            child: Container(
               width: 16,
               height: 16,
               margin: const EdgeInsets.only(top: 2),
@@ -136,6 +148,7 @@ class CartScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+            ),
             ),
 
             const SizedBox(width: AppSpacing.md),
@@ -208,6 +221,7 @@ class CartScreen extends ConsumerWidget {
           ],
         ),
       ),
+    ),
     ).animate(delay: (index * 60).ms).fadeIn();
   }
 
@@ -367,7 +381,9 @@ class CartScreen extends ConsumerWidget {
               valueColor: AppColors.success,
             ),
           const Divider(color: AppColors.divider, height: AppSpacing.xl),
-          Row(
+          Semantics(
+            label: 'Grand total: ₹${cartState.grandTotal.toInt()}',
+            child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
@@ -381,6 +397,7 @@ class CartScreen extends ConsumerWidget {
                 style: AppTypography.priceLarge.copyWith(fontSize: 20),
               ),
             ],
+          ),
           ),
         ],
       ),
@@ -400,7 +417,7 @@ class CartScreen extends ConsumerWidget {
         border: Border(top: BorderSide(color: AppColors.divider)),
       ),
       child: ChizzeButton(
-        label: 'Proceed to Payment · ₹${cartState.grandTotal.toInt()}',
+        label: 'Proceed to Payment · \u20b9${cartState.grandTotal.toInt()}',
         icon: Icons.lock_rounded,
         onPressed: () => context.push('/payment'),
       ),
@@ -446,7 +463,7 @@ class _BillRow extends StatelessWidget {
           Text(
             value,
             style: AppTypography.body2.copyWith(
-              color: valueColor ?? Colors.white,
+              color: valueColor ?? Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w500,
             ),
           ),

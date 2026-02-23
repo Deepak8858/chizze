@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../core/services/map_config.dart';
@@ -230,7 +232,7 @@ class _DeliveryMapState extends State<DeliveryMap> {
     };
 
     await _mapboxMap!.style.addSource(
-      GeoJsonSource(id: sourceId, data: geoJson.toString()),
+      GeoJsonSource(id: sourceId, data: jsonEncode(geoJson)),
     );
 
     await _mapboxMap!.style.addLayer(

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
@@ -78,9 +79,8 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
       }
     } on ApiException {
       // Keep current state
-    } catch (_) {
-      // Mock fallback
-      state = state.copyWith(referralCode: 'CHZ8K4M2NP');
+    } catch (e) {
+      debugPrint('[Referral] fetchReferralCode error: $e');
     }
   }
 
@@ -113,28 +113,10 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
       }
     } on ApiException {
       state = state.copyWith(isLoading: false);
-    } catch (_) {
-      // Mock fallback
+    } catch (e) {
+      debugPrint('[Referral] fetchReferrals error: $e');
       state = state.copyWith(
-        referrals: [
-          Referral(
-            id: 'r1',
-            referredUserId: 'u1',
-            referredUserName: 'Riya S.',
-            rewardAmount: 100,
-            status: 'completed',
-            createdAt: DateTime.now().subtract(const Duration(days: 3)),
-          ),
-          Referral(
-            id: 'r2',
-            referredUserId: 'u2',
-            referredUserName: 'Arjun K.',
-            rewardAmount: 100,
-            status: 'completed',
-            createdAt: DateTime.now().subtract(const Duration(days: 7)),
-          ),
-        ],
-        totalEarned: 200,
+        referrals: const [],
         isLoading: false,
       );
     }

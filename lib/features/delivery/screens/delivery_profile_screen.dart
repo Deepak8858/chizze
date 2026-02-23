@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -44,26 +45,34 @@ class DeliveryProfileScreen extends ConsumerWidget {
               Icons.account_balance_wallet_rounded,
               'Bank Details',
               subtitle: 'Manage payout accounts',
+              onTap: () => _showComingSoon(context, 'Bank Details'),
             ),
             _buildMenuItem(
               Icons.description_rounded,
               'Documents',
               subtitle: 'ID, License & Vehicle docs',
+              onTap: () => _showComingSoon(context, 'Documents'),
             ),
             _buildMenuItem(
               Icons.schedule_rounded,
               'Availability',
               subtitle: 'Set your working hours',
+              onTap: () => _showComingSoon(context, 'Availability'),
             ),
             _buildMenuItem(
               Icons.headset_mic_rounded,
               'Support',
               subtitle: 'Help & FAQs',
+              onTap: () => launchUrl(Uri(scheme: 'tel', path: '+918008008000')),
             ),
             _buildMenuItem(
               Icons.info_outline_rounded,
               'About Chizze',
               subtitle: 'Terms, privacy & version',
+              onTap: () => launchUrl(
+                Uri.parse('https://chizze.com/about'),
+                mode: LaunchMode.externalApplication,
+              ),
             ),
             const SizedBox(height: AppSpacing.xxl),
 
@@ -271,7 +280,16 @@ class DeliveryProfileScreen extends ConsumerWidget {
     ).animate(delay: 300.ms).fadeIn();
   }
 
-  Widget _buildMenuItem(IconData icon, String label, {String? subtitle}) {
+  void _showComingSoon(BuildContext context, String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$feature — coming soon!'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Widget _buildMenuItem(IconData icon, String label, {String? subtitle, VoidCallback? onTap}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
       decoration: BoxDecoration(
@@ -289,7 +307,7 @@ class DeliveryProfileScreen extends ConsumerWidget {
           size: 14,
           color: AppColors.textTertiary,
         ),
-        onTap: () {},
+        onTap: onTap,
         dense: true,
       ),
     );

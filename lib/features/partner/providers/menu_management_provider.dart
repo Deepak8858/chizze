@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/api_client.dart';
@@ -159,7 +160,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
 
     _api
         .put('${ApiConfig.partnerCategories}/$categoryId', body: {'name': newName})
-        .ignore();
+        .then((r) {
+      if (!r.success) debugPrint('[Menu] renameCategory failed: ${r.error}');
+    }).catchError((e) {
+      debugPrint('[Menu] renameCategory error: $e');
+    });
   }
 
   Future<void> toggleCategoryActive(String categoryId) async {
@@ -185,7 +190,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
             '${ApiConfig.partnerCategories}/$categoryId',
             body: {'is_active': toggled!.isActive},
           )
-          .ignore();
+          .then((r) {
+        if (!r.success) debugPrint('[Menu] toggleCategory failed: ${r.error}');
+      }).catchError((e) {
+        debugPrint('[Menu] toggleCategory error: $e');
+      });
     }
   }
 
@@ -194,7 +203,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
       categories: state.categories.where((c) => c.id != categoryId).toList(),
       items: state.items.where((i) => i.categoryId != categoryId).toList(),
     );
-    _api.delete('${ApiConfig.partnerCategories}/$categoryId').ignore();
+    _api.delete('${ApiConfig.partnerCategories}/$categoryId').then((r) {
+      if (!r.success) debugPrint('[Menu] deleteCategory failed: ${r.error}');
+    }).catchError((e) {
+      debugPrint('[Menu] deleteCategory error: $e');
+    });
   }
 
   // ─── Item Operations ───
@@ -299,7 +312,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     if (newImageUrl != null) body['image_url'] = newImageUrl;
 
     if (body.isNotEmpty) {
-      _api.put('${ApiConfig.partnerMenu}/$itemId', body: body).ignore();
+      _api.put('${ApiConfig.partnerMenu}/$itemId', body: body).then((r) {
+        if (!r.success) debugPrint('[Menu] updateItem failed: ${r.error}');
+      }).catchError((e) {
+        debugPrint('[Menu] updateItem error: $e');
+      });
     }
   }
 
@@ -338,7 +355,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
             '${ApiConfig.partnerMenu}/$itemId',
             body: {'is_available': toggled!.isAvailable},
           )
-          .ignore();
+          .then((r) {
+        if (!r.success) debugPrint('[Menu] toggleAvailability failed: ${r.error}');
+      }).catchError((e) {
+        debugPrint('[Menu] toggleAvailability error: $e');
+      });
     }
   }
 
@@ -346,7 +367,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     state = state.copyWith(
       items: state.items.where((i) => i.id != itemId).toList(),
     );
-    _api.delete('${ApiConfig.partnerMenu}/$itemId').ignore();
+    _api.delete('${ApiConfig.partnerMenu}/$itemId').then((r) {
+      if (!r.success) debugPrint('[Menu] deleteItem failed: ${r.error}');
+    }).catchError((e) {
+      debugPrint('[Menu] deleteItem error: $e');
+    });
   }
 }
 

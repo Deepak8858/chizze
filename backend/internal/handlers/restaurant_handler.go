@@ -235,7 +235,12 @@ func (h *RestaurantHandler) GetReviews(c *gin.Context) {
 	restaurantID := c.Param("id")
 	pg := models.ParsePagination(c)
 
-	result, err := h.appwrite.ListReviews(restaurantID)
+	result, err := h.appwrite.ListReviewsByQuery([]string{
+		appwrite.QueryEqual("restaurant_id", restaurantID),
+		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryLimit(pg.PerPage),
+		appwrite.QueryOffset(pg.Offset()),
+	})
 	if err != nil {
 		utils.InternalError(c, "Failed to fetch reviews")
 		return

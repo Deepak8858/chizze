@@ -185,23 +185,39 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 // @Router /api/v1/auth/verify-otp [post]
 func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	var req struct {
-		Phone  string `json:"phone" binding:"required"`
-		OTP    string `json:"otp" binding:"required"`
-		UserID string `json:"user_id" binding:"required"`
+		Phone       string `json:"phone" binding:"required"`
+		OTP         string `json:"otp" binding:"required"`
+		UserID      string `json:"user_id"`
+		AppwriteJWT string `json:"appwrite_jwt" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequest(c, "Phone, OTP, and user_id are required")
+		utils.BadRequest(c, "Phone, OTP, and appwrite_jwt are required")
 		return
 	}
 
-	// The Flutter app verifies OTP via Appwrite SDK and gets a session.
-	// It then calls /auth/exchange with the Appwrite JWT.
-	// This endpoint is for direct OTP flow (if not using Appwrite SDK on client):
-	// In this architecture, after Appwrite verifies OTP on client, client calls /exchange.
+	// Validate the Appwrite JWT to prove OTP was actually verified on client
+	account, err := h.appwrite.Client().VerifyJWT(req.AppwriteJWT)
+	if err != nil {
+		log.Printf("OTP verify: Appwrite JWT validation failed: %v", err)
+		utils.Unauthorized(c, "Invalid or expired session. Please verify OTP again.")
+		return
+	}
 
-	// For backwards compatibility: if user_id is provided (from Appwrite session),
-	// check user exists and issue token
-	user, err := h.appwrite.GetUser(req.UserID)
+	appwriteUserID, _ := account["$id"].(string)
+	if appwriteUserID == "" {
+		utils.Unauthorized(c, "Could not extract user ID from Appwrite account")
+		return
+	}
+
+	// Verify phone matches the account
+	accountPhone, _ := account["phone"].(string)
+	if accountPhone != "" && accountPhone != req.Phone {
+		utils.BadRequest(c, "Phone number does not match the verified session")
+		return
+	}
+
+	// Check if user exists or create
+	user, err := h.appwrite.GetUser(appwriteUserID)
 	role := "customer"
 	if err != nil {
 		// Create user
@@ -211,14 +227,14 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 			"is_active":  true,
 			"created_at": time.Now().Format(time.RFC3339),
 		}
-		h.appwrite.CreateUser(req.UserID, userData)
+		h.appwrite.CreateUser(appwriteUserID, userData)
 	} else {
 		if r, ok := user["role"].(string); ok && r != "" {
 			role = r
 		}
 	}
 
-	token, err := h.issueJWT(req.UserID, role, 7*24*time.Hour)
+	token, err := h.issueJWT(appwriteUserID, role, 7*24*time.Hour)
 	if err != nil {
 		utils.InternalError(c, "Failed to generate token")
 		return
@@ -227,7 +243,7 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	utils.Success(c, gin.H{
 		"message": "OTP verified",
 		"token":   token,
-		"user_id": req.UserID,
+		"user_id": appwriteUserID,
 		"role":    role,
 	})
 }

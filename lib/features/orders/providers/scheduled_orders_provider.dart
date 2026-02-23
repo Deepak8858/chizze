@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
@@ -92,31 +93,10 @@ class ScheduledOrdersNotifier extends StateNotifier<ScheduledOrdersState> {
       }
     } on ApiException {
       state = state.copyWith(isLoading: false);
-    } catch (_) {
-      // Mock fallback
+    } catch (e) {
+      debugPrint('[ScheduledOrders] fetch error: $e');
       state = state.copyWith(
-        orders: [
-          ScheduledOrder(
-            id: 'so1',
-            restaurantId: 'r1',
-            restaurantName: 'Biryani Express',
-            scheduledTime: DateTime.now().add(const Duration(hours: 4)),
-            status: 'pending',
-            totalAmount: 450,
-            itemCount: 3,
-            createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-          ),
-          ScheduledOrder(
-            id: 'so2',
-            restaurantId: 'r2',
-            restaurantName: 'Pizza Paradise',
-            scheduledTime: DateTime.now().add(const Duration(days: 1, hours: 12)),
-            status: 'confirmed',
-            totalAmount: 780,
-            itemCount: 2,
-            createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-          ),
-        ],
+        orders: const [],
         isLoading: false,
       );
     }

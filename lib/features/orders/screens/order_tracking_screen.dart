@@ -45,12 +45,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   @override
   void dispose() {
     if (_trackingStarted) {
-      // Use a post-frame callback to safely read the provider
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ref.read(riderLocationProvider.notifier).stopTracking();
-        }
-      });
+      ref.read(riderLocationProvider.notifier).stopTracking();
     }
     super.dispose();
   }

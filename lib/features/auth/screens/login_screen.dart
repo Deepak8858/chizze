@@ -121,11 +121,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildBrandHeader(String roleLabel) {
-    return Column(
+    return Semantics(
+      header: true,
+      label: roleLabel.isNotEmpty
+          ? 'Welcome to Chizze. Sign in as $roleLabel'
+          : 'Welcome to Chizze. Sign in to order your favorite food',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Logo
-        Container(
+        ExcludeSemantics(
+        child: Container(
           width: 56,
           height: 56,
           decoration: BoxDecoration(
@@ -138,28 +144,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             size: 28,
           ),
         ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+        ),
 
         const SizedBox(height: AppSpacing.xl),
 
-        Text(
+        ExcludeSemantics(
+        child: Text(
           'Welcome to',
           style: AppTypography.body2,
         ).animate(delay: 200.ms).fadeIn(),
+        ),
 
-        Text(
+        ExcludeSemantics(
+        child: Text(
           'Chizze',
           style: AppTypography.h1.copyWith(fontSize: 32),
         ).animate(delay: 300.ms).fadeIn().slideX(begin: -0.1),
+        ),
 
         const SizedBox(height: AppSpacing.sm),
 
-        Text(
+        ExcludeSemantics(
+        child: Text(
           roleLabel.isNotEmpty
               ? 'Sign in as $roleLabel'
               : 'Sign in to order your favorite food',
           style: AppTypography.body2,
         ).animate(delay: 400.ms).fadeIn(),
+        ),
       ],
+    ),
     );
   }
 
@@ -347,7 +361,10 @@ class _SocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      label: 'Sign in with $label',
+      child: GestureDetector(
       onTap: onTap,
       child: Container(
         height: 52,
@@ -365,6 +382,7 @@ class _SocialButton extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

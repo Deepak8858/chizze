@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
@@ -84,12 +85,8 @@ class FavoritesNotifier extends StateNotifier<FavoritesState> {
         state = state.copyWith(isLoading: false);
       }
     } catch (e) {
-      // Fallback to mock data on error
-      state = FavoritesState(
-        favorites: _mockFavorites,
-        favoriteIds: _mockFavorites.map((r) => r.id).toSet(),
-        isLoading: false,
-      );
+      debugPrint('[Favorites] fetch error: $e');
+      state = const FavoritesState(isLoading: false);
     }
   }
 

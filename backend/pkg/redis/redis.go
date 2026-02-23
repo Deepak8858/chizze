@@ -97,6 +97,11 @@ func (c *Client) Incr(ctx context.Context, key string) (int64, error) {
 	return c.rdb.Incr(ctx, key).Result()
 }
 
+// Decr atomically decrements a key and returns the new value.
+func (c *Client) Decr(ctx context.Context, key string) (int64, error) {
+	return c.rdb.Decr(ctx, key).Result()
+}
+
 // SetNX sets a key only if it does not exist (distributed lock primitive).
 // Returns true if the key was set, false if it already existed.
 func (c *Client) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {

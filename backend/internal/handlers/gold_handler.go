@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"log"
 	"time"
 
+	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/pkg/utils"
@@ -43,7 +45,7 @@ func (h *GoldHandler) GetPlans(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/v1/gold/status [get]
 func (h *GoldHandler) GetStatus(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	result, err := h.appwrite.GetActiveGoldSubscription(userID)
 	if err != nil || result.Total == 0 {
@@ -73,7 +75,7 @@ func (h *GoldHandler) GetStatus(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/v1/gold/subscribe [post]
 func (h *GoldHandler) Subscribe(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	var req models.SubscribeGoldRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -130,9 +132,11 @@ func (h *GoldHandler) Subscribe(c *gin.Context) {
 	}
 
 	// Update user's gold status
-	_, _ = h.appwrite.UpdateUser(userID, map[string]interface{}{
+	if _, err := h.appwrite.UpdateUser(userID, map[string]interface{}{
 		"is_gold_member": true,
-	})
+	}); err != nil {
+		log.Printf("[gold] failed to update user gold status for %s: %v", userID, err)
+	}
 
 	utils.Created(c, doc)
 }
@@ -149,7 +153,7 @@ func (h *GoldHandler) Subscribe(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/v1/gold/cancel [put]
 func (h *GoldHandler) Cancel(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := middleware.GetUserID(c)
 
 	result, err := h.appwrite.GetActiveGoldSubscription(userID)
 	if err != nil || result.Total == 0 {
@@ -168,9 +172,11 @@ func (h *GoldHandler) Cancel(c *gin.Context) {
 	}
 
 	// Update user gold status
-	_, _ = h.appwrite.UpdateUser(userID, map[string]interface{}{
+	if _, err := h.appwrite.UpdateUser(userID, map[string]interface{}{
 		"is_gold_member": false,
-	})
+	}); err != nil {
+		log.Printf("[gold] failed to update user gold status for %s: %v", userID, err)
+	}
 
 	utils.Success(c, gin.H{"message": "Gold membership cancelled"})
 }

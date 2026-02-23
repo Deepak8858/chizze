@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
@@ -119,9 +120,8 @@ class GoldNotifier extends StateNotifier<GoldState> {
       }
     } on ApiException {
       // Keep current state
-    } catch (_) {
-      // Mock fallback
-      state = state.copyWith(plans: _mockPlans);
+    } catch (e) {
+      debugPrint('[Gold] fetchPlans error: $e');
     }
   }
 

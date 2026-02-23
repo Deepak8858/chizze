@@ -85,6 +85,7 @@ func (s *AppwriteService) UpdateRestaurant(id string, data map[string]interface{
 func (s *AppwriteService) ListMenuItems(restaurantID string) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionMenuItems, []string{
 		appwrite.QueryEqual("restaurant_id", restaurantID),
+		appwrite.QueryLimit(500),
 	})
 }
 
@@ -154,10 +155,12 @@ func (s *AppwriteService) GetCoupon(id string) (map[string]interface{}, error) {
 
 // ─── Notifications ───
 
-func (s *AppwriteService) ListNotifications(userID string) (*appwrite.DocumentList, error) {
+func (s *AppwriteService) ListNotifications(userID string, limit, offset int) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionNotifications, []string{
 		appwrite.QueryEqual("user_id", userID),
 		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryLimit(limit),
+		appwrite.QueryOffset(offset),
 	})
 }
 
@@ -207,6 +210,7 @@ func (s *AppwriteService) ListMenuCategories(restaurantID string) (*appwrite.Doc
 	return s.client.ListDocuments(models.CollectionMenuCategories, []string{
 		appwrite.QueryEqual("restaurant_id", restaurantID),
 		appwrite.QueryOrderAsc("sort_order"),
+		appwrite.QueryLimit(100),
 	})
 }
 
@@ -266,6 +270,18 @@ func (s *AppwriteService) GetAddress(id string) (map[string]interface{}, error) 
 
 func (s *AppwriteService) GetMenuItem(id string) (map[string]interface{}, error) {
 	return s.client.GetDocument(models.CollectionMenuItems, id)
+}
+
+// ListMenuItemsByIDs batch-fetches menu items by their document IDs (avoids N+1).
+func (s *AppwriteService) ListMenuItemsByIDs(ids []string) (*appwrite.DocumentList, error) {
+	ifaces := make([]interface{}, len(ids))
+	for i, v := range ids {
+		ifaces[i] = v
+	}
+	return s.client.ListDocuments(models.CollectionMenuItems, []string{
+		appwrite.QueryEqual("$id", ifaces...),
+		appwrite.QueryLimit(len(ids)),
+	})
 }
 
 // ─── Restaurants by owner ───

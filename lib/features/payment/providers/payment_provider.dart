@@ -10,11 +10,11 @@ import '../../orders/models/order.dart' as app;
 
 /// Razorpay configuration
 class RazorpayConfig {
-  // Fallback test key — only used in dev when backend doesn't provide one
-  // In production the backend always returns the live key in the order response
+  // Key injected via --dart-define=RAZORPAY_KEY=...
+  // MUST be set for production builds — empty default prevents test key leaking
   static const String keyId = String.fromEnvironment(
     'RAZORPAY_KEY',
-    defaultValue: 'rzp_test_SIjgJ176oKm8mn',
+    defaultValue: '',
   );
   static const String keySecret =
       ''; // Keep empty in client — verify on Go backend
