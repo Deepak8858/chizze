@@ -3,7 +3,7 @@
 /// Usage:
 ///   flutter run --dart-define=ENV=dev
 ///   flutter run --dart-define=ENV=staging --dart-define=API_URL=https://staging.chizze.in/api/v1
-///   flutter build apk --dart-define=ENV=production --dart-define=API_URL=https://api.chizze.in/api/v1
+///   flutter build apk --dart-define=ENV=production --dart-define=API_URL=https://api.devdeepak.me/api/v1
 class Environment {
   static const String appwriteProjectId = String.fromEnvironment(
     'APPWRITE_PROJECT_ID',
@@ -26,7 +26,7 @@ class Environment {
     if (_apiUrlOverride.isNotEmpty) return _apiUrlOverride;
     switch (env) {
       case 'production':
-        return 'https://api.chizze.in/api/v1';
+        return 'https://api.devdeepak.me/api/v1';
       case 'staging':
         return 'https://staging.chizze.in/api/v1';
       default:
