@@ -194,7 +194,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                             'tags': _selectedTags.toList(),
                           },
                         );
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Thanks for your review! 🎉'),
@@ -203,7 +203,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                         );
                         context.go('/home');
                       } catch (e) {
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         setState(() => _isSubmitting = false);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(

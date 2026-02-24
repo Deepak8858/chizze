@@ -921,10 +921,10 @@ Flutter                        Go Backend                    Razorpay API
 
 | ID | Severity | File | Issue | Status |
 |---|---|---|---|---|
-| TD-001 | LOW | `appwrite_client.dart` | Legacy file, superseded | To remove |
+| TD-001 | ~~LOW~~ | `appwrite_client.dart` | ~~Legacy file, superseded~~ | ✅ RESOLVED — file already deleted |
 | TD-002 | ~~LOW~~ | `config/environment.dart` | ~~Legacy config~~ | ✅ FIXED — full env system |
-| TD-003 | LOW | `test/widget_test.dart` | References old MyApp | To fix |
-| TD-004 | LOW | `test/appwrite_connection_test.dart` | Deprecated APIs | To refactor |
+| TD-003 | ~~LOW~~ | `test/widget_test.dart` | ~~References old MyApp~~ | ✅ RESOLVED — file already deleted |
+| TD-004 | ~~LOW~~ | `test/appwrite_connection_test.dart` | ~~Deprecated APIs~~ | ✅ RESOLVED — file already deleted |
 | TD-005 | MEDIUM | Login screen | OAuth needs Appwrite config | Phase 4+ |
 | TD-006 | ~~LOW~~ | All screens | ~~Mock data — needs Appwrite collections~~ | ✅ FIXED — API-backed providers |
 | TD-007 | LOW | Fonts | Using google_fonts (network) | OK for dev |
@@ -936,7 +936,7 @@ Flutter                        Go Backend                    Razorpay API
 | TD-013 | LOW | ratelimit.go | In-memory RateLimit() has potential data race (visitor mutations after sync.Map Load) | Use RedisRateLimit in production |
 | TD-014 | LOW | notification_handler.go | MarkAllRead is O(N) — fetches all, updates one-by-one | Acceptable at current scale |
 | TD-015 | LOW | review_handler.go | Rating recalculation is O(N Reviews) | Consider caching in Redis |
-| TD-016 | MEDIUM | menu_item.dart | Menu items still use mock data on restaurant detail | Need menu API endpoint integration |
+| TD-016 | ~~MEDIUM~~ | menu_item.dart | ~~Menu items still use mock data on restaurant detail~~ | ✅ FIXED — mock code removed, test helpers moved to test/ |
 | TD-017 | ~~LOW~~ | partner_provider.dart | ~~Partner screens use mock orders~~ | ✅ FIXED — All 3 providers (partner, menu, analytics) wired to Go API with mock fallback |
 | TD-018 | LOW | cart_provider.dart | In-memory only (no persistence) | Consider Hive/SharedPrefs |
 
@@ -1018,6 +1018,7 @@ security:
 
 | Date | Action | Details |
 |---|---|---|
+| 2026-02-25 16:00 | Code Quality Cleanup | Fixed 7 dart analyze issues (orders_screen ref param, favorites_provider unused mock, gold_provider visibility, review_screen context.mounted, search_screen underscore lint). Fixed 6 Android build.gradle.kts errors (imports, jvmTarget, casts). Removed mock data from coupons_provider init (production hazard — users could see fake coupons if API failed). Removed dead mock code from menu_item.dart (~120 lines), moved test helpers to test/. Resolved TD-001, TD-003, TD-004 (files already deleted), TD-016 (mock code removed). dart analyze 0 issues, 132 Flutter tests pass, all Go tests pass. |
 | 2026-02-25 14:00 | Phase 9 — COMPLETE | Production Deployment & CI/CD. 13 new files, 7 modified. GitHub Actions CI/CD (5 jobs: go-test, flutter-test, docker-build, android-build, deploy). Makefile (18 targets). Health endpoints split (liveness /health + readiness /health/ready). Nginx reverse proxy (rate limiting, TLS, WebSocket, security headers). Production docker-compose (nginx + api×2 + redis + certbot, dual network). Environment configs (3 .env.example files). Android release build (com.chizze.app, ProGuard, ABI splits, release signing). Deployment scripts (setup.sh, ssl-setup.sh, deploy.sh with rollback). deploy/README.md. All tests pass: 55+ Go, 132 Flutter. |
 | 2026-02-25 10:30 | Bug Fix | CartState.copyWith nullable pattern fixed — added clearCouponCode flag so removeCoupon() can set couponCode to null. 28/28 cart tests pass. |
 | 2026-02-25 10:00 | Phase 8 — COMPLETE | 10 Go test files (55+ tests), 8 Flutter test files (132 tests). All passing. Covers: utils (geo, validators), models (order transitions, pagination, errors), services (order numbers, fees, geo), redis (nil errors, client), websocket (hub, events, broadcaster), middleware (JWT auth, rate limiting), Flutter models (order, restaurant, menu_item, api_response, delivery_partner), Flutter providers (cart, coupons, gold). 1 bug documented (copyWith nullable pattern). |

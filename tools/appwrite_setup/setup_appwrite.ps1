@@ -36,11 +36,17 @@ appwrite databases create-boolean-attribute --database-id $DB --collection-id us
 appwrite databases create-boolean-attribute --database-id $DB --collection-id users --key dark_mode --required false --default true
 appwrite databases create-string-attribute --database-id $DB --collection-id users --key default_address_id --size 36 --required false
 appwrite databases create-string-attribute --database-id $DB --collection-id users --key fcm_token --size 256 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id users --key address --size 500 --required false
+appwrite databases create-float-attribute --database-id $DB --collection-id users --key latitude --required false
+appwrite databases create-float-attribute --database-id $DB --collection-id users --key longitude --required false
+appwrite databases create-boolean-attribute --database-id $DB --collection-id users --key is_gold_member --required false --default false
+appwrite databases create-string-attribute --database-id $DB --collection-id users --key referral_code --size 20 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id users --key referred_by --size 20 --required false
 
 Start-Sleep -Seconds 3
 appwrite databases create-index --database-id $DB --collection-id users --key idx_phone --type unique --attributes phone
 appwrite databases create-index --database-id $DB --collection-id users --key idx_role --type key --attributes role
-Write-Host "   ✅ users (9 attributes, 2 indexes)" -ForegroundColor Green
+Write-Host "   ✅ users (15 attributes, 2 indexes)" -ForegroundColor Green
 
 # ─── 3. ADDRESSES Collection ─────────────────────────────────────────────────
 Write-Host "`n📍 Creating collection: addresses ..." -ForegroundColor Yellow
@@ -293,16 +299,128 @@ appwrite databases create-index --database-id $DB --collection-id payments --key
 appwrite databases create-index --database-id $DB --collection-id payments --key idx_status --type key --attributes status
 Write-Host "   ✅ payments (8 attributes, 3 indexes)" -ForegroundColor Green
 
+# ─── 14. DELIVERY_PARTNERS Collection ─────────────────────────────────────────
+Write-Host "`n🚴 Creating collection: delivery_partners ..." -ForegroundColor Yellow
+appwrite databases create-collection --database-id $DB --collection-id delivery_partners --name "Delivery Partners" --document-security true --permissions 'read("users")' 'create("users")' 'update("users")'
+
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key user_id --size 36 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key name --size 128 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key phone --size 20 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key email --size 256 --required false
+appwrite databases create-url-attribute --database-id $DB --collection-id delivery_partners --key avatar_url --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key vehicle_type --size 20 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key vehicle_number --size 20 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key license_number --size 50 --required false
+appwrite databases create-boolean-attribute --database-id $DB --collection-id delivery_partners --key is_verified --required false --default false
+appwrite databases create-boolean-attribute --database-id $DB --collection-id delivery_partners --key is_online --required false --default false
+appwrite databases create-float-attribute --database-id $DB --collection-id delivery_partners --key rating --required false
+appwrite databases create-integer-attribute --database-id $DB --collection-id delivery_partners --key total_deliveries --required false
+appwrite databases create-float-attribute --database-id $DB --collection-id delivery_partners --key current_latitude --required false
+appwrite databases create-float-attribute --database-id $DB --collection-id delivery_partners --key current_longitude --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key current_order_id --size 36 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key status --size 20 --required false --default available
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key fcm_token --size 256 --required false
+
+Start-Sleep -Seconds 5
+appwrite databases create-index --database-id $DB --collection-id delivery_partners --key idx_user_id --type key --attributes user_id
+Write-Host "   ✅ delivery_partners (17 attributes, 1 index)" -ForegroundColor Green
+
+# ─── 15. FAVORITES Collection ─────────────────────────────────────────────────
+Write-Host "`n❤️  Creating collection: favorites ..." -ForegroundColor Yellow
+appwrite databases create-collection --database-id $DB --collection-id favorites --name Favorites --document-security true --permissions 'read("users")' 'create("users")' 'delete("users")'
+
+appwrite databases create-string-attribute --database-id $DB --collection-id favorites --key user_id --size 36 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id favorites --key restaurant_id --size 36 --required true
+appwrite databases create-datetime-attribute --database-id $DB --collection-id favorites --key created_at --required false
+
+Start-Sleep -Seconds 3
+appwrite databases create-index --database-id $DB --collection-id favorites --key idx_user_id --type key --attributes user_id
+appwrite databases create-index --database-id $DB --collection-id favorites --key idx_user_restaurant --type unique --attributes user_id restaurant_id
+Write-Host "   ✅ favorites (3 attributes, 2 indexes)" -ForegroundColor Green
+
+# ─── 16. GOLD_SUBSCRIPTIONS Collection ────────────────────────────────────────
+Write-Host "`n👑 Creating collection: gold_subscriptions ..." -ForegroundColor Yellow
+appwrite databases create-collection --database-id $DB --collection-id gold_subscriptions --name "Gold Subscriptions" --document-security true --permissions 'read("users")' 'create("users")' 'update("users")'
+
+appwrite databases create-string-attribute --database-id $DB --collection-id gold_subscriptions --key user_id --size 36 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id gold_subscriptions --key plan_type --size 20 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id gold_subscriptions --key plan_name --size 50 --required true
+appwrite databases create-float-attribute --database-id $DB --collection-id gold_subscriptions --key amount --required true
+appwrite databases create-integer-attribute --database-id $DB --collection-id gold_subscriptions --key duration_days --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id gold_subscriptions --key payment_id --size 100 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id gold_subscriptions --key status --size 20 --required false --default active
+appwrite databases create-datetime-attribute --database-id $DB --collection-id gold_subscriptions --key started_at --required false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id gold_subscriptions --key expires_at --required false
+appwrite databases create-boolean-attribute --database-id $DB --collection-id gold_subscriptions --key auto_renew --required false --default false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id gold_subscriptions --key created_at --required false
+
+Start-Sleep -Seconds 3
+appwrite databases create-index --database-id $DB --collection-id gold_subscriptions --key idx_user_id --type key --attributes user_id
+Write-Host "   ✅ gold_subscriptions (11 attributes, 1 index)" -ForegroundColor Green
+
+# ─── 17. REFERRALS Collection ─────────────────────────────────────────────────
+Write-Host "`n🤝 Creating collection: referrals ..." -ForegroundColor Yellow
+appwrite databases create-collection --database-id $DB --collection-id referrals --name Referrals --document-security true --permissions 'read("users")' 'create("users")' 'update("users")'
+
+appwrite databases create-string-attribute --database-id $DB --collection-id referrals --key referrer_user_id --size 36 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id referrals --key referred_user_id --size 36 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id referrals --key referral_code --size 20 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id referrals --key status --size 20 --required false --default pending
+appwrite databases create-float-attribute --database-id $DB --collection-id referrals --key reward_amount --required false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id referrals --key created_at --required false
+
+Start-Sleep -Seconds 3
+appwrite databases create-index --database-id $DB --collection-id referrals --key idx_referrer --type key --attributes referrer_user_id
+Write-Host "   ✅ referrals (6 attributes, 1 index)" -ForegroundColor Green
+
+# ─── 18. SCHEDULED_ORDERS Collection ──────────────────────────────────────────
+Write-Host "`n⏰ Creating collection: scheduled_orders ..." -ForegroundColor Yellow
+appwrite databases create-collection --database-id $DB --collection-id scheduled_orders --name "Scheduled Orders" --document-security true --permissions 'read("users")' 'create("users")' 'update("users")' 'delete("users")'
+
+appwrite databases create-string-attribute --database-id $DB --collection-id scheduled_orders --key user_id --size 36 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id scheduled_orders --key restaurant_id --size 36 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id scheduled_orders --key items --size 10000 --required true
+appwrite databases create-datetime-attribute --database-id $DB --collection-id scheduled_orders --key scheduled_for --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id scheduled_orders --key status --size 20 --required false --default pending
+appwrite databases create-string-attribute --database-id $DB --collection-id scheduled_orders --key order_id --size 36 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id scheduled_orders --key address_id --size 36 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id scheduled_orders --key coupon_code --size 30 --required false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id scheduled_orders --key created_at --required false
+
+Start-Sleep -Seconds 3
+appwrite databases create-index --database-id $DB --collection-id scheduled_orders --key idx_user_id --type key --attributes user_id
+Write-Host "   ✅ scheduled_orders (9 attributes, 1 index)" -ForegroundColor Green
+
+# ─── 19. PAYOUTS Collection ───────────────────────────────────────────────────
+Write-Host "`n💰 Creating collection: payouts ..." -ForegroundColor Yellow
+appwrite databases create-collection --database-id $DB --collection-id payouts --name Payouts --document-security true --permissions 'read("users")' 'create("users")' 'update("users")'
+
+appwrite databases create-string-attribute --database-id $DB --collection-id payouts --key partner_id --size 36 --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id payouts --key user_id --size 36 --required false
+appwrite databases create-float-attribute --database-id $DB --collection-id payouts --key amount --required true
+appwrite databases create-string-attribute --database-id $DB --collection-id payouts --key status --size 20 --required false --default pending
+appwrite databases create-string-attribute --database-id $DB --collection-id payouts --key method --size 20 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id payouts --key reference --size 100 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id payouts --key note --size 500 --required false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id payouts --key created_at --required false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id payouts --key updated_at --required false
+
+Start-Sleep -Seconds 3
+appwrite databases create-index --database-id $DB --collection-id payouts --key idx_user_id --type key --attributes user_id
+Write-Host "   ✅ payouts (9 attributes, 1 index)" -ForegroundColor Green
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "═══════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "✅ All 12 collections created successfully!" -ForegroundColor Green
+Write-Host "✅ All 18 collections created successfully!" -ForegroundColor Green
 Write-Host "═══════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "📋 Collections:" -ForegroundColor White
 Write-Host "   users, addresses, restaurants, menu_categories,"
 Write-Host "   menu_items, orders, coupons, notifications,"
-Write-Host "   delivery_requests, rider_locations, reviews, payments"
+Write-Host "   delivery_requests, rider_locations, reviews, payments,"
+Write-Host "   delivery_partners, favorites, gold_subscriptions,"
+Write-Host "   referrals, scheduled_orders, payouts"
 Write-Host ""
 Write-Host "🔗 Database ID: $DB" -ForegroundColor White
 Write-Host ""

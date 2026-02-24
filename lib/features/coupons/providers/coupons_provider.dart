@@ -63,7 +63,7 @@ class CouponsState {
 class CouponsNotifier extends StateNotifier<CouponsState> {
   final ApiClient _api;
 
-  CouponsNotifier(this._api) : super(CouponsState(available: _mockCoupons)) {
+  CouponsNotifier(this._api) : super(const CouponsState(available: [])) {
     fetchCoupons();
   }
 
@@ -130,64 +130,7 @@ class CouponsNotifier extends StateNotifier<CouponsState> {
     state = CouponsState(available: state.available, appliedCouponId: null);
   }
 
-  static final _mockCoupons = [
-    Coupon(
-      id: 'c1',
-      code: 'CHIZZE40',
-      title: '40% OFF',
-      description: 'Get 40% off on your first order',
-      discountPercent: 40,
-      maxDiscount: 150,
-      minOrder: 199,
-      expiresAt: DateTime.now().add(const Duration(days: 7)),
-      usageLimit: 1,
-    ),
-    Coupon(
-      id: 'c2',
-      code: 'FREEDEL',
-      title: 'Free Delivery',
-      description: 'Free delivery on orders above ₹299',
-      discountPercent: 100,
-      maxDiscount: 60,
-      minOrder: 299,
-      expiresAt: DateTime.now().add(const Duration(days: 3)),
-      usageLimit: 3,
-      usageCount: 1,
-    ),
-    Coupon(
-      id: 'c3',
-      code: 'WEEKEND25',
-      title: '25% OFF',
-      description: 'Weekend special — 25% off on all restaurants',
-      discountPercent: 25,
-      maxDiscount: 100,
-      minOrder: 249,
-      expiresAt: DateTime.now().add(const Duration(days: 2)),
-      usageLimit: 2,
-    ),
-    Coupon(
-      id: 'c4',
-      code: 'BIRYANI50',
-      title: '50% OFF Biryani',
-      description: 'Flat 50% off on Biryani Blues orders',
-      discountPercent: 50,
-      maxDiscount: 200,
-      minOrder: 399,
-      expiresAt: DateTime.now().add(const Duration(days: 5)),
-      restaurantId: 'r1',
-    ),
-    Coupon(
-      id: 'c5',
-      code: 'NEWUSER',
-      title: 'New User Special',
-      description: 'Flat ₹100 off for new users',
-      discountPercent: 100,
-      maxDiscount: 100,
-      minOrder: 149,
-      expiresAt: DateTime.now().add(const Duration(days: 30)),
-      isActive: false, // already used
-    ),
-  ];
+
 }
 
 final couponsProvider = StateNotifierProvider<CouponsNotifier, CouponsState>((

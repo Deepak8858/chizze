@@ -24,16 +24,15 @@ type DeliveryPartner struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
-// DeliveryLocation for real-time tracking
+// DeliveryLocation for real-time tracking (matches Appwrite rider_locations collection)
 type DeliveryLocation struct {
-	ID        string    `json:"$id"`
-	OrderID   string    `json:"order_id"`
-	PartnerID string    `json:"partner_id"`
-	Latitude  float64   `json:"latitude"`
-	Longitude float64   `json:"longitude"`
-	Heading   float64   `json:"heading"`
-	Speed     float64   `json:"speed"`
-	Timestamp time.Time `json:"timestamp"`
+	ID        string  `json:"$id"`
+	RiderID   string  `json:"rider_id"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Heading   float64 `json:"heading"`
+	Speed     float64 `json:"speed"`
+	IsOnline  bool    `json:"is_online"`
 }
 
 // UpdateLocationRequest for partner location push

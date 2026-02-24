@@ -9,14 +9,14 @@ import (
 
 // Allowed fields for profile update
 var allowedProfileFields = map[string]bool{
-	"name":          true,
-	"email":         true,
-	"phone":         true,
-	"profile_image": true,
-	"role":          true,
-	"address":       true,
-	"latitude":      true,
-	"longitude":     true,
+	"name":       true,
+	"email":      true,
+	"phone":      true,
+	"avatar_url": true,
+	"role":       true,
+	"address":    true,
+	"latitude":   true,
+	"longitude":  true,
 }
 
 // UserHandler handles user profile and address endpoints
@@ -61,7 +61,7 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 
 // UpdateProfile updates current user profile with field whitelist
 // @Summary Update current user profile
-// @Description Updates the authenticated user's profile. Allowed fields: name, email, phone, profile_image, role, address, latitude, longitude.
+// @Description Updates the authenticated user's profile. Allowed fields: name, email, phone, avatar_url, role, address, latitude, longitude.
 // @Tags Users
 // @Accept json
 // @Produce json
@@ -96,7 +96,9 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	if err != nil {
 		utils.InternalError(c, "Failed to update profile")
 		return
-	}	h.cache.Invalidate(c.Request.Context(), services.UserProfileKey(userID))	utils.Success(c, updated)
+	}
+	h.cache.Invalidate(c.Request.Context(), services.UserProfileKey(userID))
+	utils.Success(c, updated)
 }
 
 // ListAddresses returns user's saved addresses

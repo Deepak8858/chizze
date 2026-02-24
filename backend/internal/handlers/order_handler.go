@@ -226,13 +226,8 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	// --- 7. Serialize items as JSON string ---
 	itemsJSON, _ := json.Marshal(verifiedItems)
 
-	// --- 8. Address snapshot ---
-	addrSnapshot, _ := json.Marshal(map[string]interface{}{
-		"label":     address["label"],
-		"address":   address["address"],
-		"latitude":  addrLat,
-		"longitude": addrLng,
-	})
+	// --- 8. Address snapshot (logged for debugging) ---
+	_ = address["full_address"]
 
 	// --- 9. Estimate delivery time ---
 	prepTime := 15.0 // default
@@ -243,29 +238,31 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 
 	orderNumber := h.orders.GenerateOrderNumber()
 
+	// Get restaurant name for denormalized storage
+	restaurantName, _ := restaurant["name"].(string)
+
 	orderData := map[string]interface{}{
-		"order_number":             orderNumber,
-		"customer_id":              userID,
-		"restaurant_id":            req.RestaurantID,
-		"delivery_address_id":      req.DeliveryAddressID,
-		"delivery_address_snapshot": string(addrSnapshot),
-		"items":                    string(itemsJSON),
-		"item_total":               itemTotal,
-		"delivery_fee":             deliveryFee,
-		"platform_fee":             platformFee,
-		"gst":                      gst,
-		"discount":                 discount,
-		"coupon_code":              req.CouponCode,
-		"tip":                      tip,
-		"grand_total":              grandTotal,
-		"distance_km":              distanceKm,
-		"payment_method":           req.PaymentMethod,
-		"payment_status":           models.PaymentPending,
-		"status":                   models.OrderStatusPlaced,
-		"special_instructions":     req.SpecialInstructions,
-		"delivery_instructions":    req.DeliveryInstructions,
-		"estimated_delivery_min":   estDeliveryMin,
-		"placed_at":                time.Now().Format(time.RFC3339),
+		"order_number":           orderNumber,
+		"customer_id":            userID,
+		"restaurant_id":          req.RestaurantID,
+		"restaurant_name":        restaurantName,
+		"delivery_address_id":    req.DeliveryAddressID,
+		"items":                  string(itemsJSON),
+		"item_total":             itemTotal,
+		"delivery_fee":           deliveryFee,
+		"platform_fee":           platformFee,
+		"gst":                    gst,
+		"discount":               discount,
+		"coupon_code":            req.CouponCode,
+		"tip":                    tip,
+		"grand_total":            grandTotal,
+		"payment_method":         req.PaymentMethod,
+		"payment_status":         models.PaymentPending,
+		"status":                 models.OrderStatusPlaced,
+		"special_instructions":   req.SpecialInstructions,
+		"delivery_instructions":  req.DeliveryInstructions,
+		"estimated_delivery_min": estDeliveryMin,
+		"placed_at":              time.Now().Format(time.RFC3339),
 	}
 
 	doc, err := h.appwrite.CreateOrder("unique()", orderData)

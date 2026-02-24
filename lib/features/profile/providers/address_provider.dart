@@ -85,7 +85,7 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
           return SavedAddress(
             id: m['\$id'] ?? '',
             label: m['label'] ?? 'Other',
-            fullAddress: m['address_line_1'] ?? '',
+            fullAddress: m['full_address'] ?? '',
             landmark: m['landmark'] ?? '',
             latitude: (m['latitude'] ?? 0).toDouble(),
             longitude: (m['longitude'] ?? 0).toDouble(),
@@ -105,7 +105,7 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
           ApiConfig.addresses,
           body: {
             'label': address.label,
-            'address_line_1': address.fullAddress,
+            'full_address': address.fullAddress,
             'landmark': address.landmark,
             'latitude': address.latitude,
             'longitude': address.longitude,
@@ -145,7 +145,7 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
           '${ApiConfig.addresses}/${updated.id}',
           body: {
             'label': updated.label,
-            'address_line_1': updated.fullAddress,
+            'full_address': updated.fullAddress,
             'landmark': updated.landmark,
           },
         )

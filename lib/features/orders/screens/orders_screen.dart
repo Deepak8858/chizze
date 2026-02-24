@@ -52,6 +52,7 @@ class OrdersScreen extends ConsumerWidget {
                         itemCount: activeOrders.length,
                         itemBuilder: (context, index) => _buildOrderCard(
                           context,
+                          ref,
                           activeOrders[index],
                           index,
                           isActive: true,
@@ -75,6 +76,7 @@ class OrdersScreen extends ConsumerWidget {
                         itemCount: pastOrders.length,
                         itemBuilder: (context, index) => _buildOrderCard(
                           context,
+                          ref,
                           pastOrders[index],
                           index,
                           isActive: false,
@@ -96,6 +98,7 @@ class OrdersScreen extends ConsumerWidget {
 
   Widget _buildOrderCard(
     BuildContext context,
+    WidgetRef ref,
     Order order,
     int index, {
     required bool isActive,

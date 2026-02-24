@@ -201,7 +201,8 @@ class GoldNotifier extends StateNotifier<GoldState> {
     }
   }
 
-  static const _mockPlans = [
+  // Mock plans available as static getter for fallback/testing
+  static const mockPlans = [
     GoldPlan(
       id: 'monthly',
       name: 'Gold Monthly',

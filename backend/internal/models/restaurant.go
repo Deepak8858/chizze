@@ -1,35 +1,28 @@
 package models
 
-import "time"
-
-// Restaurant represents a restaurant listing
+// Restaurant represents a restaurant listing (matches Appwrite restaurants collection)
 type Restaurant struct {
-	ID                 string    `json:"$id"`
-	OwnerID            string    `json:"owner_id"`
-	Name               string    `json:"name"`
-	Description        string    `json:"description"`
-	CoverImageURL      string    `json:"cover_image_url"`
-	LogoURL            string    `json:"logo_url"`
-	Cuisines           []string  `json:"cuisines"`
-	Address            string    `json:"address"`
-	Latitude           float64   `json:"latitude"`
-	Longitude          float64   `json:"longitude"`
-	City               string    `json:"city"`
-	Rating             float64   `json:"rating"`
-	TotalRatings       int       `json:"total_ratings"`
-	PriceForTwo        int       `json:"price_for_two"`
-	AvgDeliveryTimeMin int       `json:"avg_delivery_time_min"`
-	IsVegOnly          bool      `json:"is_veg_only"`
-	IsOnline           bool      `json:"is_online"`
-	IsFeatured         bool      `json:"is_featured"`
-	IsPromoted         bool      `json:"is_promoted"`
-	OpeningTime        string    `json:"opening_time"`
-	ClosingTime        string    `json:"closing_time"`
-	FSSAILicense       string    `json:"fssai_license"`
-	GSTNumber          string    `json:"gst_number"`
-	Commission         float64   `json:"commission_percentage"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                 string   `json:"$id"`
+	OwnerID            string   `json:"owner_id"`
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	CoverImageURL      string   `json:"cover_image_url"`
+	LogoURL            string   `json:"logo_url"`
+	Cuisines           []string `json:"cuisines"`
+	Address            string   `json:"address"`
+	Latitude           float64  `json:"latitude"`
+	Longitude          float64  `json:"longitude"`
+	City               string   `json:"city"`
+	Rating             float64  `json:"rating"`
+	TotalRatings       int      `json:"total_ratings"`
+	PriceForTwo        int      `json:"price_for_two"`
+	AvgDeliveryTimeMin int      `json:"avg_delivery_time_min"`
+	IsVegOnly          bool     `json:"is_veg_only"`
+	IsOnline           bool     `json:"is_online"`
+	IsFeatured         bool     `json:"is_featured"`
+	IsPromoted         bool     `json:"is_promoted"`
+	OpeningTime        string   `json:"opening_time"`
+	ClosingTime        string   `json:"closing_time"`
 }
 
 // MenuCategory groups menu items

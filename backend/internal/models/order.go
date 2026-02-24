@@ -22,41 +22,42 @@ const (
 	PaymentFailed   = "failed"
 )
 
-// Order represents a food order
+// Order represents a food order (matches Appwrite orders collection)
 type Order struct {
-	ID                      string     `json:"$id"`
-	OrderNumber             string     `json:"order_number"`
-	CustomerID              string     `json:"customer_id"`
-	RestaurantID            string     `json:"restaurant_id"`
-	DeliveryPartnerID       string     `json:"delivery_partner_id,omitempty"`
-	DeliveryAddressID       string     `json:"delivery_address_id"`
-	DeliveryAddressSnapshot string     `json:"delivery_address_snapshot"`
-	Items                   string     `json:"items"` // JSON array string
-	ItemTotal               float64    `json:"item_total"`
-	DeliveryFee             float64    `json:"delivery_fee"`
-	PlatformFee             float64    `json:"platform_fee"`
-	GST                     float64    `json:"gst"`
-	Discount                float64    `json:"discount"`
-	CouponCode              string     `json:"coupon_code,omitempty"`
-	Tip                     float64    `json:"tip"`
-	GrandTotal              float64    `json:"grand_total"`
-	PaymentMethod           string     `json:"payment_method"`
-	PaymentStatus           string     `json:"payment_status"`
-	PaymentID               string     `json:"payment_id,omitempty"`
-	Status                  string     `json:"status"`
-	SpecialInstructions     string     `json:"special_instructions"`
-	DeliveryInstructions    string     `json:"delivery_instructions"`
-	EstimatedDeliveryMin    int        `json:"estimated_delivery_min"`
-	PlacedAt                time.Time  `json:"placed_at"`
-	ConfirmedAt             *time.Time `json:"confirmed_at,omitempty"`
-	PreparedAt              *time.Time `json:"prepared_at,omitempty"`
-	PickedUpAt              *time.Time `json:"picked_up_at,omitempty"`
-	DeliveredAt             *time.Time `json:"delivered_at,omitempty"`
-	CancelledAt             *time.Time `json:"cancelled_at,omitempty"`
-	CancellationReason      string     `json:"cancellation_reason,omitempty"`
-	CancelledBy             string     `json:"cancelled_by,omitempty"`
-	CreatedAt               time.Time  `json:"created_at"`
-	UpdatedAt               time.Time  `json:"updated_at"`
+	ID                   string     `json:"$id"`
+	OrderNumber          string     `json:"order_number"`
+	CustomerID           string     `json:"customer_id"`
+	RestaurantID         string     `json:"restaurant_id"`
+	RestaurantName       string     `json:"restaurant_name"`
+	DeliveryPartnerID    string     `json:"delivery_partner_id,omitempty"`
+	DeliveryPartnerName  string     `json:"delivery_partner_name,omitempty"`
+	DeliveryPartnerPhone string     `json:"delivery_partner_phone,omitempty"`
+	DeliveryAddressID    string     `json:"delivery_address_id"`
+	Items                string     `json:"items"` // JSON array string
+	ItemTotal            float64    `json:"item_total"`
+	DeliveryFee          float64    `json:"delivery_fee"`
+	PlatformFee          float64    `json:"platform_fee"`
+	GST                  float64    `json:"gst"`
+	Discount             float64    `json:"discount"`
+	CouponCode           string     `json:"coupon_code,omitempty"`
+	Tip                  float64    `json:"tip"`
+	GrandTotal           float64    `json:"grand_total"`
+	PaymentMethod        string     `json:"payment_method"`
+	PaymentStatus        string     `json:"payment_status"`
+	PaymentID            string     `json:"payment_id,omitempty"`
+	RazorpayOrderID      string     `json:"razorpay_order_id,omitempty"`
+	Status               string     `json:"status"`
+	SpecialInstructions  string     `json:"special_instructions"`
+	DeliveryInstructions string     `json:"delivery_instructions"`
+	EstimatedDeliveryMin int        `json:"estimated_delivery_min"`
+	PlacedAt             time.Time  `json:"placed_at"`
+	ConfirmedAt          *time.Time `json:"confirmed_at,omitempty"`
+	PreparedAt           *time.Time `json:"prepared_at,omitempty"`
+	PickedUpAt           *time.Time `json:"picked_up_at,omitempty"`
+	DeliveredAt          *time.Time `json:"delivered_at,omitempty"`
+	CancelledAt          *time.Time `json:"cancelled_at,omitempty"`
+	CancellationReason   string     `json:"cancellation_reason,omitempty"`
+	CancelledBy          string     `json:"cancelled_by,omitempty"`
 }
 
 // OrderItem is a line item in an order

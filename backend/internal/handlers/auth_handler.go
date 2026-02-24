@@ -96,12 +96,10 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 		}
 
 		userData := map[string]interface{}{
-			"phone":      phone,
-			"email":      email,
-			"name":       name,
-			"role":       role,
-			"is_active":  true,
-			"created_at": time.Now().Format(time.RFC3339),
+			"phone": phone,
+			"email": email,
+			"name":  name,
+			"role":  role,
 		}
 		_, createErr := h.appwrite.CreateUser(appwriteUserID, userData)
 		if createErr != nil {
@@ -222,10 +220,8 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	if err != nil {
 		// Create user
 		userData := map[string]interface{}{
-			"phone":      req.Phone,
-			"role":       "customer",
-			"is_active":  true,
-			"created_at": time.Now().Format(time.RFC3339),
+			"phone": req.Phone,
+			"role":  "customer",
 		}
 		h.appwrite.CreateUser(appwriteUserID, userData)
 	} else {

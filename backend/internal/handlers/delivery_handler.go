@@ -159,12 +159,12 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 
 	// Also store in rider_locations for tracking history
 	_, _ = h.appwrite.CreateDeliveryLocation("unique()", map[string]interface{}{
-		"partner_id": userID,
-		"latitude":   req.Latitude,
-		"longitude":  req.Longitude,
-		"heading":    req.Heading,
-		"speed":      req.Speed,
-		"timestamp":  time.Now().Format(time.RFC3339),
+		"rider_id":  userID,
+		"latitude":  req.Latitude,
+		"longitude": req.Longitude,
+		"heading":   req.Heading,
+		"speed":     req.Speed,
+		"is_online": true,
 	})
 
 	// Broadcast live location to customers tracking this rider's deliveries

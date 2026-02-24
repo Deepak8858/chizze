@@ -134,8 +134,4 @@ final favoritesProvider =
   return FavoritesNotifier(api);
 });
 
-/// Mock favorites for offline fallback
-final List<Restaurant> _mockFavorites = [
-  Restaurant.mockList[0],
-  Restaurant.mockList[2],
-];
+

@@ -256,7 +256,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 loading: () => const Center(
                   child: CircularProgressIndicator(color: AppColors.primary),
                 ),
-                error: (_, __) => _buildEmptyState(query),
+                error: (_, _) => _buildEmptyState(query),
                 data: (results) => results.isEmpty
                     ? _buildEmptyState(query)
                     : ListView.builder(
