@@ -349,6 +349,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? city,
     double? latitude,
     double? longitude,
+    bool? isVeg,
     // Restaurant-specific
     String? restaurantName,
     String? restaurantAddress,
@@ -373,6 +374,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (latitude != null && longitude != null) {
         body['latitude'] = latitude;
         body['longitude'] = longitude;
+      }
+      if (isVeg != null) {
+        body['is_veg'] = isVeg;
       }
 
       // Role-specific fields

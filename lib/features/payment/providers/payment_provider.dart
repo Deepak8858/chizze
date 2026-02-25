@@ -113,6 +113,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await _api.post(
         ApiConfig.orders,
         body: body,
+        headers: headers.isNotEmpty ? headers : null,
       );
 
       if (response.success && response.data != null) {

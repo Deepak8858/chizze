@@ -226,8 +226,9 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	// --- 7. Serialize items as JSON string ---
 	itemsJSON, _ := json.Marshal(verifiedItems)
 
-	// --- 8. Address snapshot (logged for debugging) ---
-	_ = address["full_address"]
+	// --- 8. Address snapshot — store address data in order for historical reference ---
+	deliveryAddress, _ := address["full_address"].(string)
+	deliveryLandmark, _ := address["landmark"].(string)
 
 	// --- 9. Estimate delivery time ---
 	prepTime := 15.0 // default
@@ -246,7 +247,13 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		"customer_id":            userID,
 		"restaurant_id":          req.RestaurantID,
 		"restaurant_name":        restaurantName,
+		"restaurant_latitude":    restLat,
+		"restaurant_longitude":   restLng,
 		"delivery_address_id":    req.DeliveryAddressID,
+		"delivery_address":       deliveryAddress,
+		"delivery_landmark":      deliveryLandmark,
+		"delivery_latitude":      addrLat,
+		"delivery_longitude":     addrLng,
 		"items":                  string(itemsJSON),
 		"item_total":             itemTotal,
 		"delivery_fee":           deliveryFee,
@@ -269,6 +276,20 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	if err != nil {
 		utils.InternalError(c, "Failed to create order")
 		return
+	}
+
+	// Broadcast new order to restaurant owner via WebSocket
+	if h.broadcaster != nil {
+		ownerID, _ := restaurant["owner_id"].(string)
+		if ownerID != "" {
+			orderID, _ := doc["$id"].(string)
+			h.broadcaster.BroadcastNewOrder(ownerID, orderID, map[string]interface{}{
+				"order_number":    orderNumber,
+				"restaurant_name": restaurantName,
+				"grand_total":     grandTotal,
+				"items_count":     len(verifiedItems),
+			})
+		}
 	}
 
 	// Cache idempotency response (24h TTL)

@@ -148,10 +148,15 @@ class ApiClient {
   Future<ApiResponse<T>> post<T>(
     String endpoint, {
     Map<String, dynamic>? body,
+    Map<String, String>? headers,
     T Function(dynamic)? fromData,
   }) async {
     try {
-      final response = await _dio.post(endpoint, data: body);
+      final response = await _dio.post(
+        endpoint,
+        data: body,
+        options: headers != null ? Options(headers: headers) : null,
+      );
       return _parseResponse<T>(response, fromData);
     } on DioException catch (e) {
       throw _handleDioError(e);

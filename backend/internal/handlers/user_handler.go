@@ -13,7 +13,6 @@ var allowedProfileFields = map[string]bool{
 	"email":              true,
 	"phone":              true,
 	"avatar_url":         true,
-	"role":               true,
 	"address":            true,
 	"latitude":           true,
 	"longitude":          true,

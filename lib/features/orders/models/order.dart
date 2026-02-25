@@ -9,6 +9,12 @@ class Order {
   final String? deliveryPartnerName;
   final String? deliveryPartnerPhone;
   final String deliveryAddressId;
+  final String? deliveryAddress;
+  final String? deliveryLandmark;
+  final double? deliveryLatitude;
+  final double? deliveryLongitude;
+  final double? restaurantLatitude;
+  final double? restaurantLongitude;
   final List<OrderItem> items;
   final double itemTotal;
   final double deliveryFee;
@@ -45,6 +51,12 @@ class Order {
     this.deliveryPartnerName,
     this.deliveryPartnerPhone,
     required this.deliveryAddressId,
+    this.deliveryAddress,
+    this.deliveryLandmark,
+    this.deliveryLatitude,
+    this.deliveryLongitude,
+    this.restaurantLatitude,
+    this.restaurantLongitude,
     required this.items,
     required this.itemTotal,
     required this.deliveryFee,
@@ -83,6 +95,12 @@ class Order {
       deliveryPartnerName: map['delivery_partner_name'],
       deliveryPartnerPhone: map['delivery_partner_phone'],
       deliveryAddressId: map['delivery_address_id'] ?? '',
+      deliveryAddress: map['delivery_address'],
+      deliveryLandmark: map['delivery_landmark'],
+      deliveryLatitude: (map['delivery_latitude'] as num?)?.toDouble(),
+      deliveryLongitude: (map['delivery_longitude'] as num?)?.toDouble(),
+      restaurantLatitude: (map['restaurant_latitude'] as num?)?.toDouble(),
+      restaurantLongitude: (map['restaurant_longitude'] as num?)?.toDouble(),
       items:
           (map['items'] as List<dynamic>?)
               ?.map((i) => OrderItem.fromMap(i as Map<String, dynamic>))
@@ -132,6 +150,12 @@ class Order {
       'restaurant_id': restaurantId,
       'restaurant_name': restaurantName,
       'delivery_address_id': deliveryAddressId,
+      'delivery_address': deliveryAddress,
+      'delivery_landmark': deliveryLandmark,
+      'delivery_latitude': deliveryLatitude,
+      'delivery_longitude': deliveryLongitude,
+      'restaurant_latitude': restaurantLatitude,
+      'restaurant_longitude': restaurantLongitude,
       'items': items.map((i) => i.toMap()).toList(),
       'item_total': itemTotal,
       'delivery_fee': deliveryFee,
@@ -175,6 +199,12 @@ class Order {
       deliveryPartnerName: deliveryPartnerName ?? this.deliveryPartnerName,
       deliveryPartnerPhone: deliveryPartnerPhone ?? this.deliveryPartnerPhone,
       deliveryAddressId: deliveryAddressId,
+      deliveryAddress: deliveryAddress,
+      deliveryLandmark: deliveryLandmark,
+      deliveryLatitude: deliveryLatitude,
+      deliveryLongitude: deliveryLongitude,
+      restaurantLatitude: restaurantLatitude,
+      restaurantLongitude: restaurantLongitude,
       items: items,
       itemTotal: itemTotal,
       deliveryFee: deliveryFee,

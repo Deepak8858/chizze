@@ -501,6 +501,13 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 	if longitude != 0 {
 		userUpdate["longitude"] = longitude
 	}
+	// Save preference fields from onboarding
+	if isVeg, ok := req["is_veg"].(bool); ok {
+		userUpdate["is_veg"] = isVeg
+	}
+	if darkMode, ok := req["dark_mode"].(bool); ok {
+		userUpdate["dark_mode"] = darkMode
+	}
 
 	_, err := h.appwrite.UpdateUser(userID, userUpdate)
 	if err != nil {
@@ -523,6 +530,12 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 		}
 		if longitude != 0 {
 			createData["longitude"] = longitude
+		}
+		if isVeg, ok := req["is_veg"].(bool); ok {
+			createData["is_veg"] = isVeg
+		}
+		if darkMode, ok := req["dark_mode"].(bool); ok {
+			createData["dark_mode"] = darkMode
 		}
 		_, createErr := h.appwrite.CreateUser(userID, createData)
 		if createErr != nil {
@@ -653,8 +666,12 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 		}
 	}
 
+	// Fetch updated user doc to return to client
+	updatedUser, _ := h.appwrite.GetUser(userID)
+
 	utils.Success(c, gin.H{
 		"message": "Onboarding complete",
 		"role":    role,
+		"user":    updatedUser,
 	})
 }

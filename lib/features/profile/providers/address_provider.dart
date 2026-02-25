@@ -113,7 +113,21 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
           },
         )
         .then((r) {
-      if (!r.success) {
+      if (r.success && r.data != null) {
+        // Replace optimistic entry with server-returned doc (real $id)
+        final data = r.data as Map<String, dynamic>;
+        final serverAddress = SavedAddress(
+          id: data['\$id'] ?? address.id,
+          label: data['label'] ?? address.label,
+          fullAddress: data['full_address'] ?? address.fullAddress,
+          landmark: data['landmark'] ?? address.landmark,
+          latitude: (data['latitude'] ?? address.latitude).toDouble(),
+          longitude: (data['longitude'] ?? address.longitude).toDouble(),
+          isDefault: data['is_default'] ?? address.isDefault,
+        );
+        state = state.map((a) => a.id == address.id ? serverAddress : a).toList();
+        debugPrint('[Address] synced server ID: ${serverAddress.id}');
+      } else if (!r.success) {
         debugPrint('[Address] add failed: ${r.error}');
         state = state.where((a) => a.id != address.id).toList();
       }
@@ -163,22 +177,73 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
   void setDefault(String id) {
     final prev = List<SavedAddress>.of(state);
     state = state.map((a) => a.copyWith(isDefault: a.id == id)).toList();
-    // Persist default flag to backend for each address
-    for (final addr in state) {
+    // Only update the new default address and the old default (if any)
+    final oldDefault = prev.where((a) => a.isDefault && a.id != id).toList();
+    // Set new default
+    _api.put('${ApiConfig.addresses}/$id', body: {
+      'is_default': true,
+    }).then((r) {
+      if (!r.success) {
+        debugPrint('[Address] setDefault update failed for $id: ${r.error}');
+        state = prev;
+      }
+    }).catchError((e) {
+      debugPrint('[Address] setDefault error for $id: $e');
+      state = prev;
+    });
+    // Clear old default(s)
+    for (final addr in oldDefault) {
       _api.put('${ApiConfig.addresses}/${addr.id}', body: {
-        'is_default': addr.id == id,
+        'is_default': false,
       }).then((r) {
         if (!r.success) {
-          debugPrint('[Address] setDefault update failed for ${addr.id}: ${r.error}');
+          debugPrint('[Address] clear old default failed for ${addr.id}: ${r.error}');
         }
       }).catchError((e) {
-        debugPrint('[Address] setDefault error for ${addr.id}: $e');
-        state = prev;
+        debugPrint('[Address] clear old default error for ${addr.id}: $e');
       });
     }
   }
 
   // Mock addresses removed — using real data from API only
+
+  /// Add address and wait for server response — returns the server-created address
+  /// Use this for flows that need the real server ID (e.g. onboarding, checkout)
+  Future<SavedAddress?> addAddressAsync(SavedAddress address) async {
+    try {
+      final r = await _api.post(
+        ApiConfig.addresses,
+        body: {
+          'label': address.label,
+          'full_address': address.fullAddress,
+          'landmark': address.landmark,
+          'latitude': address.latitude,
+          'longitude': address.longitude,
+          'is_default': address.isDefault,
+        },
+      );
+      if (r.success && r.data != null) {
+        final data = r.data as Map<String, dynamic>;
+        final serverAddress = SavedAddress(
+          id: data['\$id'] ?? '',
+          label: data['label'] ?? address.label,
+          fullAddress: data['full_address'] ?? address.fullAddress,
+          landmark: data['landmark'] ?? address.landmark,
+          latitude: (data['latitude'] ?? address.latitude).toDouble(),
+          longitude: (data['longitude'] ?? address.longitude).toDouble(),
+          isDefault: data['is_default'] ?? address.isDefault,
+        );
+        state = [...state, serverAddress];
+        debugPrint('[Address] addAddressAsync success: ${serverAddress.id}');
+        return serverAddress;
+      }
+      debugPrint('[Address] addAddressAsync failed: ${r.error}');
+      return null;
+    } catch (e) {
+      debugPrint('[Address] addAddressAsync error: $e');
+      return null;
+    }
+  }
 }
 
 final addressProvider =

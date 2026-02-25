@@ -24,6 +24,7 @@ class OrderTrackingScreen extends ConsumerStatefulWidget {
 
 class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   bool _trackingStarted = false;
+  String? _lastKnownRiderId;
 
   @override
   void initState() {
@@ -38,9 +39,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         .where((o) => o.id == widget.orderId)
         .firstOrNull;
     final riderId = order?.deliveryPartnerId;
-    if (riderId != null && riderId.isNotEmpty) {
+    if (riderId != null && riderId.isNotEmpty && riderId != _lastKnownRiderId) {
+      if (_trackingStarted) {
+        ref.read(riderLocationProvider.notifier).stopTracking();
+      }
       ref.read(riderLocationProvider.notifier).trackRider(riderId);
       _trackingStarted = true;
+      _lastKnownRiderId = riderId;
     }
   }
 
@@ -67,6 +72,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       );
     }
 
+    // Restart tracking when a delivery partner is assigned or changes
+    final currentRiderId = order.deliveryPartnerId;
+    if (currentRiderId != null &&
+        currentRiderId.isNotEmpty &&
+        currentRiderId != _lastKnownRiderId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startTracking());
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -89,32 +102,39 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
           children: [
             // ─── Live Map ───
             if (order.status.index >= OrderStatus.pickedUp.index &&
-                order.status != OrderStatus.cancelled)
+                order.status != OrderStatus.cancelled &&
+                order.restaurantLatitude != null &&
+                order.restaurantLongitude != null &&
+                order.deliveryLatitude != null &&
+                order.deliveryLongitude != null)
               Builder(
                 builder: (context) {
                   final riderLocation = ref.watch(riderLocationProvider);
+                  // Use midpoint of restaurant and customer as rider fallback
+                  final fallbackLat = (order.restaurantLatitude! + order.deliveryLatitude!) / 2;
+                  final fallbackLng = (order.restaurantLongitude! + order.deliveryLongitude!) / 2;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.xl),
                     child: DeliveryMap(
                       height: 220,
                       trackRider: true,
                       markers: [
-                        const MapMarker(
+                        MapMarker(
                           type: MapMarkerType.restaurant,
-                          latitude: 17.4486,
-                          longitude: 78.3810,
-                          label: 'Restaurant',
+                          latitude: order.restaurantLatitude!,
+                          longitude: order.restaurantLongitude!,
+                          label: order.restaurantName,
                         ),
                         MapMarker(
                           type: MapMarkerType.rider,
-                          latitude: riderLocation?.latitude ?? 17.4440,
-                          longitude: riderLocation?.longitude ?? 78.3860,
+                          latitude: riderLocation?.latitude ?? fallbackLat,
+                          longitude: riderLocation?.longitude ?? fallbackLng,
                           label: order.deliveryPartnerName ?? 'Rider',
                         ),
-                        const MapMarker(
+                        MapMarker(
                           type: MapMarkerType.customer,
-                          latitude: 17.4401,
-                          longitude: 78.3911,
+                          latitude: order.deliveryLatitude!,
+                          longitude: order.deliveryLongitude!,
                           label: 'You',
                         ),
                       ],

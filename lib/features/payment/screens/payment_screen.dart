@@ -411,16 +411,31 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     // Get default delivery address — fall back to user profile address
     final addresses = ref.read(addressProvider);
     final profile = ref.read(userProfileProvider);
-    final defaultAddress = addresses.isNotEmpty
+    var defaultAddress = addresses.isNotEmpty
         ? addresses.firstWhere(
             (a) => a.isDefault,
             orElse: () => addresses.first,
           )
         : null;
 
-    // Use saved address ID, or fall back to 'profile' placeholder for profile address
-    final deliveryAddressId = defaultAddress?.id ?? 
-        (profile.address.isNotEmpty ? 'profile_address' : '');
+    // If no saved address exists but profile has address data, auto-create one
+    if (defaultAddress == null && profile.address.isNotEmpty) {
+      final created = await ref.read(addressProvider.notifier).addAddressAsync(
+        SavedAddress(
+          id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+          label: 'Home',
+          fullAddress: profile.address,
+          latitude: profile.latitude,
+          longitude: profile.longitude,
+          isDefault: true,
+        ),
+      );
+      if (created != null) {
+        defaultAddress = created;
+      }
+    }
+
+    final deliveryAddressId = defaultAddress?.id ?? '';
 
     if (deliveryAddressId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
