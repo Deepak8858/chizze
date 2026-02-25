@@ -6,6 +6,8 @@ import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../providers/cart_provider.dart';
+import '../../profile/providers/address_provider.dart';
+import '../../profile/providers/user_profile_provider.dart';
 
 /// Cart & Checkout screen
 class CartScreen extends ConsumerWidget {
@@ -47,6 +49,11 @@ class CartScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ─── Delivery Address ───
+                  _buildDeliveryAddress(context, ref),
+
+                  const SizedBox(height: AppSpacing.xl),
+
                   // ─── Cart Items ───
                   ...cartState.items.asMap().entries.map((entry) {
                     return _buildCartItemCard(ref, entry.value, entry.key);
@@ -73,6 +80,89 @@ class CartScreen extends ConsumerWidget {
 
           // ─── Checkout Bar ───
           _buildCheckoutBar(context, cartState),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeliveryAddress(BuildContext context, WidgetRef ref) {
+    final addresses = ref.watch(addressProvider);
+    final profile = ref.watch(userProfileProvider);
+    final defaultAddr = addresses.where((a) => a.isDefault).firstOrNull ??
+        (addresses.isNotEmpty ? addresses.first : null);
+
+    final label = defaultAddr?.label ?? 'Home';
+    final addressText = defaultAddr?.fullAddress ??
+        (profile.address.isNotEmpty ? profile.address : null);
+
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.location_on_rounded,
+                size: 18,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Delivery Address',
+                style: AppTypography.body1.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => context.push('/addresses'),
+                child: Text(
+                  addressText != null ? 'Change' : 'Add',
+                  style: AppTypography.buttonSmall.copyWith(
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (addressText != null) ...[
+            Text(
+              label,
+              style: AppTypography.body2.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              addressText,
+              style: AppTypography.caption,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ] else
+            GestureDetector(
+              onTap: () => context.push('/addresses'),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                    style: BorderStyle.solid,
+                  ),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                ),
+                child: Center(
+                  child: Text(
+                    '+ Add delivery address',
+                    style: AppTypography.body2.copyWith(
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

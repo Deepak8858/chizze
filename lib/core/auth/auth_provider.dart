@@ -401,6 +401,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       debugPrint('[Auth] Onboarding profile saved via /auth/onboard');
 
+      // For customers, auto-create a saved address from onboarding data
+      if (state.userRole == 'customer' && address != null && address.isNotEmpty) {
+        try {
+          await _apiClient.post(
+            '/users/me/addresses',
+            body: {
+              'label': 'Home',
+              'full_address': address,
+              'landmark': '',
+              'latitude': latitude ?? 0,
+              'longitude': longitude ?? 0,
+              'is_default': true,
+            },
+          );
+          debugPrint('[Auth] Auto-created saved address from onboarding');
+        } catch (e) {
+          debugPrint('[Auth] Auto-create saved address failed (non-critical): $e');
+        }
+      }
+
       // Mark as onboarded locally ONLY after successful API call
       await _secureStorage.write(key: _kOnboardedKey, value: 'true');
       state = state.copyWith(isNewUser: false);

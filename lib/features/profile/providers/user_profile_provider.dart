@@ -15,6 +15,13 @@ class UserProfile {
   final bool isVeg;
   final bool darkMode;
   final String defaultAddressId;
+  final String address;
+  final double latitude;
+  final double longitude;
+  final String role;
+  final bool isGoldMember;
+  final String referralCode;
+  final String referredBy;
 
   const UserProfile({
     required this.id,
@@ -25,6 +32,13 @@ class UserProfile {
     this.isVeg = false,
     this.darkMode = true,
     this.defaultAddressId = '',
+    this.address = '',
+    this.latitude = 0,
+    this.longitude = 0,
+    this.role = 'customer',
+    this.isGoldMember = false,
+    this.referralCode = '',
+    this.referredBy = '',
   });
 
   UserProfile copyWith({
@@ -34,6 +48,13 @@ class UserProfile {
     bool? isVeg,
     bool? darkMode,
     String? defaultAddressId,
+    String? address,
+    double? latitude,
+    double? longitude,
+    String? role,
+    bool? isGoldMember,
+    String? referralCode,
+    String? referredBy,
   }) {
     return UserProfile(
       id: id,
@@ -44,6 +65,13 @@ class UserProfile {
       isVeg: isVeg ?? this.isVeg,
       darkMode: darkMode ?? this.darkMode,
       defaultAddressId: defaultAddressId ?? this.defaultAddressId,
+      address: address ?? this.address,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      role: role ?? this.role,
+      isGoldMember: isGoldMember ?? this.isGoldMember,
+      referralCode: referralCode ?? this.referralCode,
+      referredBy: referredBy ?? this.referredBy,
     );
   }
 
@@ -63,6 +91,13 @@ class UserProfile {
     isVeg: false,
     darkMode: true,
     defaultAddressId: '',
+    address: '',
+    latitude: 0,
+    longitude: 0,
+    role: 'customer',
+    isGoldMember: false,
+    referralCode: '',
+    referredBy: '',
   );
 }
 
@@ -100,10 +135,25 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
           phone: d['phone'] ?? state.phone,
           email: d['email'] ?? state.email,
           avatarUrl: d['avatar_url'],
-          isVeg: d['dietary_preferences']?.contains('veg') ?? false,
-          darkMode: state.darkMode,
-          defaultAddressId: state.defaultAddressId,
+          isVeg: d['is_veg'] ?? state.isVeg,
+          darkMode: d['dark_mode'] ?? state.darkMode,
+          defaultAddressId: d['default_address_id'] ?? state.defaultAddressId,
+          address: d['address'] ?? state.address,
+          latitude: (d['latitude'] ?? state.latitude).toDouble(),
+          longitude: (d['longitude'] ?? state.longitude).toDouble(),
+          role: d['role'] ?? state.role,
+          isGoldMember: d['is_gold_member'] ?? state.isGoldMember,
+          referralCode: d['referral_code'] ?? state.referralCode,
+          referredBy: d['referred_by'] ?? state.referredBy,
         );
+
+        // Sync local prefs with server values
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_keyIsVeg, state.isVeg);
+        await prefs.setBool(_keyDarkMode, state.darkMode);
+        if (state.defaultAddressId.isNotEmpty) {
+          await prefs.setString(_keyDefaultAddress, state.defaultAddressId);
+        }
       }
     } on ApiException {
       // Keep current state
@@ -144,6 +194,14 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
     state = state.copyWith(isVeg: !state.isVeg);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyIsVeg, state.isVeg);
+    // Sync to backend
+    _api.put(ApiConfig.profile, body: {'is_veg': state.isVeg}).then((r) {
+      if (!r.success) {
+        debugPrint('[Profile] toggleVeg sync failed: ${r.error}');
+      }
+    }).catchError((e) {
+      debugPrint('[Profile] toggleVeg sync error: $e');
+    });
   }
 
   void toggleDarkMode() async {

@@ -7,6 +7,7 @@ import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../../cart/providers/cart_provider.dart';
 import '../../profile/providers/address_provider.dart';
+import '../../profile/providers/user_profile_provider.dart';
 import '../providers/payment_provider.dart';
 import '../../orders/providers/orders_provider.dart';
 
@@ -48,6 +49,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ─── Delivery Address ───
+                  _buildDeliveryAddressSection(context, ref),
+
+                  const SizedBox(height: AppSpacing.xxl),
+
                   // ─── Order Summary ───
                   _buildOrderSummary(cartState),
 
@@ -124,6 +130,86 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
           // ─── Pay Button ───
           _buildPayBar(cartState, paymentState),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeliveryAddressSection(BuildContext context, WidgetRef ref) {
+    final addresses = ref.watch(addressProvider);
+    final profile = ref.watch(userProfileProvider);
+    final defaultAddr = addresses.where((a) => a.isDefault).firstOrNull ??
+        (addresses.isNotEmpty ? addresses.first : null);
+
+    final label = defaultAddr?.label ?? 'Home';
+    final addressText = defaultAddr?.fullAddress ??
+        (profile.address.isNotEmpty ? profile.address : null);
+
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.location_on_rounded,
+                size: 18,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Delivering to',
+                style: AppTypography.body1.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => context.push('/addresses'),
+                child: Text(
+                  addressText != null ? 'Change' : 'Add Address',
+                  style: AppTypography.buttonSmall.copyWith(
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (addressText != null) ...[
+            Text(
+              label,
+              style: AppTypography.body2.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              addressText,
+              style: AppTypography.caption,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ] else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                border: Border.all(
+                  color: AppColors.error.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  'No delivery address set. Tap "Add Address" above.',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.error,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -322,8 +408,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final userEmail = authState.user?.email ?? '';
     final userPhone = authState.user?.phone ?? '';
 
-    // Get default delivery address
+    // Get default delivery address — fall back to user profile address
     final addresses = ref.read(addressProvider);
+    final profile = ref.read(userProfileProvider);
     final defaultAddress = addresses.isNotEmpty
         ? addresses.firstWhere(
             (a) => a.isDefault,
@@ -331,10 +418,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           )
         : null;
 
-    if (defaultAddress == null) {
+    // Use saved address ID, or fall back to 'profile' placeholder for profile address
+    final deliveryAddressId = defaultAddress?.id ?? 
+        (profile.address.isNotEmpty ? 'profile_address' : '');
+
+    if (deliveryAddressId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please add a delivery address first')),
       );
+      context.push('/addresses');
       return;
     }
 
@@ -344,7 +436,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final orderDoc = await ref.read(paymentProvider.notifier).placeBackendOrder(
           cartState: cartState,
           paymentMethod: paymentMethod,
-          deliveryAddressId: defaultAddress.id,
+          deliveryAddressId: deliveryAddressId,
           tip: _tip,
           idempotencyKey:
               'order_${DateTime.now().millisecondsSinceEpoch}_${cartState.restaurantId}',

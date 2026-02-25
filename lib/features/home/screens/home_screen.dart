@@ -11,6 +11,8 @@ import '../providers/restaurant_provider.dart';
 import '../models/restaurant.dart';
 import '../../favorites/providers/favorites_provider.dart';
 import '../../coupons/providers/coupons_provider.dart';
+import '../../profile/providers/user_profile_provider.dart';
+import '../../profile/providers/address_provider.dart';
 
 /// Customer home screen — restaurant discovery feed
 class HomeScreen extends ConsumerWidget {
@@ -22,6 +24,15 @@ class HomeScreen extends ConsumerWidget {
     final userName = authState.user?.name ?? 'Foodie';
     final restaurantState = ref.watch(restaurantProvider);
     final restaurants = restaurantState.restaurants;
+
+    // Get delivery address: prefer default saved address, fall back to profile address
+    final addresses = ref.watch(addressProvider);
+    final profile = ref.watch(userProfileProvider);
+    final defaultAddr = addresses.where((a) => a.isDefault).firstOrNull ?? 
+                        (addresses.isNotEmpty ? addresses.first : null);
+    final deliveryLabel = defaultAddr?.label ?? 'Home';
+    final deliveryAddress = defaultAddr?.fullAddress ?? 
+                           (profile.address.isNotEmpty ? profile.address : 'Set delivery address');
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -37,7 +48,7 @@ class HomeScreen extends ConsumerWidget {
                   AppSpacing.xl,
                   AppSpacing.base,
                 ),
-                child: _buildHeader(context, userName),
+                child: _buildHeader(context, userName, deliveryLabel, deliveryAddress),
               ),
             ),
 
@@ -121,41 +132,44 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, String userName) {
+  Widget _buildHeader(BuildContext context, String userName, String deliveryLabel, String deliveryAddress) {
     return Row(
       children: [
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.location_on_rounded,
-                    color: AppColors.primary,
-                    size: 18,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Text(
-                    'Deliver to',
-                    style: AppTypography.caption.copyWith(
+          child: GestureDetector(
+            onTap: () => context.push('/addresses'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.location_on_rounded,
                       color: AppColors.primary,
+                      size: 18,
                     ),
-                  ),
-                  const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.primary,
-                    size: 18,
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Home · HSR Layout, Bengaluru',
-                style: AppTypography.body1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      'Deliver to',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '$deliveryLabel · $deliveryAddress',
+                  style: AppTypography.body1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
         Container(

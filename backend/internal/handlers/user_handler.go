@@ -9,14 +9,17 @@ import (
 
 // Allowed fields for profile update
 var allowedProfileFields = map[string]bool{
-	"name":       true,
-	"email":      true,
-	"phone":      true,
-	"avatar_url": true,
-	"role":       true,
-	"address":    true,
-	"latitude":   true,
-	"longitude":  true,
+	"name":               true,
+	"email":              true,
+	"phone":              true,
+	"avatar_url":         true,
+	"role":               true,
+	"address":            true,
+	"latitude":           true,
+	"longitude":          true,
+	"is_veg":             true,
+	"dark_mode":          true,
+	"default_address_id": true,
 }
 
 // UserHandler handles user profile and address endpoints
