@@ -268,6 +268,7 @@ class ProfileScreen extends ConsumerWidget {
   ) {
     final nameCtrl = TextEditingController(text: profile.name);
     final emailCtrl = TextEditingController(text: profile.email);
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -278,62 +279,80 @@ class ProfileScreen extends ConsumerWidget {
           top: Radius.circular(AppSpacing.radiusLg),
         ),
       ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.xl,
-          AppSpacing.xl,
-          AppSpacing.xl,
-          MediaQuery.of(context).viewInsets.bottom + AppSpacing.xl,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.textTertiary,
-                  borderRadius: BorderRadius.circular(2),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            AppSpacing.xl,
+            AppSpacing.xl,
+            MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.textTertiary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            Text('Edit Profile', style: AppTypography.h3),
-            const SizedBox(height: AppSpacing.xl),
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Full Name'),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: emailCtrl,
-              decoration: const InputDecoration(labelText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  ref
-                      .read(userProfileProvider.notifier)
-                      .updateName(nameCtrl.text);
-                  ref
-                      .read(userProfileProvider.notifier)
-                      .updateEmail(emailCtrl.text);
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: const Text('Save Changes'),
+              const SizedBox(height: AppSpacing.xl),
+              Text('Edit Profile', style: AppTypography.h3),
+              const SizedBox(height: AppSpacing.xl),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Full Name'),
               ),
-            ),
-          ],
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'Email'),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: isSaving
+                      ? null
+                      : () {
+                          setSheetState(() => isSaving = true);
+                          final notifier = ref.read(userProfileProvider.notifier);
+                          if (nameCtrl.text.trim() != profile.name) {
+                            notifier.updateName(nameCtrl.text.trim());
+                          }
+                          if (emailCtrl.text.trim() != profile.email) {
+                            notifier.updateEmail(emailCtrl.text.trim());
+                          }
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Profile updated')),
+                          );
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Save Changes'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

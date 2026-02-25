@@ -261,6 +261,11 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 		return
 	}
 
+	// Clear the pending_delivery key so matcher doesn't re-broadcast this order
+	if h.redis != nil {
+		h.redis.Del(context.Background(), "pending_delivery:"+orderID)
+	}
+
 	// Notify customer that a delivery partner accepted their order
 	customerID, _ := order["customer_id"].(string)
 	orderNumber, _ := order["order_number"].(string)
@@ -421,18 +426,53 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 	vehicleType, _ := partner["vehicle_type"].(string)
 	vehicleNumber, _ := partner["vehicle_number"].(string)
 
+	// Extract additional fields Flutter DeliveryPartner.fromDashboard() expects
+	partnerID, _ := partner["$id"].(string)
+	partnerUserID, _ := partner["user_id"].(string)
+	partnerName, _ := partner["name"].(string)
+	partnerPhone, _ := partner["phone"].(string)
+	avatarURL, _ := partner["avatar_url"].(string)
+	curLat := getFloat(partner, "current_latitude")
+	curLng := getFloat(partner, "current_longitude")
+
+	// Calculate hours online today from login_at if available
+	hoursOnlineToday := 0.0
+	if loginAt, ok := partner["login_at"].(string); ok && loginAt != "" {
+		if t, err := time.Parse(time.RFC3339, loginAt); err == nil && isOnline {
+			hoursOnlineToday = time.Since(t).Hours()
+		}
+	}
+
+	// Tips today
+	tipsToday := 0.0
+	for _, order := range orderResult.Documents {
+		status, _ := order["status"].(string)
+		if status == models.OrderStatusDelivered {
+			tipsToday += getFloat(order, "tip")
+		}
+	}
+
 	resp := gin.H{
-		"is_online":         isOnline,
-		"rating":            rating,
-		"total_deliveries":  int(totalDeliveries),
-		"total_earnings":    totalEarnings,
-		"vehicle_type":      vehicleType,
-		"vehicle_number":    vehicleNumber,
-		"today_earnings":    todayEarnings,
-		"today_deliveries":  todayDeliveries,
-		"today_distance_km": todayDistanceKm,
-		"weekly_goal":       50,
-		"weekly_completed":  weeklyCompleted,
+		"$id":                partnerID,
+		"user_id":            partnerUserID,
+		"name":               partnerName,
+		"phone":              partnerPhone,
+		"avatar_url":         avatarURL,
+		"is_online":          isOnline,
+		"rating":             rating,
+		"total_deliveries":   int(totalDeliveries),
+		"total_earnings":     totalEarnings,
+		"vehicle_type":       vehicleType,
+		"vehicle_number":     vehicleNumber,
+		"today_earnings":     todayEarnings,
+		"today_deliveries":   todayDeliveries,
+		"today_distance_km":  todayDistanceKm,
+		"weekly_goal":        50,
+		"weekly_completed":   weeklyCompleted,
+		"current_latitude":   curLat,
+		"current_longitude":  curLng,
+		"hours_online_today": hoursOnlineToday,
+		"tips_today":         tipsToday,
 	}
 
 	if activeDeliveryOrder != nil {
@@ -515,6 +555,16 @@ func (h *DeliveryHandler) Earnings(c *gin.Context) {
 			restID, _ := order["restaurant_id"].(string)
 			ordID, _ := order["$id"].(string)
 
+			// Resolve restaurant name
+			restName := "Restaurant"
+			if restID != "" {
+				if rest, rErr := h.appwrite.GetRestaurant(restID); rErr == nil && rest != nil {
+					if n, ok := rest["name"].(string); ok {
+						restName = n
+					}
+				}
+			}
+
 			// Calculate duration from accepted_at to delivered_at
 			durationMin := 0
 			acceptedStr, _ := order["accepted_at"].(string)
@@ -528,14 +578,15 @@ func (h *DeliveryHandler) Earnings(c *gin.Context) {
 			}
 
 			recentTrips = append(recentTrips, gin.H{
-				"order_id":        ordID,
-				"order_number":    orderNumber,
-				"restaurant_id":   restID,
-				"amount":          tripEarning,
-				"tip":             tip,
-				"distance_km":     distance,
-				"duration_min":    durationMin,
-				"completed_at":    deliveredStr,
+				"order_id":         ordID,
+				"order_number":     orderNumber,
+				"restaurant_id":    restID,
+				"restaurant_name":  restName,
+				"amount":           tripEarning,
+				"tip":              tip,
+				"distance_km":      distance,
+				"duration_min":     durationMin,
+				"completed_at":     deliveredStr,
 			})
 		}
 	}
@@ -909,27 +960,30 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 	orderID := c.Param("id")
 	userID := middleware.GetUserID(c)
 
-	// Verify order exists and is assigned to this partner
+	// Verify order exists
 	order, err := h.appwrite.GetOrder(orderID)
 	if err != nil {
 		utils.NotFound(c, "Order not found")
 		return
 	}
 
-	assignedPartner, _ := order["delivery_partner_id"].(string)
-	if assignedPartner != userID {
-		utils.Forbidden(c, "Order not assigned to you")
-		return
+	// Clear the pending_delivery key so matcher can re-broadcast to other riders
+	if h.redis != nil {
+		h.redis.Del(context.Background(), "pending_delivery:"+orderID)
 	}
 
-	// Unassign partner
-	_, err = h.appwrite.UpdateOrder(orderID, map[string]interface{}{
-		"delivery_partner_id": "",
-		"accepted_at":         "",
-	})
-	if err != nil {
-		utils.InternalError(c, "Failed to reject order")
-		return
+	// If the order was already assigned to this partner, unassign
+	assignedPartner, _ := order["delivery_partner_id"].(string)
+	if assignedPartner == userID {
+		_, err = h.appwrite.UpdateOrder(orderID, map[string]interface{}{
+			"delivery_partner_id": "",
+			"accepted_at":         "",
+		})
+		if err != nil {
+			utils.InternalError(c, "Failed to reject order")
+			return
+		}
 	}
+
 	utils.Success(c, gin.H{"message": "Order rejected", "order_id": orderID})
 }

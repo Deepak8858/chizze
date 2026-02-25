@@ -135,12 +135,12 @@ class DeliveryRequest {
     required this.restaurantName,
     this.restaurantCuisine = '',
     this.restaurantAddress = '',
-    this.restaurantLatitude = 17.4486,
-    this.restaurantLongitude = 78.3810,
+    this.restaurantLatitude = 0,
+    this.restaurantLongitude = 0,
     this.customerName = 'Customer',
     this.customerAddress = '',
-    this.customerLatitude = 17.4401,
-    this.customerLongitude = 78.3911,
+    this.customerLatitude = 0,
+    this.customerLongitude = 0,
     this.pickupDistanceKm = 0,
     this.deliveryDistanceKm = 0,
     this.distanceKm = 0,
@@ -155,7 +155,7 @@ class DeliveryRequest {
   }
 
   double get countdownFraction =>
-      secondsRemaining > 0 ? secondsRemaining / 30.0 : 0;
+      secondsRemaining > 0 ? secondsRemaining / 60.0 : 0;
 
   bool get hasExpired => secondsRemaining <= 0;
 
@@ -169,15 +169,15 @@ class DeliveryRequest {
       restaurantCuisine: json['restaurant_cuisine'] as String? ?? '',
       restaurantAddress: json['restaurant_address'] as String? ?? '',
       restaurantLatitude:
-          (json['restaurant_latitude'] as num?)?.toDouble() ?? 17.4486,
+          (json['restaurant_latitude'] as num?)?.toDouble() ?? 0,
       restaurantLongitude:
-          (json['restaurant_longitude'] as num?)?.toDouble() ?? 78.3810,
+          (json['restaurant_longitude'] as num?)?.toDouble() ?? 0,
       customerName: json['customer_name'] as String? ?? 'Customer',
       customerAddress: json['customer_address'] as String? ?? '',
       customerLatitude:
-          (json['customer_latitude'] as num?)?.toDouble() ?? 17.4401,
+          (json['customer_latitude'] as num?)?.toDouble() ?? 0,
       customerLongitude:
-          (json['customer_longitude'] as num?)?.toDouble() ?? 78.3911,
+          (json['customer_longitude'] as num?)?.toDouble() ?? 0,
       pickupDistanceKm:
           (json['pickup_distance_km'] as num?)?.toDouble() ?? 0,
       deliveryDistanceKm:

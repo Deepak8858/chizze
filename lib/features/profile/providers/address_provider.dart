@@ -66,9 +66,10 @@ enum IconLabel {
   const IconLabel(this.label, this.emoji);
 }
 
-/// Address notifier — API-backed with mock fallback
+/// Address notifier — API-backed, server-first
 class AddressNotifier extends StateNotifier<List<SavedAddress>> {
   final ApiClient _api;
+  bool _fetched = false;
 
   AddressNotifier(this._api) : super(const []) {
     fetchAddresses();
@@ -92,158 +93,135 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
             isDefault: m['is_default'] ?? false,
           );
         }).toList();
+        _fetched = true;
       }
     } on ApiException {
       // Keep current state
     } catch (_) {}
   }
 
-  void addAddress(SavedAddress address) {
-    state = [...state, address];
-    _api
-        .post(
-          ApiConfig.addresses,
-          body: {
-            'label': address.label,
-            'full_address': address.fullAddress,
-            'landmark': address.landmark,
-            'latitude': address.latitude,
-            'longitude': address.longitude,
-            'is_default': address.isDefault,
-          },
-        )
-        .then((r) {
-      if (r.success && r.data != null) {
-        // Replace optimistic entry with server-returned doc (real $id)
-        final data = r.data as Map<String, dynamic>;
-        final serverAddress = SavedAddress(
-          id: data['\$id'] ?? address.id,
-          label: data['label'] ?? address.label,
-          fullAddress: data['full_address'] ?? address.fullAddress,
-          landmark: data['landmark'] ?? address.landmark,
-          latitude: (data['latitude'] ?? address.latitude).toDouble(),
-          longitude: (data['longitude'] ?? address.longitude).toDouble(),
-          isDefault: data['is_default'] ?? address.isDefault,
-        );
-        state = state.map((a) => a.id == address.id ? serverAddress : a).toList();
-        debugPrint('[Address] synced server ID: ${serverAddress.id}');
-      } else if (!r.success) {
-        debugPrint('[Address] add failed: ${r.error}');
-        state = state.where((a) => a.id != address.id).toList();
-      }
-    }).catchError((e) {
-      debugPrint('[Address] add error: $e');
-      state = state.where((a) => a.id != address.id).toList();
-    });
+  bool get hasFetched => _fetched;
+
+  SavedAddress _parseDoc(Map<String, dynamic> data, {SavedAddress? fallback}) {
+    return SavedAddress(
+      id: data['\$id'] ?? fallback?.id ?? '',
+      label: data['label'] ?? fallback?.label ?? 'Other',
+      fullAddress: data['full_address'] ?? fallback?.fullAddress ?? '',
+      landmark: data['landmark'] ?? fallback?.landmark ?? '',
+      latitude: (data['latitude'] ?? fallback?.latitude ?? 0).toDouble(),
+      longitude: (data['longitude'] ?? fallback?.longitude ?? 0).toDouble(),
+      isDefault: data['is_default'] ?? fallback?.isDefault ?? false,
+    );
   }
 
-  void removeAddress(String id) {
-    final removed = state.where((a) => a.id == id).toList();
-    state = state.where((a) => a.id != id).toList();
-    _api.delete('${ApiConfig.addresses}/$id').then((r) {
-      if (!r.success) {
-        debugPrint('[Address] remove failed: ${r.error}');
-        state = [...state, ...removed];
-      }
-    }).catchError((e) {
-      debugPrint('[Address] remove error: $e');
-      state = [...state, ...removed];
-    });
-  }
+  Map<String, dynamic> _toBody(SavedAddress a) => {
+    'label': a.label,
+    'full_address': a.fullAddress,
+    'landmark': a.landmark,
+    'latitude': a.latitude,
+    'longitude': a.longitude,
+    'is_default': a.isDefault,
+  };
 
-  void updateAddress(SavedAddress updated) {
-    final old = state.firstWhere((a) => a.id == updated.id, orElse: () => updated);
-    state = state.map((a) => a.id == updated.id ? updated : a).toList();
-    _api
-        .put(
-          '${ApiConfig.addresses}/${updated.id}',
-          body: {
-            'label': updated.label,
-            'full_address': updated.fullAddress,
-            'landmark': updated.landmark,
-          },
-        )
-        .then((r) {
-      if (!r.success) {
-        debugPrint('[Address] update failed: ${r.error}');
-        state = state.map((a) => a.id == updated.id ? old : a).toList();
-      }
-    }).catchError((e) {
-      debugPrint('[Address] update error: $e');
-      state = state.map((a) => a.id == updated.id ? old : a).toList();
-    });
-  }
-
-  void setDefault(String id) {
-    final prev = List<SavedAddress>.of(state);
-    state = state.map((a) => a.copyWith(isDefault: a.id == id)).toList();
-    // Only update the new default address and the old default (if any)
-    final oldDefault = prev.where((a) => a.isDefault && a.id != id).toList();
-    // Set new default
-    _api.put('${ApiConfig.addresses}/$id', body: {
-      'is_default': true,
-    }).then((r) {
-      if (!r.success) {
-        debugPrint('[Address] setDefault update failed for $id: ${r.error}');
-        state = prev;
-      }
-    }).catchError((e) {
-      debugPrint('[Address] setDefault error for $id: $e');
-      state = prev;
-    });
-    // Clear old default(s)
-    for (final addr in oldDefault) {
-      _api.put('${ApiConfig.addresses}/${addr.id}', body: {
-        'is_default': false,
-      }).then((r) {
-        if (!r.success) {
-          debugPrint('[Address] clear old default failed for ${addr.id}: ${r.error}');
-        }
-      }).catchError((e) {
-        debugPrint('[Address] clear old default error for ${addr.id}: $e');
-      });
-    }
-  }
-
-  // Mock addresses removed — using real data from API only
-
-  /// Add address and wait for server response — returns the server-created address
-  /// Use this for flows that need the real server ID (e.g. onboarding, checkout)
-  Future<SavedAddress?> addAddressAsync(SavedAddress address) async {
+  /// Add address — awaits server response. Returns the saved address or null on failure.
+  Future<SavedAddress?> addAddress(SavedAddress address) async {
     try {
-      final r = await _api.post(
-        ApiConfig.addresses,
-        body: {
-          'label': address.label,
-          'full_address': address.fullAddress,
-          'landmark': address.landmark,
-          'latitude': address.latitude,
-          'longitude': address.longitude,
-          'is_default': address.isDefault,
-        },
-      );
+      final r = await _api.post(ApiConfig.addresses, body: _toBody(address));
       if (r.success && r.data != null) {
-        final data = r.data as Map<String, dynamic>;
-        final serverAddress = SavedAddress(
-          id: data['\$id'] ?? '',
-          label: data['label'] ?? address.label,
-          fullAddress: data['full_address'] ?? address.fullAddress,
-          landmark: data['landmark'] ?? address.landmark,
-          latitude: (data['latitude'] ?? address.latitude).toDouble(),
-          longitude: (data['longitude'] ?? address.longitude).toDouble(),
-          isDefault: data['is_default'] ?? address.isDefault,
-        );
+        final serverAddress = _parseDoc(r.data as Map<String, dynamic>, fallback: address);
         state = [...state, serverAddress];
-        debugPrint('[Address] addAddressAsync success: ${serverAddress.id}');
+        debugPrint('[Address] add success: ${serverAddress.id}');
         return serverAddress;
       }
-      debugPrint('[Address] addAddressAsync failed: ${r.error}');
+      debugPrint('[Address] add failed: ${r.error}');
       return null;
     } catch (e) {
-      debugPrint('[Address] addAddressAsync error: $e');
+      debugPrint('[Address] add error: $e');
       return null;
     }
   }
+
+  /// Remove address — awaits server response. Returns true on success.
+  Future<bool> removeAddress(String id) async {
+    final prev = List<SavedAddress>.of(state);
+    state = state.where((a) => a.id != id).toList();
+    try {
+      final r = await _api.delete('${ApiConfig.addresses}/$id');
+      if (r.success) return true;
+      debugPrint('[Address] remove failed: ${r.error}');
+      state = prev;
+      return false;
+    } catch (e) {
+      debugPrint('[Address] remove error: $e');
+      state = prev;
+      return false;
+    }
+  }
+
+  /// Update address — awaits server response. Returns the updated address or null.
+  Future<SavedAddress?> updateAddress(SavedAddress updated) async {
+    final old = state.firstWhere((a) => a.id == updated.id, orElse: () => updated);
+    state = state.map((a) => a.id == updated.id ? updated : a).toList();
+    try {
+      final r = await _api.put(
+        '${ApiConfig.addresses}/${updated.id}',
+        body: {
+          'label': updated.label,
+          'full_address': updated.fullAddress,
+          'landmark': updated.landmark,
+          'latitude': updated.latitude,
+          'longitude': updated.longitude,
+        },
+      );
+      if (r.success) {
+        if (r.data != null) {
+          final serverAddr = _parseDoc(r.data as Map<String, dynamic>, fallback: updated);
+          state = state.map((a) => a.id == updated.id ? serverAddr : a).toList();
+          return serverAddr;
+        }
+        return updated;
+      }
+      debugPrint('[Address] update failed: ${r.error}');
+      state = state.map((a) => a.id == updated.id ? old : a).toList();
+      return null;
+    } catch (e) {
+      debugPrint('[Address] update error: $e');
+      state = state.map((a) => a.id == updated.id ? old : a).toList();
+      return null;
+    }
+  }
+
+  /// Set default address — awaits server confirmation.
+  Future<bool> setDefault(String id) async {
+    final prev = List<SavedAddress>.of(state);
+    state = state.map((a) => a.copyWith(isDefault: a.id == id)).toList();
+    final oldDefault = prev.where((a) => a.isDefault && a.id != id).toList();
+    try {
+      final r = await _api.put('${ApiConfig.addresses}/$id', body: {'is_default': true});
+      if (!r.success) {
+        debugPrint('[Address] setDefault failed for $id: ${r.error}');
+        state = prev;
+        return false;
+      }
+      // Clear old default(s)
+      for (final addr in oldDefault) {
+        try {
+          await _api.put('${ApiConfig.addresses}/${addr.id}', body: {'is_default': false});
+        } catch (e) {
+          debugPrint('[Address] clear old default error for ${addr.id}: $e');
+        }
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[Address] setDefault error for $id: $e');
+      state = prev;
+      return false;
+    }
+  }
+
+  /// Add address and wait for server response — alias for addAddress.
+  /// Use this for flows that need the real server ID (e.g. onboarding, checkout)
+  Future<SavedAddress?> addAddressAsync(SavedAddress address) => addAddress(address);
 }
 
 final addressProvider =

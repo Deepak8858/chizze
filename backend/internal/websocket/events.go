@@ -63,6 +63,12 @@ func (b *EventBroadcaster) BroadcastDeliveryRequest(riderID, orderID, restaurant
 	})
 }
 
+// BroadcastDeliveryRequestFull notifies a rider with a fully enriched delivery request payload
+// that matches the Flutter DeliveryRequest.fromMap() schema
+func (b *EventBroadcaster) BroadcastDeliveryRequestFull(riderID string, payload map[string]interface{}) {
+	b.sendToUser(riderID, EventDeliveryRequest, payload)
+}
+
 // BroadcastDeliveryLocation sends a rider's live location to the customer tracking this order
 func (b *EventBroadcaster) BroadcastDeliveryLocation(customerID, orderID string, lat, lng float64, bearing float64) {
 	b.sendToUser(customerID, EventDeliveryLocation, map[string]interface{}{

@@ -153,9 +153,16 @@ class AddressManagementScreen extends ConsumerWidget {
                 if (!addr.isDefault)
                   Expanded(
                     child: TextButton.icon(
-                      onPressed: () => ref
-                          .read(addressProvider.notifier)
-                          .setDefault(addr.id),
+                      onPressed: () async {
+                        final ok = await ref
+                            .read(addressProvider.notifier)
+                            .setDefault(addr.id);
+                        if (!ok && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Failed to set default')),
+                          );
+                        }
+                      },
                       icon: const Icon(Icons.check_circle_outline, size: 16),
                       label: const Text(
                         'Set Default',
@@ -173,9 +180,16 @@ class AddressManagementScreen extends ConsumerWidget {
                 ),
                 Expanded(
                   child: TextButton.icon(
-                    onPressed: () => ref
-                        .read(addressProvider.notifier)
-                        .removeAddress(addr.id),
+                    onPressed: () async {
+                      final ok = await ref
+                          .read(addressProvider.notifier)
+                          .removeAddress(addr.id);
+                      if (!ok && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Failed to delete address')),
+                        );
+                      }
+                    },
                     icon: const Icon(
                       Icons.delete_outline,
                       size: 16,
@@ -204,6 +218,9 @@ class AddressManagementScreen extends ConsumerWidget {
     final addrCtrl = TextEditingController(text: existing?.fullAddress ?? '');
     final landCtrl = TextEditingController(text: existing?.landmark ?? '');
     String selectedLabel = existing?.label ?? 'Home';
+    double? capturedLat = existing?.latitude;
+    double? capturedLng = existing?.longitude;
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -318,6 +335,8 @@ class AddressManagementScreen extends ConsumerWidget {
                         p.postalCode,
                       ].where((s) => s != null && s.isNotEmpty).join(', ');
                       addrCtrl.text = address;
+                    capturedLat = pos.latitude;
+                    capturedLng = pos.longitude;
                     }
                   } catch (e) {
                     if (ctx.mounted) {
@@ -357,38 +376,73 @@ class AddressManagementScreen extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    if (addrCtrl.text.isEmpty) return;
-                    if (isEdit) {
-                      ref
-                          .read(addressProvider.notifier)
-                          .updateAddress(
-                            existing.copyWith(
-                              label: selectedLabel,
-                              fullAddress: addrCtrl.text,
-                              landmark: landCtrl.text,
-                            ),
-                          );
-                    } else {
-                      ref
-                          .read(addressProvider.notifier)
-                          .addAddress(
-                            SavedAddress(
-                              id: 'addr_${DateTime.now().millisecondsSinceEpoch}',
-                              label: selectedLabel,
-                              fullAddress: addrCtrl.text,
-                              landmark: landCtrl.text,
-                            ),
-                          );
-                    }
-                    Navigator.pop(ctx);
-                  },
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (addrCtrl.text.isEmpty) return;
+                          setSheetState(() => isSaving = true);
+                          try {
+                            if (isEdit) {
+                              final result = await ref
+                                  .read(addressProvider.notifier)
+                                  .updateAddress(
+                                    existing.copyWith(
+                                      label: selectedLabel,
+                                      fullAddress: addrCtrl.text,
+                                      landmark: landCtrl.text,
+                                      latitude: capturedLat ?? existing.latitude,
+                                      longitude: capturedLng ?? existing.longitude,
+                                    ),
+                                  );
+                              if (ctx.mounted) {
+                                Navigator.pop(ctx);
+                                if (result == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Failed to update address')),
+                                  );
+                                }
+                              }
+                            } else {
+                              final result = await ref
+                                  .read(addressProvider.notifier)
+                                  .addAddress(
+                                    SavedAddress(
+                                      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+                                      label: selectedLabel,
+                                      fullAddress: addrCtrl.text,
+                                      landmark: landCtrl.text,
+                                      latitude: capturedLat ?? 0,
+                                      longitude: capturedLng ?? 0,
+                                    ),
+                                  );
+                              if (ctx.mounted) {
+                                Navigator.pop(ctx);
+                                if (result == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Failed to save address. Please try again.')),
+                                  );
+                                }
+                              }
+                            }
+                          } finally {
+                            if (ctx.mounted) setSheetState(() => isSaving = false);
+                          }
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: Text(isEdit ? 'Update Address' : 'Save Address'),
+                  child: isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(isEdit ? 'Update Address' : 'Save Address'),
                 ),
               ),
             ],

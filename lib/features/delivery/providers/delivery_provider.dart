@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
 import '../../../core/services/location_service.dart';
-import '../../../core/services/realtime_service.dart';
+import '../../../core/services/websocket_service.dart';
 import '../models/delivery_partner.dart';
 
 /// Delivery partner state
@@ -56,39 +56,38 @@ class DeliveryState {
       incomingRequest != null && !incomingRequest!.hasExpired;
 }
 
-/// Delivery notifier — API-backed with Realtime + location tracking
+/// Delivery notifier — API-backed with WebSocket + location tracking
 class DeliveryNotifier extends StateNotifier<DeliveryState> {
   final ApiClient _api;
-  final RealtimeService _realtime;
+  final WebSocketService _ws;
   final LocationService _location;
-  StreamSubscription? _realtimeSub;
+  StreamSubscription? _wsSub;
   StreamSubscription? _locationStreamSub;
   Timer? _locationTimer;
   bool _isLoadingGuard = false;
   double _lastHeading = 0.0;
   double _lastSpeed = 0.0;
 
-  DeliveryNotifier(this._api, this._realtime, this._location)
+  DeliveryNotifier(this._api, this._ws, this._location)
     : super(DeliveryState(partner: DeliveryPartner.empty)) {
     _loadData();
-    _subscribeToRealtime();
+    _subscribeToWebSocket();
   }
 
-  /// Listen for new delivery request assignments in real-time
-  void _subscribeToRealtime() {
+  /// Listen for new delivery request assignments via WebSocket (Go backend hub)
+  void _subscribeToWebSocket() {
     try {
-      final channel = RealtimeChannels.deliveryRequestsChannel();
-      _realtimeSub = _realtime.subscribe(channel).listen((event) {
-        if (event.type == RealtimeEventType.create) {
-          try {
-            final request = DeliveryRequest.fromMap(event.data);
-            state = state.copyWith(incomingRequest: request);
-          } catch (_) {
-            // Malformed event data — ignore
-          }
+      _wsSub = _ws.deliveryRequests.listen((event) {
+        try {
+          final request = DeliveryRequest.fromMap(event.payload);
+          state = state.copyWith(incomingRequest: request);
+        } catch (e) {
+          debugPrint('[Delivery] WS delivery_request parse error: $e');
         }
       });
-    } catch (_) {} // Realtime not available
+    } catch (e) {
+      debugPrint('[Delivery] WS subscribe error: $e');
+    }
   }
 
   /// Start real GPS location tracking when online
@@ -157,7 +156,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
 
   @override
   void dispose() {
-    _realtimeSub?.cancel();
+    _wsSub?.cancel();
     _locationTimer?.cancel();
     _locationStreamSub?.cancel();
     super.dispose();
@@ -256,9 +255,18 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     }
   }
 
-  /// Reject/skip a delivery request
-  void rejectRequest() {
+  /// Reject/skip a delivery request — notify backend so order re-enters the queue
+  Future<void> rejectRequest() async {
+    final orderId = state.incomingRequest?.order.id;
     state = state.copyWith(clearRequest: true);
+
+    if (orderId != null && orderId.isNotEmpty) {
+      try {
+        await _api.put('${ApiConfig.deliveryOrders}/$orderId/reject');
+      } catch (e) {
+        debugPrint('[Delivery] rejectRequest error: $e');
+      }
+    }
   }
 
   /// Move to next delivery step
@@ -406,8 +414,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
 final deliveryProvider = StateNotifierProvider<DeliveryNotifier, DeliveryState>(
   (ref) {
     final api = ref.watch(apiClientProvider);
-    final realtime = ref.watch(realtimeServiceProvider);
+    final ws = ref.watch(webSocketServiceProvider);
     final location = ref.watch(locationServiceProvider);
-    return DeliveryNotifier(api, realtime, location);
+    return DeliveryNotifier(api, ws, location);
   },
 );
