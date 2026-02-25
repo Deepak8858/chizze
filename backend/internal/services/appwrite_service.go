@@ -42,8 +42,16 @@ func (s *AppwriteService) GetUser(userID string) (map[string]interface{}, error)
 	return s.client.GetDocument(models.CollectionUsers, userID)
 }
 
+func (s *AppwriteService) ListUsers(queries []string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionUsers, queries)
+}
+
 func (s *AppwriteService) UpdateUser(userID string, data map[string]interface{}) (map[string]interface{}, error) {
 	return s.client.UpdateDocument(models.CollectionUsers, userID, data)
+}
+
+func (s *AppwriteService) DeleteUser(userID string) error {
+	return s.client.DeleteDocument(models.CollectionUsers, userID)
 }
 
 // ─── Addresses ───
@@ -74,6 +82,10 @@ func (s *AppwriteService) ListRestaurants(queries []string) (*appwrite.DocumentL
 
 func (s *AppwriteService) GetRestaurant(id string) (map[string]interface{}, error) {
 	return s.client.GetDocument(models.CollectionRestaurants, id)
+}
+
+func (s *AppwriteService) CreateRestaurant(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionRestaurants, id, data)
 }
 
 func (s *AppwriteService) UpdateRestaurant(id string, data map[string]interface{}) (map[string]interface{}, error) {
@@ -175,18 +187,24 @@ func (s *AppwriteService) UpdateNotification(id string, data map[string]interfac
 // ─── Delivery Partners ───
 
 func (s *AppwriteService) GetDeliveryPartner(userID string) (*appwrite.DocumentList, error) {
-	return s.client.ListDocuments(models.CollectionDeliveryRequests, []string{
+	return s.client.ListDocuments(models.CollectionDeliveryPartners, []string{
 		appwrite.QueryEqual("user_id", userID),
 	})
 }
 
 func (s *AppwriteService) UpdateDeliveryPartner(id string, data map[string]interface{}) (map[string]interface{}, error) {
-	return s.client.UpdateDocument(models.CollectionDeliveryRequests, id, data)
+	return s.client.UpdateDocument(models.CollectionDeliveryPartners, id, data)
 }
 
 func (s *AppwriteService) ListDeliveryPartners(queries []string) (*appwrite.DocumentList, error) {
-	return s.client.ListDocuments(models.CollectionDeliveryRequests, queries)
+	return s.client.ListDocuments(models.CollectionDeliveryPartners, queries)
 }
+
+func (s *AppwriteService) CreateDeliveryPartner(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionDeliveryPartners, id, data)
+}
+
+// ─── Delivery Requests (order assignments) ───
 
 func (s *AppwriteService) CreateDeliveryRequest(id string, data map[string]interface{}) (map[string]interface{}, error) {
 	return s.client.CreateDocument(models.CollectionDeliveryRequests, id, data)
