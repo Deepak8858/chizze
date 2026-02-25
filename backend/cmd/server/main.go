@@ -184,6 +184,7 @@ func main() {
 		auth.POST("/send-otp", authHandler.SendOTP)
 		auth.POST("/verify-otp", authHandler.VerifyOTP)
 		auth.POST("/exchange", authHandler.Exchange)
+		auth.POST("/check-phone", authHandler.CheckPhone)
 	}
 
 	// Restaurants (public)
@@ -211,6 +212,7 @@ func main() {
 		// Auth (authenticated)
 		authenticated.POST("/auth/refresh", authHandler.Refresh)
 		authenticated.DELETE("/auth/logout", authHandler.Logout)
+		authenticated.POST("/auth/onboard", authHandler.Onboard)
 
 		// Users
 		users := authenticated.Group("/users")

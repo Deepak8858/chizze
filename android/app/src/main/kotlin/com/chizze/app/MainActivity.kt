@@ -1,4 +1,4 @@
-package com.example.chizze
+package com.chizze.app
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
@@ -379,9 +380,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.phone_rounded, color: AppColors.success),
-            onPressed: () {
+            onPressed: () async {
               final phone = order.deliveryPartnerPhone;
               if (phone != null && phone.isNotEmpty) {
+                await Permission.phone.request();
                 launchUrl(Uri.parse('tel:$phone'));
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(

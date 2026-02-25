@@ -120,11 +120,20 @@ class WebSocketService {
   WebSocketService(this._apiClient);
 
   /// Derive the WebSocket URL from the REST API URL
-  Uri get _wsUri {
-    final base = Environment.apiBaseUrl; // e.g. http://10.0.2.2:8080/api/v1
-    final scheme = base.startsWith('https') ? 'wss' : 'ws';
-    final rest = base.replaceFirst(RegExp(r'^https?://'), '');
-    return Uri.parse('$scheme://$rest/ws');
+  Uri _wsUri(String token) {
+    final base = Environment.apiBaseUrl;
+    final uri = Uri.parse(base);
+    final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
+    final port = uri.hasPort
+        ? uri.port
+        : (uri.scheme == 'https' ? 443 : 80);
+    return Uri(
+      scheme: scheme,
+      host: uri.host,
+      port: port,
+      path: '${uri.path}/ws',
+      queryParameters: {'token': token},
+    );
   }
 
   /// Connect to the WebSocket endpoint (requires auth token)
@@ -140,13 +149,11 @@ class WebSocketService {
     }
 
     _setState(WsConnectionState.connecting);
-    debugPrint('[WS] Connecting to $_wsUri');
+    final wsUrl = _wsUri(token);
+    debugPrint('[WS] Connecting to ${wsUrl.toString().replaceAll(RegExp(r'token=[^&]+'), 'token=***')}');
 
     try {
-      _channel = WebSocketChannel.connect(
-        _wsUri,
-        protocols: ['Bearer', token],
-      );
+      _channel = WebSocketChannel.connect(wsUrl);
 
       _channel!.stream.listen(
         _onMessage,

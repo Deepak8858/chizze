@@ -67,6 +67,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     logging:
       driver: json-file
       options:
@@ -74,6 +77,7 @@ services:
         max-file: "5"
     networks:
       - backend
+      - frontend
 
   # ─── Redis (Cache + Rate Limiting + Pub/Sub) ───
   redis:

@@ -92,40 +92,42 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Exchange Appwrite JWT for Go backend JWT
+  /// Exchange Appwrite JWT for Go backend JWT.
+  /// Throws on failure — callers decide whether to treat it as fatal.
   Future<void> _exchangeToken() async {
-    try {
-      final jwt = await _account.createJWT();
-      debugPrint('[Auth] Got Appwrite JWT, exchanging with backend...');
-      final body = <String, dynamic>{'jwt': jwt.jwt};
-      // If user selected a specific role (from role selection screen), send it
-      if (state.selectedRole != 'customer') {
-        body['role'] = state.selectedRole;
+    final jwt = await _account.createJWT();
+    debugPrint('[Auth] Got Appwrite JWT, exchanging with backend...');
+    // Clear any stale backend token before exchange (exchange is a public endpoint)
+    _apiClient.clearAuthToken();
+    final body = <String, dynamic>{'jwt': jwt.jwt};
+    // Always send selected role to backend (including 'customer')
+    body['role'] = state.selectedRole;
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      '/auth/exchange',
+      body: body,
+    );
+    final token = response.data?['token'] as String?;
+    final role = response.data?['role'] as String? ?? 'customer';
+    final isNew = response.data?['is_new'] as bool? ?? false;
+    if (token != null) {
+      _apiClient.setAuthToken(token);
+      await _apiClient.persistToken(token);
+      await _persistRole(role);
+      // Sync onboarded flag based on backend's is_new determination.
+      // Backend checks for role-specific records, so is_new=true means
+      // onboarding is genuinely needed even for migrated/returning users.
+      if (isNew) {
+        await _secureStorage.delete(key: _kOnboardedKey);
+      } else {
+        await _secureStorage.write(key: _kOnboardedKey, value: 'true');
       }
-      final response = await _apiClient.post<Map<String, dynamic>>(
-        '/auth/exchange',
-        body: body,
+      state = state.copyWith(
+        userRole: role,
+        isNewUser: isNew,
       );
-      final token = response.data?['token'] as String?;
-      final role = response.data?['role'] as String? ?? 'customer';
-      final isNew = response.data?['is_new'] as bool? ?? false;
-      if (token != null) {
-        _apiClient.setAuthToken(token);
-        await _apiClient.persistToken(token);
-        await _persistRole(role);
-        // Re-sync onboarded flag from backend for reinstall resilience
-        if (!isNew) {
-          await _secureStorage.write(key: _kOnboardedKey, value: 'true');
-        }
-        final onboarded = await _secureStorage.read(key: _kOnboardedKey);
-        state = state.copyWith(
-          userRole: role,
-          isNewUser: isNew && onboarded != 'true',
-        );
-        debugPrint('[Auth] Backend JWT set & persisted, role=$role, isNew=$isNew');
-      }
-    } catch (e) {
-      debugPrint('[Auth] Token exchange failed: $e');
-      // Non-fatal — Appwrite session still valid, backend calls will fail
+      debugPrint('[Auth] Backend JWT set & persisted, role=$role, isNew=$isNew');
+    } else {
+      throw Exception('Backend returned no token');
     }
   }
 
@@ -158,27 +160,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
         },
       );
       debugPrint('[Auth] Session found for user: ${user.name} (${user.$id})');
-      state = state.copyWith(
-        status: AuthStatus.authenticated,
-        user: user,
-        isLoading: false,
-      );
-      // Try to restore persisted backend JWT first (faster than exchange)
+
+      // Try to restore persisted backend JWT & role (faster than exchange)
       final persisted = await _apiClient.loadPersistedToken();
       final persistedRole = await _loadPersistedRole();
       final onboarded = await _secureStorage.read(key: _kOnboardedKey);
-      if (persistedRole != null) {
+
+      if (persisted != null && persistedRole != null) {
+        // Fast path: have persisted token & role — set everything atomically
+        debugPrint('[Auth] Using persisted JWT, role=$persistedRole, onboarded=$onboarded');
         state = state.copyWith(
+          status: AuthStatus.authenticated,
+          user: user,
+          isLoading: false,
           userRole: persistedRole,
           isNewUser: onboarded != 'true',
         );
-        debugPrint('[Auth] Restored persisted role=$persistedRole, onboarded=$onboarded');
-      }
-      if (persisted == null) {
-        // No persisted token — do a full exchange
-        await _exchangeToken();
       } else {
-        debugPrint('[Auth] Using persisted backend JWT');
+        // Slow path: exchange token first to get correct role, THEN set authenticated
+        state = state.copyWith(user: user);
+        await _exchangeToken();
+        state = state.copyWith(
+          status: AuthStatus.authenticated,
+          isLoading: false,
+        );
       }
     } catch (e) {
       debugPrint('[Auth] No active session: $e');
@@ -200,16 +205,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
         password: password,
       );
       final user = await _account.get();
+      // Exchange token FIRST to get correct role/isNew, THEN set authenticated
+      state = state.copyWith(user: user);
+      await _exchangeToken();
       state = state.copyWith(
         status: AuthStatus.authenticated,
-        user: user,
         isLoading: false,
       );
-      await _exchangeToken();
     } on AppwriteException catch (e) {
       state = state.copyWith(
         isLoading: false,
         error: e.message ?? 'Login failed',
+      );
+    } catch (e) {
+      debugPrint('[Auth] Login failed (exchange): $e');
+      // Clean up the Appwrite session since we can't complete login
+      try { await _account.deleteSession(sessionId: 'current'); } catch (_) {}
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Server unavailable. Please try again.',
       );
     }
   }
@@ -270,19 +284,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (kDebugMode) {
         debugPrint('[Auth] verifyPhoneOTP: success, user=${user.name} (${user.$id})');
       }
+      // Exchange token FIRST to get correct role/isNew, THEN set authenticated
+      state = state.copyWith(user: user);
+      await _exchangeToken();
       state = state.copyWith(
         status: AuthStatus.authenticated,
-        user: user,
         isLoading: false,
       );
-      await _exchangeToken();
     } on AppwriteException catch (e) {
       debugPrint('[Auth] verifyPhoneOTP: failed — ${e.message} (${e.code})');
       state = state.copyWith(
         isLoading: false,
         error: e.message ?? 'Invalid OTP',
-      );
-    }
+      );    } catch (e) {
+      debugPrint('[Auth] verifyPhoneOTP exchange failed: $e');
+      // Clean up the Appwrite session since we can't complete login
+      try { await _account.deleteSession(sessionId: 'current'); } catch (_) {}
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Server unavailable. Please try again.',
+      );    }
   }
 
   /// OAuth login (Google, Apple)
@@ -291,16 +312,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _account.createOAuth2Session(provider: provider);
       final user = await _account.get();
+      // Exchange token FIRST to get correct role/isNew, THEN set authenticated
+      state = state.copyWith(user: user);
+      await _exchangeToken();
       state = state.copyWith(
         status: AuthStatus.authenticated,
-        user: user,
         isLoading: false,
       );
-      await _exchangeToken();
     } on AppwriteException catch (e) {
       state = state.copyWith(
         isLoading: false,
         error: e.message ?? 'OAuth login failed',
+      );
+    } catch (e) {
+      debugPrint('[Auth] OAuth login exchange failed: $e');
+      try { await _account.deleteSession(sessionId: 'current'); } catch (_) {}
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Server unavailable. Please try again.',
       );
     }
   }
@@ -312,39 +341,74 @@ class AuthNotifier extends StateNotifier<AuthState> {
     debugPrint('[Auth] Selected role set to: $role');
   }
 
-  /// Complete onboarding — save name + address to backend, mark as onboarded
+  /// Complete onboarding — save profile + role-specific data to backend, mark as onboarded
   Future<void> completeOnboarding({
     required String name,
+    String? email,
     String? address,
+    String? city,
     double? latitude,
     double? longitude,
+    // Restaurant-specific
+    String? restaurantName,
+    String? restaurantAddress,
+    String? cuisineType,
+    // Delivery-specific
+    String? vehicleType,
+    String? vehicleNumber,
   }) async {
     try {
       final body = <String, dynamic>{
         'name': name,
-        'role': state.userRole,
       };
+      if (email != null && email.isNotEmpty) {
+        body['email'] = email;
+      }
       if (address != null && address.isNotEmpty) {
         body['address'] = address;
+      }
+      if (city != null && city.isNotEmpty) {
+        body['city'] = city;
       }
       if (latitude != null && longitude != null) {
         body['latitude'] = latitude;
         body['longitude'] = longitude;
       }
 
-      await _apiClient.put<Map<String, dynamic>>(
-        '/users/me',
+      // Role-specific fields
+      if (state.userRole == 'restaurant_owner') {
+        if (restaurantName != null && restaurantName.isNotEmpty) {
+          body['restaurant_name'] = restaurantName;
+        }
+        if (restaurantAddress != null && restaurantAddress.isNotEmpty) {
+          body['restaurant_address'] = restaurantAddress;
+        }
+        if (cuisineType != null && cuisineType.isNotEmpty) {
+          body['cuisine_type'] = cuisineType;
+        }
+      } else if (state.userRole == 'delivery_partner') {
+        if (vehicleType != null && vehicleType.isNotEmpty) {
+          body['vehicle_type'] = vehicleType;
+        }
+        if (vehicleNumber != null && vehicleNumber.isNotEmpty) {
+          body['vehicle_number'] = vehicleNumber;
+        }
+      }
+
+      await _apiClient.post<Map<String, dynamic>>(
+        '/auth/onboard',
         body: body,
       );
-      debugPrint('[Auth] Onboarding profile saved');
-    } catch (e) {
-      debugPrint('[Auth] Onboarding profile save failed (non-fatal): $e');
-    }
+      debugPrint('[Auth] Onboarding profile saved via /auth/onboard');
 
-    // Mark as onboarded locally
-    await _secureStorage.write(key: _kOnboardedKey, value: 'true');
-    state = state.copyWith(isNewUser: false);
-    debugPrint('[Auth] Onboarding complete');
+      // Mark as onboarded locally ONLY after successful API call
+      await _secureStorage.write(key: _kOnboardedKey, value: 'true');
+      state = state.copyWith(isNewUser: false);
+      debugPrint('[Auth] Onboarding complete');
+    } catch (e) {
+      debugPrint('[Auth] Onboarding save failed: $e');
+      rethrow; // Let caller show error — do NOT mark as onboarded
+    }
   }
 
   /// Logout

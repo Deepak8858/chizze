@@ -452,9 +452,25 @@ class HomeScreen extends ConsumerWidget {
               ),
               child: Stack(
                 children: [
-                  Center(
-                    child: Text(emoji, style: const TextStyle(fontSize: 48)),
-                  ),
+                  if (restaurant.coverImageUrl.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(AppSpacing.radiusLg),
+                      ),
+                      child: Image.network(
+                        restaurant.coverImageUrl,
+                        width: double.infinity,
+                        height: 160,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Center(
+                          child: Text(emoji, style: const TextStyle(fontSize: 48)),
+                        ),
+                      ),
+                    )
+                  else
+                    Center(
+                      child: Text(emoji, style: const TextStyle(fontSize: 48)),
+                    ),
                   if (restaurant.isPromoted)
                     Positioned(
                       top: 12,

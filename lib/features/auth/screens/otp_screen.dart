@@ -82,12 +82,13 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
     // Listen for auth state changes
     ref.listen<AuthState>(authProvider, (prev, next) {
-      // Auth success → router redirect will handle navigation based on role + onboarding
+      // Auth success → GoRouter refreshListenable will auto-redirect based on role + onboarding
       if (prev?.status != AuthStatus.authenticated &&
           next.status == AuthStatus.authenticated) {
-        debugPrint('[OTP] Auth success! Router redirect will navigate.');
-        // Trigger GoRouter redirect by navigating to root
-        if (mounted) context.go('/');
+        debugPrint('[OTP] Auth success! role=${next.userRole}, isNew=${next.isNewUser}');
+        // GoRouter's refreshListenable already redirects from /otp (auth route)
+        // to the correct destination based on role + onboarding state.
+        // No manual context.go() needed — the redirect fires automatically.
         return;
       }
       // Error → show snackbar, reset verify flag, clear OTP

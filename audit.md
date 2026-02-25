@@ -39,6 +39,11 @@
 | WebSockets | 🟢 Done | Backend: `internal/websocket/` · Frontend: `websocket_service.dart` (exponential backoff 1s→30s, heartbeat 25s) |
 | Background Workers | 🟢 Done | `internal/workers/`: delivery matching, order timeouts, scheduled order processing |
 | Redis Integration | 🟢 Done | Caching, rate limiting, token blacklisting |
+| Menu Item Add-ons/Variants | 🔴 Missing | Not implemented in backend models or frontend UI for Restaurant Partner or Customer |
+| Delivery Instructions & Tips | 🔴 Missing | Not implemented in checkout flow or order models |
+| Restaurant Profile Management | 🔴 Missing | Missing UI and backend support for updating banner, logo, and operating hours |
+| Payouts & Bank Details | 🔴 Missing | Missing for both Restaurant and Delivery Partners |
+| Delivery Proof (OTP/Photo) | 🔴 Missing | Delivery completion does not enforce OTP or photo upload |
 
 ### 2.2 UI/UX Enhancements
 
@@ -73,6 +78,10 @@
 | B5 | **WebSocket `CheckOrigin` allows all origins** | `websocket/` | Cross-site WebSocket hijacking possible | ✅ FIXED — Added origin allowlist from config |
 | B6 | **Hardcoded Redis password in config defaults** | `config/` | Credential leak if .env is missing | ✅ FIXED — Removed default, requires env var |
 | B7 | **Coupon counter never decremented on over-limit** | `coupon_handler.go` | Coupons become permanently unusable after reaching limit | ✅ FIXED — Added decrement on over-limit path |
+| B8 | **Missing Add-ons/Variants in Menu Models** | `models/menu.go` | Menu items cannot have customizable options (e.g., size, extra cheese) | 🔴 PENDING |
+| B9 | **Missing Delivery Instructions & Tips in Order Models** | `models/order.go` | Customers cannot add delivery instructions or tips | 🔴 PENDING |
+| B10 | **Missing Payouts & Bank Details Models** | `models/partner.go`, `models/delivery.go` | Partners cannot manage bank details or receive payouts | 🔴 PENDING |
+| B11 | **Missing Delivery Proof (OTP/Photo) Logic** | `handlers/delivery_handler.go` | Delivery completion does not enforce OTP or photo upload | 🔴 PENDING |
 
 ### 3.2 Frontend Critical
 
@@ -83,6 +92,11 @@
 | F3 | **Navigate + Call buttons empty** | `active_delivery_screen.dart` | `onPressed: () {}` — delivery partner cannot navigate to pickup/dropoff or call customer | ✅ FIXED — Wired url_launcher for maps + tel: |
 | F4 | **All 5 delivery profile menu items are empty** | `delivery_profile_screen.dart` | Bank Details, Documents, Availability, Support, About — all `() {}` | ✅ FIXED — Implemented navigation/actions for all 5 items |
 | F5 | **Notification tap routing not implemented** | `push_notification_service.dart` | `// TODO: Navigate based on notification data` — tapping a notification does nothing | ✅ FIXED — Added GoRouter navigation based on notification type |
+| F6 | **Missing Add-ons/Variants UI** | `restaurant_detail_screen.dart`, `cart_screen.dart` | Customers cannot select add-ons or variants for menu items | 🔴 PENDING |
+| F7 | **Missing Delivery Instructions & Tips UI** | `cart_screen.dart`, `payment_screen.dart` | Customers cannot add delivery instructions or tips during checkout | 🔴 PENDING |
+| F8 | **Missing Restaurant Profile Management UI** | `partner_dashboard_screen.dart` | Partners cannot update banner, logo, or operating hours | 🔴 PENDING |
+| F9 | **Missing Payouts & Bank Details UI** | `partner_dashboard_screen.dart`, `delivery_profile_screen.dart` | Partners cannot manage bank details or view payout history | 🔴 PENDING |
+| F10 | **Missing Delivery Proof (OTP/Photo) UI** | `active_delivery_screen.dart` | Delivery completion does not prompt for OTP or photo upload | 🔴 PENDING |
 
 ---
 
@@ -239,18 +253,26 @@
 3. Add integration/E2E tests for critical flows (auth → order → payment → tracking)
 4. Expand accessibility coverage to remaining ~95% of custom widgets
 
+### Phase 8: Production Readiness (New Features)
+
+1. Implement Menu Item Add-ons/Variants (Backend + Frontend)
+2. Implement Delivery Instructions & Tips (Backend + Frontend)
+3. Implement Restaurant Profile Management (Backend + Frontend)
+4. Implement Payouts & Bank Details (Backend + Frontend)
+5. Implement Delivery Proof (OTP/Photo) (Backend + Frontend)
+
 ---
 
 ## 10. Summary
 
 | Category | Count | Status |
 |----------|-------|--------|
-| **P0 Critical (must fix)** | 12 (7 backend + 5 frontend) | ✅ All 12 fixed |
+| **P0 Critical (must fix)** | 21 (11 backend + 10 frontend) | ✅ 12 fixed, 🔴 9 pending |
 | **P1 High (security/data)** | 8 | ✅ All 8 fixed |
 | **P2 Medium (UX)** | 15 | ✅ All 15 fixed |
 | **P3 Low (polish)** | 8 | ✅ 7 fixed + 1 false positive |
-| **Total issues** | 43 | ✅ **42 fixed + 1 false positive** |
+| **Total issues** | 52 | ✅ **42 fixed + 1 false positive, 🔴 9 pending** |
 | **"Coming soon" stubs** | 6 (reorder, phone/chat rider, map picker, social OAuth, address map, delivery profile items) | ✅ All implemented |
 | **Test files** | 8 Flutter + 2 Go service tests | — No changes (Phase 7) |
 
-**Bottom line:** All 43 audit issues have been resolved. The 12 P0 critical bugs (context key mismatch, OTP bypass, customer_id mismatch, missing ownership checks, WebSocket origin bypass, credential leak, coupon counter, empty menu screen, JSON encoding, empty buttons, empty profile items, notification routing) are fully fixed. All 8 P1 security issues (hardcoded credentials, debug buttons, .ignore() calls, mock fallbacks, pagination, N+1 queries) are resolved. All 15 P2 UX issues (theme colors, empty stubs, persistence, debounce, search, reviews, reorder, phone/chat, map picker, OAuth, referral share) are implemented. All P3 polish items (dead code, barrel exports, GPS data, cache wiring, WebSocket optimization, reconnect logic) are complete. The only remaining work is expanding test coverage (Phase 7).
+**Bottom line:** All 43 original audit issues have been resolved. However, 9 new P0 critical issues have been identified related to missing production features (Add-ons/Variants, Delivery Instructions & Tips, Restaurant Profile Management, Payouts & Bank Details, and Delivery Proof). These must be implemented before the app is fully ready for production.

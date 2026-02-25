@@ -33,26 +33,29 @@ func Auth(cfg *config.Config, redisClient ...*redispkg.Client) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		var tokenStr string
+
+		// 1. Check Authorization header (primary)
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+				tokenStr = parts[1]
+			}
+		}
+
+		// 2. Fallback: check query parameter (for WebSocket connections)
+		if tokenStr == "" {
+			tokenStr = c.Query("token")
+		}
+
+		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"success": false,
-				"error":   "Missing Authorization header",
+				"error":   "Missing authentication token",
 			})
 			return
 		}
-
-		// Extract Bearer token
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"success": false,
-				"error":   "Invalid Authorization format. Use: Bearer <token>",
-			})
-			return
-		}
-
-		tokenStr := parts[1]
 
 		// Parse and validate JWT with algorithm pinning (prevent 'none' algorithm attack)
 		claims := &AuthClaims{}

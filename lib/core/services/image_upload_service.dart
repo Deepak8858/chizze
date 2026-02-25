@@ -3,6 +3,7 @@ import 'package:appwrite/appwrite.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 import '../constants/appwrite_constants.dart';
 import 'appwrite_service.dart';
 
@@ -20,6 +21,25 @@ class ImageUploadService {
     int quality = 85,
   }) async {
     try {
+      // Request appropriate permission before opening picker
+      if (source == ImageSource.camera) {
+        final status = await ph.Permission.camera.request();
+        if (!status.isGranted) {
+          debugPrint('[ImageUploadService] Camera permission denied');
+          return null;
+        }
+      } else {
+        // Gallery — request photos or storage based on Android version
+        var status = await ph.Permission.photos.request();
+        if (!status.isGranted) {
+          status = await ph.Permission.storage.request();
+          if (!status.isGranted) {
+            debugPrint('[ImageUploadService] Photo access denied');
+            return null;
+          }
+        }
+      }
+
       final picker = ImagePicker();
       final picked = await picker.pickImage(
         source: source,

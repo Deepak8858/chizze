@@ -88,6 +88,9 @@ appwrite databases create-boolean-attribute --database-id $DB --collection-id re
 appwrite databases create-boolean-attribute --database-id $DB --collection-id restaurants --key is_promoted --required false --default false
 appwrite databases create-string-attribute --database-id $DB --collection-id restaurants --key opening_time --size 10 --required false --default "09:00"
 appwrite databases create-string-attribute --database-id $DB --collection-id restaurants --key closing_time --size 10 --required false --default "23:00"
+appwrite databases create-string-attribute --database-id $DB --collection-id restaurants --key bank_account_name --size 128 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id restaurants --key bank_account_number --size 50 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id restaurants --key bank_ifsc --size 20 --required false
 
 Start-Sleep -Seconds 5
 appwrite databases create-index --database-id $DB --collection-id restaurants --key idx_owner --type key --attributes owner_id
@@ -96,7 +99,7 @@ appwrite databases create-index --database-id $DB --collection-id restaurants --
 appwrite databases create-index --database-id $DB --collection-id restaurants --key idx_featured --type key --attributes is_featured
 appwrite databases create-index --database-id $DB --collection-id restaurants --key idx_rating --type key --attributes rating --orders DESC
 appwrite databases create-index --database-id $DB --collection-id restaurants --key idx_name --type fulltext --attributes name
-Write-Host "   ✅ restaurants (20 attributes, 6 indexes)" -ForegroundColor Green
+Write-Host "   ✅ restaurants (23 attributes, 6 indexes)" -ForegroundColor Green
 
 # ─── 5. MENU_CATEGORIES Collection ───────────────────────────────────────────
 Write-Host "`n📂 Creating collection: menu_categories ..." -ForegroundColor Yellow
@@ -128,6 +131,8 @@ appwrite databases create-boolean-attribute --database-id $DB --collection-id me
 appwrite databases create-enum-attribute --database-id $DB --collection-id menu_items --key spice_level --elements mild medium spicy extra_spicy --required false --default mild
 appwrite databases create-integer-attribute --database-id $DB --collection-id menu_items --key preparation_time_min --required false
 appwrite databases create-string-attribute --database-id $DB --collection-id menu_items --key customizations --size 5000 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id menu_items --key add_ons --size 5000 --required false --array true
+appwrite databases create-string-attribute --database-id $DB --collection-id menu_items --key variants --size 5000 --required false --array true
 appwrite databases create-integer-attribute --database-id $DB --collection-id menu_items --key calories --required false
 appwrite databases create-string-attribute --database-id $DB --collection-id menu_items --key allergens --size 200 --required false --array true
 appwrite databases create-integer-attribute --database-id $DB --collection-id menu_items --key sort_order --required false
@@ -137,7 +142,7 @@ appwrite databases create-index --database-id $DB --collection-id menu_items --k
 appwrite databases create-index --database-id $DB --collection-id menu_items --key idx_category --type key --attributes category_id
 appwrite databases create-index --database-id $DB --collection-id menu_items --key idx_veg --type key --attributes is_veg
 appwrite databases create-index --database-id $DB --collection-id menu_items --key idx_name --type fulltext --attributes name
-Write-Host "   ✅ menu_items (16 attributes, 4 indexes)" -ForegroundColor Green
+Write-Host "   ✅ menu_items (18 attributes, 4 indexes)" -ForegroundColor Green
 
 # ─── 7. ORDERS Collection ────────────────────────────────────────────────────
 Write-Host "`n📋 Creating collection: orders ..." -ForegroundColor Yellow
@@ -167,6 +172,8 @@ appwrite databases create-string-attribute --database-id $DB --collection-id ord
 appwrite databases create-enum-attribute --database-id $DB --collection-id orders --key status --elements placed confirmed preparing ready pickedUp outForDelivery delivered cancelled --required true --default placed
 appwrite databases create-string-attribute --database-id $DB --collection-id orders --key special_instructions --size 500 --required false
 appwrite databases create-string-attribute --database-id $DB --collection-id orders --key delivery_instructions --size 500 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id orders --key delivery_proof_url --size 500 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id orders --key delivery_otp --size 10 --required false
 appwrite databases create-integer-attribute --database-id $DB --collection-id orders --key estimated_delivery_min --required false
 appwrite databases create-datetime-attribute --database-id $DB --collection-id orders --key placed_at --required true
 appwrite databases create-datetime-attribute --database-id $DB --collection-id orders --key confirmed_at --required false
@@ -184,7 +191,7 @@ appwrite databases create-index --database-id $DB --collection-id orders --key i
 appwrite databases create-index --database-id $DB --collection-id orders --key idx_rider --type key --attributes delivery_partner_id
 appwrite databases create-index --database-id $DB --collection-id orders --key idx_order_num --type unique --attributes order_number
 appwrite databases create-index --database-id $DB --collection-id orders --key idx_placed --type key --attributes placed_at --orders DESC
-Write-Host "   ✅ orders (33 attributes, 6 indexes)" -ForegroundColor Green
+Write-Host "   ✅ orders (35 attributes, 6 indexes)" -ForegroundColor Green
 
 # ─── 8. COUPONS Collection ───────────────────────────────────────────────────
 Write-Host "`n🎟️  Creating collection: coupons ..." -ForegroundColor Yellow
@@ -320,10 +327,14 @@ appwrite databases create-float-attribute --database-id $DB --collection-id deli
 appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key current_order_id --size 36 --required false
 appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key status --size 20 --required false --default available
 appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key fcm_token --size 256 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key bank_account_name --size 128 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key bank_account_number --size 50 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key bank_ifsc --size 20 --required false
+appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key kyc_document_url --size 500 --required false
 
 Start-Sleep -Seconds 5
 appwrite databases create-index --database-id $DB --collection-id delivery_partners --key idx_user_id --type key --attributes user_id
-Write-Host "   ✅ delivery_partners (17 attributes, 1 index)" -ForegroundColor Green
+Write-Host "   ✅ delivery_partners (21 attributes, 1 index)" -ForegroundColor Green
 
 # ─── 15. FAVORITES Collection ─────────────────────────────────────────────────
 Write-Host "`n❤️  Creating collection: favorites ..." -ForegroundColor Yellow

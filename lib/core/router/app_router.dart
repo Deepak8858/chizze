@@ -89,6 +89,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           state.uri.path == '/role-select';
       final isOnboarding = state.uri.path == '/onboarding';
       final isPartnerRoute = state.uri.path.startsWith('/partner');
+      final isDeliveryRoute = state.uri.path.startsWith('/delivery');
+
+      // Shared routes accessible by all authenticated roles
+      final isSharedRoute =
+          state.uri.path == '/cart' ||
+          state.uri.path == '/payment' ||
+          state.uri.path == '/notifications' ||
+          state.uri.path == '/addresses' ||
+          state.uri.path == '/profile' ||
+          state.uri.path == '/coupons' ||
+          state.uri.path == '/gold' ||
+          state.uri.path == '/referral' ||
+          state.uri.path.startsWith('/order') ||
+          state.uri.path.startsWith('/review') ||
+          state.uri.path.startsWith('/restaurant') ||
+          state.uri.path.startsWith('/scheduled-orders');
 
       debugPrint('[Router] redirect: path=${state.uri.path}, status=${authState.status}, isAuth=$isAuth, isNew=${authState.isNewUser}');
 
@@ -131,17 +147,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/home';
       }
 
-      // Partner trying to access customer routes (and vice versa)
+      // ─── Role-based route guards ───
+
+      // Partner on customer route → redirect to partner dashboard (allow shared routes)
       if (isAuth && authState.isPartner && !isPartnerRoute && !isAuthRoute && !isOnboarding) {
-        // Allow some shared routes
-        if (state.uri.path == '/cart' ||
-            state.uri.path == '/payment' ||
-            state.uri.path.startsWith('/order') ||
-            state.uri.path.startsWith('/review') ||
-            state.uri.path.startsWith('/restaurant')) {
-          return null;
-        }
+        if (isSharedRoute) return null;
         return '/partner/dashboard';
+      }
+
+      // Delivery partner on customer route → redirect to delivery dashboard (allow shared routes)
+      if (isAuth && authState.isDeliveryPartner && !isDeliveryRoute && !isAuthRoute && !isOnboarding) {
+        if (isSharedRoute) return null;
+        return '/delivery/dashboard';
+      }
+
+      // Customer on partner/delivery route → redirect to customer home
+      if (isAuth && !authState.isPartner && !authState.isDeliveryPartner) {
+        if (isPartnerRoute) return '/home';
+        if (isDeliveryRoute) return '/home';
       }
 
       return null; // No redirect needed

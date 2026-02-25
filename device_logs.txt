@@ -1,0 +1,276 @@
+--------- beginning of main
+02-24 18:49:56.413 10275 14095 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+02-24 18:49:56.538 10275 10275 I flutter : [Firebase] Initialized successfully
+02-24 18:49:56.542 10275 10275 I flutter : [Cache] Initialized with 0 cached entries
+02-24 18:49:56.544 10275 10275 I flutter : [Auth] checkSession() started
+02-24 18:49:56.546 10275 10275 I flutter : [Router] redirect: path=/, status=AuthStatus.initial, isAuth=false, isNew=false
+02-24 18:49:56.913 10275 10275 I flutter : [Auth] No active session: AppwriteException: general_unauthorized_scope, User (role: guests) missing scopes (["account"]) (401)
+02-24 18:49:57.025 10275 10275 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.unauthenticated, role=customer, isNew=false
+02-24 18:49:57.025 10275 10275 I flutter : [Router] redirect: path=/, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 18:49:57.025 10275 10275 I flutter : [Router] redirect: path=/role-select, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 18:49:57.039 10275 10275 I flutter : [WS] Disconnected
+02-24 18:50:34.332 10275 10275 I flutter : [Router] redirect: path=/login, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 18:50:34.364 10275 10275 I flutter : [Auth] Selected role set to: restaurant_owner
+02-24 18:50:34.397 10275 10275 I flutter : [WS] Disconnected
+02-24 18:50:56.248 10275 10275 I flutter : [Auth] sendPhoneOTP: sending OTP to +918858901717
+02-24 18:50:56.256 10275 10275 I flutter : [WS] Disconnected
+02-24 18:50:56.734 10275 10275 I flutter : [Auth] sendPhoneOTP: success, userId=699da5b83ccce026d163
+02-24 18:50:56.734 10275 10275 I flutter : [Router] redirect: path=/otp, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 18:50:56.739 10275 10275 I flutter : [WS] Disconnected
+02-24 18:51:08.411 10275 10275 I flutter : [OTP] Verifying OTP for userId=699da5b83ccce026d163
+02-24 18:51:08.412 10275 10275 I flutter : [Auth] verifyPhoneOTP: verifying userId=699da5b83ccce026d163
+02-24 18:51:08.423 10275 10275 I flutter : [WS] Disconnected
+02-24 18:51:09.153 10275 10275 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.authenticated, role=customer, isNew=false
+02-24 18:51:09.154 10275 10275 I flutter : [Router] redirect: path=/login, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:09.157 10275 10275 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:09.157 10275 10275 I flutter : [OTP] Auth success! Router redirect will navigate.
+02-24 18:51:09.158 10275 10275 I flutter : [Router] redirect: path=/, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:09.158 10275 10275 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:09.158 10275 10275 I flutter : [Login] Auth success! Router redirect will navigate.
+02-24 18:51:09.162 10275 10275 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:51:09.518 10275 10275 I flutter : [Auth] Got Appwrite JWT, exchanging with backend...
+02-24 18:51:27.906 10275 10275 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:29.141 10275 10275 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:29.832 10275 10275 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:30.229 10275 10275 I flutter : [Router] redirect: path=/orders, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:30.584 10275 10275 I flutter : [Router] redirect: path=/favorites, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:30.999 10275 10275 I flutter : [Router] redirect: path=/search, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:33.465 10275 10275 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:34.104 10275 10275 I flutter : [Router] redirect: path=/favorites, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:34.568 10275 10275 I flutter : [Router] redirect: path=/orders, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:34.867 10275 10275 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:51:39.284 10275 10275 I flutter : [Restaurants] ApiException: The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 18:51:39.524 10275 10275 I flutter : [Auth] Token exchange failed: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 18:51:50.750 10275 10275 I flutter : Received heartbeat response from realtime server
+02-24 18:52:00.620 10275 10275 I flutter : [Favorites] fetch error: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 18:52:10.749 10275 10275 I flutter : Received heartbeat response from realtime server
+02-24 18:52:14.625 10275 10275 I flutter : [Router] redirect: path=/addresses, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:30.727 10275 10275 I flutter : Received heartbeat response from realtime server
+02-24 18:52:32.383 10275 10275 I flutter : [Router] redirect: path=/orders, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:34.030 10275 10275 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:36.132 10275 10275 I flutter : [Router] redirect: path=/search, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:37.509 10275 10275 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:38.131 17490 17490 I flutter : [IMPORTANT:flutter/shell/common/shell.cc(528)] [Action Required]: Impeller opt-out deprecated.
+02-24 18:52:38.131 17490 17490 I flutter :     The application opted out of Impeller by either using the
+02-24 18:52:38.131 17490 17490 I flutter :     `--no-enable-impeller` flag or the
+02-24 18:52:38.131 17490 17490 I flutter :     `io.flutter.embedding.android.EnableImpeller` `AndroidManifest.xml` entry.
+02-24 18:52:38.131 17490 17490 I flutter :     These options are going to go away in an upcoming Flutter release. Remove
+02-24 18:52:38.131 17490 17490 I flutter :     the explicit opt-out. If you need to opt-out, please report a bug describing
+02-24 18:52:38.131 17490 17490 I flutter :     the issue.
+02-24 18:52:38.131 17490 17490 I flutter : 
+02-24 18:52:38.131 17490 17490 I flutter :     https://github.com/flutter/flutter/issues/new?template=02_bug.yml
+02-24 18:52:38.532 10275 10275 I flutter : [Router] redirect: path=/favorites, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:39.036 10275 10275 I flutter : [Router] redirect: path=/orders, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:39.699 10275 10275 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:41.681 10275 10275 I flutter : [Profile] updateName error: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 18:52:41.690 10275 10275 I flutter : [Profile] updateEmail error: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 18:52:41.782 10275 10275 I flutter : [Router] redirect: path=/coupons, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:44.815 10275 10275 I flutter : [Router] redirect: path=/notifications, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:50.910 10275 10275 I flutter : [Router] redirect: path=/search, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:53.194 10275 10275 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:54.275 10275 10275 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:52:58.381 10275 10275 I flutter : [Address] add error: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 18:53:05.301 10275 10275 I flutter : Received heartbeat response from realtime server
+02-24 18:53:05.760 10275 10275 I flutter : [Router] redirect: path=/search, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:53:06.757 10275 10275 E flutter : [ERROR:flutter/lib/ui/window/platform_configuration.cc(436)] Reported frame time is older than the last one; clamping. 1399085032619 < 1399085032752 ~= 133
+02-24 18:53:14.693 17816 19057 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+02-24 18:53:14.800 17816 17816 I flutter : [Firebase] Initialized successfully
+02-24 18:53:14.803 17816 17816 I flutter : [Cache] Initialized with 0 cached entries
+02-24 18:53:14.805 17816 17816 I flutter : [Auth] checkSession() started
+02-24 18:53:14.807 17816 17816 I flutter : [Router] redirect: path=/, status=AuthStatus.initial, isAuth=false, isNew=false
+02-24 18:53:15.185 17816 17816 I flutter : [Auth] Session found for user:  (699da5b83ccce026d163)
+02-24 18:53:15.185 17816 17816 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.authenticated, role=customer, isNew=false
+02-24 18:53:15.185 17816 17816 I flutter : [Router] redirect: path=/, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:53:15.185 17816 17816 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:53:15.200 17816 17816 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:53:15.755 17816 17816 I flutter : [Auth] Got Appwrite JWT, exchanging with backend...
+02-24 18:53:17.062 17816 17816 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:53:45.224 17816 17816 I flutter : [Restaurants] ApiException: The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 18:53:45.762 17816 17816 I flutter : [Auth] Token exchange failed: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 18:55:58.200 17816 17816 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:55:59.032 17816 17816 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:56:00.177 17816 17816 I flutter : [Auth] logout() called
+02-24 18:56:00.187 17816 17816 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:56:00.973 17816 17816 I flutter : [Auth] logout() called
+02-24 18:56:00.988 17816 17816 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:56:01.209 17816 17816 I flutter : [Auth] logout() called
+02-24 18:56:01.220 17816 17816 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:56:01.446 17816 17816 I flutter : [Auth] logout() called
+02-24 18:56:01.453 17816 17816 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:56:01.659 17816 17816 I flutter : [Auth] logout() called
+02-24 18:56:01.670 17816 17816 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:56:01.886 17816 17816 I flutter : [Auth] logout() called
+02-24 18:56:01.889 17816 17816 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:56:02.072 17816 17816 I flutter : [Auth] logout() called
+02-24 18:56:02.073 17816 17816 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:56:02.584 17816 17816 E flutter : [ERROR:flutter/lib/ui/window/platform_configuration.cc(436)] Reported frame time is older than the last one; clamping. 1399260860413 < 1399260860414 ~= 1
+02-24 18:56:24.833 21304 21763 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+02-24 18:56:24.984 21304 21304 I flutter : [Firebase] Initialized successfully
+02-24 18:56:24.999 21304 21304 I flutter : [Cache] Initialized with 0 cached entries
+02-24 18:56:25.002 21304 21304 I flutter : [Auth] checkSession() started
+02-24 18:56:25.004 21304 21304 I flutter : [Router] redirect: path=/, status=AuthStatus.initial, isAuth=false, isNew=false
+02-24 18:56:25.397 21304 21304 I flutter : [Auth] No active session: AppwriteException: general_unauthorized_scope, User (role: guests) missing scopes (["account"]) (401)
+02-24 18:56:25.845 21304 21304 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.unauthenticated, role=customer, isNew=false
+02-24 18:56:25.845 21304 21304 I flutter : [Router] redirect: path=/, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 18:56:25.845 21304 21304 I flutter : [Router] redirect: path=/role-select, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 18:56:25.852 21304 21304 I flutter : [WS] Disconnected
+02-24 18:56:28.001 21304 21304 I flutter : [Router] redirect: path=/login, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 18:56:33.002 21304 21304 I flutter : [Auth] sendPhoneOTP: sending OTP to +918858901717
+02-24 18:56:33.012 21304 21304 I flutter : [WS] Disconnected
+02-24 18:56:33.350 21304 21304 I flutter : [Auth] sendPhoneOTP: success, userId=699da5b83ccce026d163
+02-24 18:56:33.350 21304 21304 I flutter : [Router] redirect: path=/otp, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 18:56:33.354 21304 21304 I flutter : [WS] Disconnected
+02-24 18:56:48.298 21304 21304 I flutter : [OTP] Verifying OTP for userId=699da5b83ccce026d163
+02-24 18:56:48.298 21304 21304 I flutter : [Auth] verifyPhoneOTP: verifying userId=699da5b83ccce026d163
+02-24 18:56:48.321 21304 21304 I flutter : [WS] Disconnected
+02-24 18:56:48.966 21304 21304 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.authenticated, role=customer, isNew=false
+02-24 18:56:48.966 21304 21304 I flutter : [Router] redirect: path=/login, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:56:48.968 21304 21304 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:56:48.968 21304 21304 I flutter : [OTP] Auth success! Router redirect will navigate.
+02-24 18:56:48.969 21304 21304 I flutter : [Router] redirect: path=/, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:56:48.969 21304 21304 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:56:48.969 21304 21304 I flutter : [Login] Auth success! Router redirect will navigate.
+02-24 18:56:48.972 21304 21304 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:56:49.464 21304 21304 I flutter : [Auth] Got Appwrite JWT, exchanging with backend...
+02-24 18:56:54.380 21304 21304 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:56:58.011 21304 21304 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:56:59.496 21304 21304 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:57:00.631 21304 21304 I flutter : [Auth] logout() called
+02-24 18:57:00.637 21304 21304 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:57:01.077 21304 21304 I flutter : [Auth] logout() called
+02-24 18:57:01.087 21304 21304 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:57:01.246 21304 21304 I flutter : [Auth] logout() called
+02-24 18:57:01.253 21304 21304 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:57:01.445 21304 21304 I flutter : [Auth] logout() called
+02-24 18:57:01.454 21304 21304 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:57:17.048 21304 23275 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+02-24 18:57:17.151 21304 21304 I flutter : [Firebase] Initialized successfully
+02-24 18:57:17.154 21304 21304 I flutter : [Cache] Initialized with 0 cached entries
+02-24 18:57:17.156 21304 21304 I flutter : [Auth] checkSession() started
+02-24 18:57:17.158 21304 21304 I flutter : [Router] redirect: path=/, status=AuthStatus.initial, isAuth=false, isNew=false
+02-24 18:57:17.527 21304 21304 I flutter : [Auth] Session found for user:  (699da5b83ccce026d163)
+02-24 18:57:17.527 21304 21304 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.authenticated, role=customer, isNew=false
+02-24 18:57:17.527 21304 21304 I flutter : [Router] redirect: path=/, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:57:17.528 21304 21304 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:57:17.534 21304 21304 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:57:18.206 21304 21304 I flutter : [Auth] Got Appwrite JWT, exchanging with backend...
+02-24 18:58:53.334 22054 24634 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+02-24 18:58:53.486 22054 22054 I flutter : [Firebase] Initialized successfully
+02-24 18:58:53.490 22054 22054 I flutter : [Cache] Initialized with 0 cached entries
+02-24 18:58:53.493 22054 22054 I flutter : [Auth] checkSession() started
+02-24 18:58:53.495 22054 22054 I flutter : [Router] redirect: path=/, status=AuthStatus.initial, isAuth=false, isNew=false
+02-24 18:58:53.944 22054 22054 I flutter : [Auth] Session found for user:  (699da5b83ccce026d163)
+02-24 18:58:53.944 22054 22054 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.authenticated, role=customer, isNew=false
+02-24 18:58:53.944 22054 22054 I flutter : [Router] redirect: path=/, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:58:53.944 22054 22054 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:58:53.945 22054 22054 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 18:58:54.713 22054 22054 I flutter : [Auth] Got Appwrite JWT, exchanging with backend...
+02-24 18:58:56.171 22054 22054 I flutter : [Router] redirect: path=/search, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:59:19.869 22054 22054 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:59:23.934 22054 22054 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 18:59:23.977 22054 22054 I flutter : [Restaurants] ApiException: The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 18:59:24.716 22054 22054 I flutter : [Auth] Token exchange failed: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 19:00:01.850 24693 25208 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+02-24 19:00:02.010 24693 24693 I flutter : [Firebase] Initialized successfully
+02-24 19:00:02.030 24693 24693 I flutter : [Cache] Initialized with 0 cached entries
+02-24 19:00:02.034 24693 24693 I flutter : [Auth] checkSession() started
+02-24 19:00:02.037 24693 24693 I flutter : [Router] redirect: path=/, status=AuthStatus.initial, isAuth=false, isNew=false
+02-24 19:00:02.859 24693 24693 I flutter : [Auth] No active session: AppwriteException: general_unauthorized_scope, User (role: guests) missing scopes (["account"]) (401)
+02-24 19:00:03.217 24693 24693 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.unauthenticated, role=customer, isNew=false
+02-24 19:00:03.217 24693 24693 I flutter : [Router] redirect: path=/, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:00:03.217 24693 24693 I flutter : [Router] redirect: path=/role-select, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:00:03.219 24693 24693 I flutter : [WS] Disconnected
+02-24 19:01:03.187 24693 24693 I flutter : [Router] redirect: path=/login, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:01:11.828 24693 25695 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+02-24 19:01:11.902 24693 24693 I flutter : [Firebase] Initialized successfully
+02-24 19:01:11.905 24693 24693 I flutter : [Cache] Initialized with 0 cached entries
+02-24 19:01:11.907 24693 24693 I flutter : [Auth] checkSession() started
+02-24 19:01:11.909 24693 24693 I flutter : [Router] redirect: path=/, status=AuthStatus.initial, isAuth=false, isNew=false
+02-24 19:01:12.420 24693 24693 I flutter : [Auth] No active session: AppwriteException: general_unauthorized_scope, User (role: guests) missing scopes (["account"]) (401)
+02-24 19:01:12.546 24693 24693 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.unauthenticated, role=customer, isNew=false
+02-24 19:01:12.546 24693 24693 I flutter : [Router] redirect: path=/, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:01:12.546 24693 24693 I flutter : [Router] redirect: path=/role-select, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:01:12.561 24693 24693 I flutter : [WS] Disconnected
+02-24 19:08:02.585 24693 24693 I flutter : [Router] redirect: path=/login, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:08:07.306 24693 24693 I flutter : [Auth] sendPhoneOTP: sending OTP to +917607185834
+02-24 19:08:07.312 24693 24693 I flutter : [WS] Disconnected
+02-24 19:08:07.821 24693 24693 I flutter : [Auth] sendPhoneOTP: success, userId=699da9bf4ad93369fc4b
+02-24 19:08:07.821 24693 24693 I flutter : [Router] redirect: path=/otp, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:08:07.829 24693 24693 I flutter : [WS] Disconnected
+02-24 19:08:24.382 24693 24693 I flutter : [OTP] Verifying OTP for userId=699da9bf4ad93369fc4b
+02-24 19:08:24.382 24693 24693 I flutter : [Auth] verifyPhoneOTP: verifying userId=699da9bf4ad93369fc4b
+02-24 19:08:24.395 24693 24693 I flutter : [WS] Disconnected
+02-24 19:08:25.225 24693 24693 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.authenticated, role=customer, isNew=false
+02-24 19:08:25.225 24693 24693 I flutter : [Router] redirect: path=/login, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:25.228 24693 24693 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:25.229 24693 24693 I flutter : [OTP] Auth success! Router redirect will navigate.
+02-24 19:08:25.229 24693 24693 I flutter : [Router] redirect: path=/, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:25.230 24693 24693 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:25.231 24693 24693 I flutter : [Login] Auth success! Router redirect will navigate.
+02-24 19:08:25.234 24693 24693 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 19:08:25.601 24693 24693 I flutter : [Auth] Got Appwrite JWT, exchanging with backend...
+02-24 19:08:40.687 24693 24693 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:41.690 24693 24693 I flutter : [Router] redirect: path=/orders, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:42.437 24693 24693 I flutter : [Router] redirect: path=/favorites, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:48.204 24693 24693 I flutter : [Router] redirect: path=/search, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:49.895 24693 24693 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:51.154 24693 24693 I flutter : [Router] redirect: path=/search, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:53.470 24693 24693 I flutter : [Router] redirect: path=/favorites, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:55.357 24693 24693 I flutter : [Restaurants] ApiException: The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 19:08:55.607 24693 24693 I flutter : [Auth] Token exchange failed: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 19:08:57.762 24693 24693 I flutter : [Router] redirect: path=/orders, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:08:59.086 24693 24693 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:09:01.132 24693 24693 I flutter : [Auth] logout() called
+02-24 19:09:01.145 24693 24693 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 19:09:02.305 24693 24693 I flutter : Received heartbeat response from realtime server
+02-24 19:09:12.473 24693 24693 I flutter : [Favorites] fetch error: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 19:09:16.923 24693 24693 I flutter : [Router] redirect: path=/addresses, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:09:22.294 24693 24693 I flutter : Received heartbeat response from realtime server
+02-24 19:09:28.921 25786 28576 D PermissionController: BpPermissionController checking  android.permission.RECORD_AUDIO for uid=10291 pid=> 25786 , result: 1
+02-24 19:09:31.139 24693 24693 I flutter : [Auth] Backend logout failed (non-critical): ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 19:09:31.638 24693 24693 I flutter : [Auth] Appwrite session deleted
+02-24 19:09:32.047 24693 24693 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.unauthenticated, role=customer, isNew=false
+02-24 19:09:32.048 24693 24693 I flutter : [Router] redirect: path=/profile, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:09:32.048 24693 24693 I flutter : [Router] redirect: path=/role-select, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:09:32.048 24693 24693 I flutter : [Auth] State set to unauthenticated
+02-24 19:12:14.277 24693 24693 I flutter : Reconnecting in 1 seconds.
+02-24 19:12:14.301 24693 24693 I flutter : [Address] add error: ApiException(0): The connection errored: Software caused connection abort This indicates an error which most likely cannot be solved by the library.
+02-24 19:12:14.301 24693 24693 I flutter : [Profile] updateEmail error: ApiException(0): The connection errored: Software caused connection abort This indicates an error which most likely cannot be solved by the library.
+02-24 19:12:14.302 24693 24693 I flutter : [Profile] updateName error: ApiException(0): The connection errored: Software caused connection abort This indicates an error which most likely cannot be solved by the library.
+02-24 19:12:14.382 24693 24693 I flutter : [WS] Disconnected
+02-24 19:12:14.519 24693 24693 E flutter : [ERROR:flutter/lib/ui/window/platform_configuration.cc(436)] Reported frame time is older than the last one; clamping. 1400232793842 < 1400232793976 ~= 134
+02-24 19:12:17.372 24693 24693 I flutter : [Router] redirect: path=/login, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:12:17.397 24693 24693 I flutter : [Auth] Selected role set to: delivery_partner
+02-24 19:12:17.420 24693 24693 I flutter : [WS] Disconnected
+02-24 19:12:18.886 24693 24693 I flutter : Reconnecting in 1 seconds.
+02-24 19:12:27.781 24693 24693 I flutter : [Auth] sendPhoneOTP: sending OTP to +917607185834
+02-24 19:12:27.795 24693 24693 I flutter : [WS] Disconnected
+02-24 19:12:28.190 24693 24693 I flutter : [Auth] sendPhoneOTP: success, userId=699da9bf4ad93369fc4b
+02-24 19:12:28.191 24693 24693 I flutter : [Router] redirect: path=/otp, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 19:12:28.196 24693 24693 I flutter : [WS] Disconnected
+02-24 19:12:35.544 24693 24693 I flutter : [OTP] Verifying OTP for userId=699da9bf4ad93369fc4b
+02-24 19:12:35.544 24693 24693 I flutter : [Auth] verifyPhoneOTP: verifying userId=699da9bf4ad93369fc4b
+02-24 19:12:35.562 24693 24693 I flutter : [WS] Disconnected
+02-24 19:12:36.326 24693 24693 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.authenticated, role=customer, isNew=false
+02-24 19:12:36.327 24693 24693 I flutter : [Router] redirect: path=/login, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:12:36.328 24693 24693 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:12:36.328 24693 24693 I flutter : [OTP] Auth success! Router redirect will navigate.
+02-24 19:12:36.328 24693 24693 I flutter : [Router] redirect: path=/, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:12:36.329 24693 24693 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:12:36.329 24693 24693 I flutter : [Login] Auth success! Router redirect will navigate.
+02-24 19:12:36.332 24693 24693 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 19:12:36.722 24693 24693 I flutter : [Auth] Got Appwrite JWT, exchanging with backend...
+02-24 19:12:39.904 24693 24693 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:12:40.451 24693 24693 I flutter : Received heartbeat response from realtime server
+02-24 19:12:41.107 24693 24693 I flutter : [Router] redirect: path=/orders, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:12:42.235 24693 24693 I flutter : [Router] redirect: path=/favorites, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:12:42.783 24693 24693 I flutter : [Router] redirect: path=/search, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:13:00.469 24693 24693 I flutter : Received heartbeat response from realtime server
+02-24 19:13:06.734 24693 24693 I flutter : [Auth] Token exchange failed: ApiException(0): The request connection took longer than 0:00:30.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:30.000000 or improve the response time of the server.
+02-24 19:13:20.459 24693 24693 I flutter : Received heartbeat response from realtime server
+02-24 19:13:33.309 24693 24693 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 19:13:34.488 24693 24693 I flutter : [Auth] logout() called
+02-24 19:13:34.504 24693 24693 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 19:13:35.017 24693 24693 I flutter : [Auth] logout() called
+02-24 19:13:35.022 24693 24693 I flutter : [WS] No auth token ΓÇö skipping connect
+02-24 19:13:35.551 24693 24693 E flutter : [ERROR:flutter/lib/ui/window/platform_configuration.cc(436)] Reported frame time is older than the last one; clamping. 1400313827183 < 1400313827184 ~= 1

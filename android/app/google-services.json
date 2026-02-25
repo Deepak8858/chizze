@@ -1,14 +1,13 @@
 {
   "project_info": {
-    "project_number": "000000000000",
-    "firebase_url": "https://chizze-placeholder.firebaseio.com",
-    "project_id": "chizze-placeholder",
-    "storage_bucket": "chizze-placeholder.appspot.com"
+    "project_number": "570655319157",
+    "project_id": "chizze-b85d7",
+    "storage_bucket": "chizze-b85d7.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+        "mobilesdk_app_id": "1:570655319157:android:5330026c3ca2e75e12843c",
         "android_client_info": {
           "package_name": "com.chizze.app"
         }
@@ -16,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyPlaceholderKeyReplaceMe"
+          "current_key": "AIzaSyCJXODOHnsQUJM94Ya8optd6KcoylTQTRU"
         }
       ],
       "services": {

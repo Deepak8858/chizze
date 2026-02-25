@@ -21,6 +21,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _showEmailLogin = false;
   bool _roleSet = false;
+  String _selectedRole = 'customer';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Set role SYNCHRONOUSLY on first frame — no postFrameCallback race
+    if (!_roleSet) {
+      _roleSet = true;
+      _selectedRole = _getSelectedRole(context);
+      ref.read(authProvider.notifier).setSelectedRole(_selectedRole);
+    }
+  }
 
   @override
   void dispose() {
@@ -43,15 +55,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final selectedRole = _getSelectedRole(context);
-
-    // Set the selected role in auth provider once (not on every rebuild)
-    if (!_roleSet) {
-      _roleSet = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(authProvider.notifier).setSelectedRole(selectedRole);
-      });
-    }
+    final selectedRole = _selectedRole;
 
     final roleLabel_ = switch (selectedRole) {
       'restaurant_owner' => 'Restaurant Partner',

@@ -43,9 +43,13 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onError: (DioException error, ErrorInterceptorHandler handler) async {
+          // Skip refresh for public auth endpoints (exchange, verify-otp, etc.)
+          final path = error.requestOptions.path;
+          final isPublicAuth = path.contains('/auth/');
           if (error.response?.statusCode == 401 &&
               _refreshCallback != null &&
-              !_isRefreshing) {
+              !_isRefreshing &&
+              !isPublicAuth) {
             _isRefreshing = true;
             debugPrint('[ApiClient] 401 received, attempting token refresh...');
             try {

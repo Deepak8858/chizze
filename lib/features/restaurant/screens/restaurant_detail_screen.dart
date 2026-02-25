@@ -207,15 +207,31 @@ class _RestaurantDetailScreenState
         background: Stack(
           fit: StackFit.expand,
           children: [
-            Container(
-              color: AppColors.surfaceElevated,
-              child: Center(
-                child: Text(
-                  _cuisineEmoji(restaurant.cuisines.first),
-                  style: const TextStyle(fontSize: 72),
+            if (restaurant.coverImageUrl.isNotEmpty)
+              Image.network(
+                restaurant.coverImageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                errorBuilder: (_, __, ___) => Container(
+                  color: AppColors.surfaceElevated,
+                  child: Center(
+                    child: Text(
+                      _cuisineEmoji(restaurant.cuisines.first),
+                      style: const TextStyle(fontSize: 72),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Container(
+                color: AppColors.surfaceElevated,
+                child: Center(
+                  child: Text(
+                    _cuisineEmoji(restaurant.cuisines.first),
+                    style: const TextStyle(fontSize: 72),
+                  ),
                 ),
               ),
-            ),
             // Gradient overlay
             Container(
               decoration: const BoxDecoration(
@@ -521,12 +537,28 @@ class _RestaurantDetailScreenState
                     color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                   ),
-                  child: Center(
-                    child: Text(
-                      item.isVeg ? '🥗' : '🍖',
-                      style: const TextStyle(fontSize: 32),
-                    ),
-                  ),
+                  child: item.imageUrl.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          child: Image.network(
+                            item.imageUrl,
+                            width: 90,
+                            height: 90,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Text(
+                                item.isVeg ? '🥗' : '🍖',
+                                style: const TextStyle(fontSize: 32),
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Text(
+                            item.isVeg ? '🥗' : '🍖',
+                            style: const TextStyle(fontSize: 32),
+                          ),
+                        ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 _AddButton(

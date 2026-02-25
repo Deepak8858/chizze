@@ -297,6 +297,17 @@ class _PeakHoursChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (data.isEmpty) {
+      return GlassCard(
+        child: SizedBox(
+          height: 120,
+          child: Center(
+            child: Text('No peak hours data yet', style: AppTypography.body2.copyWith(color: AppColors.textSecondary)),
+          ),
+        ),
+      );
+    }
+
     final maxOrders = data.map((d) => d.orders).reduce(max);
 
     return GlassCard(

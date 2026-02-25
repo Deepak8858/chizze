@@ -1,0 +1,71 @@
+02-24 20:47:04.774 22980 24963 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+02-24 20:47:04.908 22980 22980 I flutter : [Firebase] Initialized successfully
+02-24 20:47:04.911 22980 22980 I flutter : [Cache] Initialized with 0 cached entries
+02-24 20:47:04.913 22980 22980 I flutter : [Auth] checkSession() started
+02-24 20:47:04.915 22980 22980 I flutter : [Router] redirect: path=/, status=AuthStatus.initial, isAuth=false, isNew=false
+02-24 20:47:05.193 22980 22980 I flutter : [ApiClient] 401 received, attempting token refresh...
+02-24 20:47:05.544 22980 22980 I flutter : [Auth] Refresh via interceptor failed: AppwriteException: general_unauthorized_scope, User (role: guests) missing scopes (["account"]) (401)
+02-24 20:47:05.545 22980 22980 I flutter : [Auth] No active session: AppwriteException: general_unauthorized_scope, User (role: guests) missing scopes (["account"]) (401)
+02-24 20:47:05.651 22980 22980 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.unauthenticated, role=customer, isNew=false
+02-24 20:47:05.651 22980 22980 I flutter : [Router] redirect: path=/, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 20:47:05.652 22980 22980 I flutter : [Router] redirect: path=/role-select, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 20:47:05.667 22980 22980 I flutter : [WS] Disconnected
+02-24 20:47:13.913 22980 22980 I flutter : [Router] redirect: path=/login, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 20:47:19.108 22980 22980 I flutter : [Auth] sendPhoneOTP: sending OTP to +917607185834
+02-24 20:47:19.117 22980 22980 I flutter : [WS] Disconnected
+02-24 20:47:19.478 22980 22980 I flutter : [Auth] sendPhoneOTP: success, userId=699dc0ff1a825ec35f7e
+02-24 20:47:19.479 22980 22980 I flutter : [Router] redirect: path=/otp, status=AuthStatus.unauthenticated, isAuth=false, isNew=false
+02-24 20:47:19.484 22980 22980 I flutter : [WS] Disconnected
+02-24 20:47:27.799 22980 22980 I flutter : [OTP] Verifying OTP for userId=699dc0ff1a825ec35f7e
+02-24 20:47:27.799 22980 22980 I flutter : [Auth] verifyPhoneOTP: verifying userId=699dc0ff1a825ec35f7e
+02-24 20:47:27.818 22980 22980 I flutter : [WS] Disconnected
+02-24 20:47:28.686 22980 22980 I flutter : [WS] Disconnected
+02-24 20:47:29.001 22980 22980 I flutter : [Auth] Got Appwrite JWT, exchanging with backend...
+02-24 20:47:29.980 22980 22980 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.unauthenticated, role=customer, isNew=true
+02-24 20:47:29.981 22980 22980 I flutter : [Router] redirect: path=/login, status=AuthStatus.unauthenticated, isAuth=false, isNew=true
+02-24 20:47:29.981 22980 22980 I flutter : [Auth] Backend JWT set & persisted, role=customer, isNew=true
+02-24 20:47:29.981 22980 22980 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.authenticated, role=customer, isNew=true
+02-24 20:47:29.981 22980 22980 I flutter : [Router] redirect: path=/login, status=AuthStatus.authenticated, isAuth=true, isNew=true
+02-24 20:47:29.982 22980 22980 I flutter : [Router] redirect: path=/onboarding, status=AuthStatus.authenticated, isAuth=true, isNew=true
+02-24 20:47:29.982 22980 22980 I flutter : [Login] Auth success! Router redirect will navigate.
+02-24 20:47:29.982 22980 22980 I flutter : [OTP] Auth success! role=customer, isNew=true
+02-24 20:47:29.984 22980 22980 I flutter : [WS] Connecting to wss://api.devdeepak.me:443/api/v1/ws
+02-24 20:47:29.985 22980 22980 I flutter : [WS] Connected
+02-24 20:47:30.293 22980 22980 I flutter : [WS] Error: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
+02-24 20:47:30.293 22980 22980 I flutter : [WS] Reconnecting in 1s (attempt 1)
+02-24 20:47:30.293 22980 22980 I flutter : [WS] Connection closed
+02-24 20:47:30.293 22980 22980 E flutter : [ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
+02-24 20:47:31.294 22980 22980 I flutter : [WS] Connecting to wss://api.devdeepak.me:443/api/v1/ws
+02-24 20:47:31.294 22980 22980 I flutter : [WS] Connected
+02-24 20:47:31.560 22980 22980 I flutter : [WS] Error: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
+02-24 20:47:31.560 22980 22980 I flutter : [WS] Reconnecting in 2s (attempt 2)
+02-24 20:47:31.560 22980 22980 I flutter : [WS] Connection closed
+02-24 20:47:31.560 22980 22980 E flutter : [ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
+02-24 20:47:33.561 22980 22980 I flutter : [WS] Connecting to wss://api.devdeepak.me:443/api/v1/ws
+02-24 20:47:33.561 22980 22980 I flutter : [WS] Connected
+02-24 20:47:33.850 22980 22980 I flutter : [WS] Error: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
+02-24 20:47:33.850 22980 22980 I flutter : [WS] Reconnecting in 4s (attempt 3)
+02-24 20:47:33.850 22980 22980 I flutter : [WS] Connection closed
+02-24 20:47:33.850 22980 22980 E flutter : [ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
+02-24 20:47:37.852 22980 22980 I flutter : [WS] Connecting to wss://api.devdeepak.me:443/api/v1/ws
+02-24 20:47:37.852 22980 22980 I flutter : [WS] Connected
+02-24 20:47:37.880 22980 22980 I flutter : [Auth] Onboarding profile save failed (non-fatal): ApiException(500): Failed to update profile
+02-24 20:47:38.002 22980 22980 I flutter : [Router] Auth state changed ΓåÆ status=AuthStatus.authenticated, role=customer, isNew=false
+02-24 20:47:38.002 22980 22980 I flutter : [Router] redirect: path=/onboarding, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 20:47:38.003 22980 22980 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 20:47:38.003 22980 22980 I flutter : [Auth] Onboarding complete
+02-24 20:47:38.155 22980 22980 I flutter : [WS] Error: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
+02-24 20:47:38.155 22980 22980 I flutter : [WS] Reconnecting in 8s (attempt 4)
+02-24 20:47:38.155 22980 22980 I flutter : [WS] Connection closed
+02-24 20:47:38.156 22980 22980 E flutter : [ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
+02-24 20:47:40.642 22980 22980 I flutter : [Router] redirect: path=/profile, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 20:47:42.525 22980 22980 I flutter : [Router] redirect: path=/orders, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 20:47:43.445 22980 22980 I flutter : [Router] redirect: path=/favorites, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 20:47:44.011 22980 22980 I flutter : [Router] redirect: path=/search, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 20:47:46.106 22980 22980 I flutter : [Router] redirect: path=/home, status=AuthStatus.authenticated, isAuth=true, isNew=false
+02-24 20:47:46.157 22980 22980 I flutter : [WS] Connecting to wss://api.devdeepak.me:443/api/v1/ws
+02-24 20:47:46.157 22980 22980 I flutter : [WS] Connected
+02-24 20:47:46.416 22980 22980 I flutter : [WS] Error: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
+02-24 20:47:46.416 22980 22980 I flutter : [WS] Reconnecting in 16s (attempt 5)
+02-24 20:47:46.416 22980 22980 I flutter : [WS] Connection closed
+02-24 20:47:46.417 22980 22980 E flutter : [ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: WebSocketChannelException: WebSocketException: Connection to 'https://api.devdeepak.me/api/v1/ws#' was not upgraded to websocket
