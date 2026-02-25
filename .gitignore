@@ -90,3 +90,4 @@ backend/docker-compose.override.yml
 # Go backend binary
 backend/server.exe
 backend/server
+tools/deploy_backend.py
