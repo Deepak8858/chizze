@@ -611,9 +611,7 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 		if existing != nil && existing.Total > 0 {
 			// Update existing profile
 			partnerID, _ := existing.Documents[0]["$id"].(string)
-			partnerUpdate := map[string]interface{}{
-				"name": name,
-			}
+			partnerUpdate := map[string]interface{}{}
 			if vehicleType != "" {
 				partnerUpdate["vehicle_type"] = vehicleType
 			}
@@ -624,13 +622,16 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 			log.Printf("Onboard: updated delivery partner %s for user %s", partnerID, userID)
 		} else {
 			// Create new delivery partner profile
-			// Only use fields that exist in the delivery_partners collection schema
+			// Only use fields that exist in the actual Appwrite delivery_partners collection:
+			// user_id, vehicle_type, vehicle_number, license_number, is_online, is_on_delivery,
+			// current_latitude, current_longitude, last_location_update, rating, total_ratings,
+			// total_deliveries, total_earnings, bank_account_id, documents_verified, created_at, updated_at
+			// NOTE: name and phone are stored in the users collection, NOT here
 			partnerData := map[string]interface{}{
-				"user_id":   userID,
-				"name":      name,
-				"phone":     "",
-				"is_online": false,
-				"rating":    4.5,
+				"user_id":        userID,
+				"is_online":      false,
+				"is_on_delivery": false,
+				"rating":         4.5,
 			}
 			if vehicleType != "" {
 				partnerData["vehicle_type"] = vehicleType
@@ -639,14 +640,6 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 			}
 			if vehicleNumber != "" {
 				partnerData["vehicle_number"] = vehicleNumber
-			}
-
-			// Try to get phone from user doc
-			user, _ := h.appwrite.GetUser(userID)
-			if user != nil {
-				if phone, ok := user["phone"].(string); ok {
-					partnerData["phone"] = phone
-				}
 			}
 
 			partnerID := fmt.Sprintf("dp_%s", userID[:8])
