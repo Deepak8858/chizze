@@ -221,7 +221,7 @@ appwrite databases create-collection --database-id $DB --collection-id notificat
 appwrite databases create-string-attribute --database-id $DB --collection-id notifications --key user_id --size 36 --required true
 appwrite databases create-string-attribute --database-id $DB --collection-id notifications --key title --size 200 --required true
 appwrite databases create-string-attribute --database-id $DB --collection-id notifications --key body --size 1000 --required true
-appwrite databases create-enum-attribute --database-id $DB --collection-id notifications --key type --elements order promo system --required true
+appwrite databases create-enum-attribute --database-id $DB --collection-id notifications --key type --elements order promo system delivery_update --required true
 appwrite databases create-boolean-attribute --database-id $DB --collection-id notifications --key is_read --required false --default false
 appwrite databases create-string-attribute --database-id $DB --collection-id notifications --key data --size 2000 --required false
 
@@ -266,7 +266,7 @@ appwrite databases create-float-attribute --database-id $DB --collection-id ride
 appwrite databases create-boolean-attribute --database-id $DB --collection-id rider_locations --key is_online --required false --default false
 
 Start-Sleep -Seconds 3
-appwrite databases create-index --database-id $DB --collection-id rider_locations --key idx_rider --type unique --attributes rider_id
+appwrite databases create-index --database-id $DB --collection-id rider_locations --key idx_rider --type key --attributes rider_id
 appwrite databases create-index --database-id $DB --collection-id rider_locations --key idx_online --type key --attributes is_online
 Write-Host "   ✅ rider_locations (6 attributes, 2 indexes)" -ForegroundColor Green
 
@@ -331,10 +331,14 @@ appwrite databases create-string-attribute --database-id $DB --collection-id del
 appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key bank_account_number --size 50 --required false
 appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key bank_ifsc --size 20 --required false
 appwrite databases create-string-attribute --database-id $DB --collection-id delivery_partners --key kyc_document_url --size 500 --required false
+appwrite databases create-float-attribute --database-id $DB --collection-id delivery_partners --key heading --required false
+appwrite databases create-float-attribute --database-id $DB --collection-id delivery_partners --key speed --required false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id delivery_partners --key last_location_at --required false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id delivery_partners --key login_at --required false
 
 Start-Sleep -Seconds 5
 appwrite databases create-index --database-id $DB --collection-id delivery_partners --key idx_user_id --type key --attributes user_id
-Write-Host "   ✅ delivery_partners (21 attributes, 1 index)" -ForegroundColor Green
+Write-Host "   ✅ delivery_partners (25 attributes, 1 index)" -ForegroundColor Green
 
 # ─── 15. FAVORITES Collection ─────────────────────────────────────────────────
 Write-Host "`n❤️  Creating collection: favorites ..." -ForegroundColor Yellow

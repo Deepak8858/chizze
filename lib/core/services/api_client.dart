@@ -230,7 +230,8 @@ class ApiClient {
       return exception;
     }
     final exception = ApiException(statusCode: 0, message: e.message ?? 'Network error');
-    Sentry.captureException(exception, stackTrace: e.stackTrace);
+    // Don't report transient network errors (offline, timeout, DNS) to Sentry —
+    // they are not bugs. The breadcrumb above is sufficient for context.
     return exception;
   }
 }

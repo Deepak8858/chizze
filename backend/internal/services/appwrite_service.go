@@ -260,6 +260,14 @@ func (s *AppwriteService) CreateDeliveryLocation(id string, data map[string]inte
 	return s.client.CreateDocument(models.CollectionRiderLocations, id, data)
 }
 
+func (s *AppwriteService) UpdateDeliveryLocation(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.UpdateDocument(models.CollectionRiderLocations, id, data)
+}
+
+func (s *AppwriteService) ListDeliveryLocations(queries []string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionRiderLocations, queries)
+}
+
 // ─── Payouts ───
 
 func (s *AppwriteService) CreatePayout(id string, data map[string]interface{}) (map[string]interface{}, error) {

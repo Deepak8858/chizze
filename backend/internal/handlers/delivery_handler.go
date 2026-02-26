@@ -140,6 +140,7 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 		"last_location_at":  time.Now().Format(time.RFC3339),
 	})
 	if err != nil {
+		log.Printf("[delivery] UpdateLocation failed for partner %s (user %s): %v", partnerID, userID, err)
 		utils.InternalError(c, "Failed to update location")
 		return
 	}
@@ -157,15 +158,25 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 		}
 	}
 
-	// Also store in rider_locations for tracking history
-	_, _ = h.appwrite.CreateDeliveryLocation("unique()", map[string]interface{}{
+	// Also store in rider_locations for tracking (upsert: update existing or create new)
+	locData := map[string]interface{}{
 		"rider_id":  userID,
 		"latitude":  req.Latitude,
 		"longitude": req.Longitude,
 		"heading":   req.Heading,
 		"speed":     req.Speed,
 		"is_online": true,
+	}
+	existingLocs, locErr := h.appwrite.ListDeliveryLocations([]string{
+		appwrite.QueryEqual("rider_id", userID),
+		appwrite.QueryLimit(1),
 	})
+	if locErr == nil && existingLocs != nil && existingLocs.Total > 0 {
+		locID, _ := existingLocs.Documents[0]["$id"].(string)
+		_, _ = h.appwrite.UpdateDeliveryLocation(locID, locData)
+	} else {
+		_, _ = h.appwrite.CreateDeliveryLocation("unique()", locData)
+	}
 
 	// Broadcast live location to customers tracking this rider's deliveries
 	if h.broadcaster != nil {

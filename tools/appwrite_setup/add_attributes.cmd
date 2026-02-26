@@ -178,7 +178,7 @@ echo [NOTIFICATIONS] Adding attributes...
 appwrite databases create-string-attribute --database-id chizze_db --collection-id notifications --key user_id --size 36 --required true
 appwrite databases create-string-attribute --database-id chizze_db --collection-id notifications --key title --size 200 --required true
 appwrite databases create-string-attribute --database-id chizze_db --collection-id notifications --key body --size 1000 --required true
-appwrite databases create-enum-attribute --database-id chizze_db --collection-id notifications --key type --elements order promo system --required true
+appwrite databases create-enum-attribute --database-id chizze_db --collection-id notifications --key type --elements order promo system delivery_update --required true
 appwrite databases create-boolean-attribute --database-id chizze_db --collection-id notifications --key is_read --required false --default false
 appwrite databases create-string-attribute --database-id chizze_db --collection-id notifications --key data --size 2000 --required false
 timeout /t 5 /nobreak >nul
@@ -221,7 +221,7 @@ appwrite databases create-float-attribute --database-id chizze_db --collection-i
 appwrite databases create-boolean-attribute --database-id chizze_db --collection-id rider_locations --key is_online --required false --default false
 timeout /t 5 /nobreak >nul
 echo [RIDER_LOCATIONS] Adding indexes...
-appwrite databases create-index --database-id chizze_db --collection-id rider_locations --key idx_rider --type unique --attributes rider_id
+appwrite databases create-index --database-id chizze_db --collection-id rider_locations --key idx_rider --type key --attributes rider_id
 appwrite databases create-index --database-id chizze_db --collection-id rider_locations --key idx_online --type key --attributes is_online
 echo [RIDER_LOCATIONS] Done!
 
