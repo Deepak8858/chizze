@@ -75,7 +75,8 @@ func (h *PaymentHandler) Initiate(c *gin.Context) {
 	orderNumber, _ := order["order_number"].(string)
 	rzpOrder, err := h.payments.CreateRazorpayOrder(amountPaise, "INR", orderNumber)
 	if err != nil {
-		log.Printf("Razorpay order creation failed: %v", err)
+		log.Printf("[ERROR] Razorpay order creation failed for order=%s amount=%d user=%s: %v",
+			req.OrderID, amountPaise, userID, err)
 		utils.InternalError(c, "Failed to create payment order")
 		return
 	}

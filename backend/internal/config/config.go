@@ -89,6 +89,14 @@ func Load() *Config {
 		log.Fatal("FATAL: REDIS_URL must be set to a real Redis instance in production mode")
 	}
 
+	// Validate Razorpay credentials — empty secret causes 401 on every payment attempt
+	if cfg.RazorpayKeySecret == "" {
+		if cfg.IsProduction() {
+			log.Fatal("FATAL: RAZORPAY_KEY_SECRET not set — all payments will fail with 401")
+		}
+		log.Println("WARNING: RAZORPAY_KEY_SECRET not set — Razorpay payments will fail")
+	}
+
 	return cfg
 }
 

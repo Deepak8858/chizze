@@ -69,6 +69,11 @@ type RazorpayOrderResponse struct {
 
 // CreateRazorpayOrder creates an order on Razorpay (circuit-breaker protected)
 func (s *PaymentService) CreateRazorpayOrder(amountPaise int64, currency, receipt string) (*RazorpayOrderResponse, error) {
+	// Fail fast if credentials are not configured — avoids burning circuit breaker on 401s
+	if s.keyID == "" || s.keySecret == "" {
+		return nil, fmt.Errorf("razorpay credentials not configured (keyID=%q, secretSet=%v)", s.keyID, s.keySecret != "")
+	}
+
 	payload := map[string]interface{}{
 		"amount":   amountPaise,
 		"currency": currency,

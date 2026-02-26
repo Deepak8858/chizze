@@ -98,3 +98,4 @@ tools/ssh_cmd.py
 tools/appwrite_setup/add_attributes.cmd
 tools/ssh_cmd.py
 tools/fix_schema_flutter3.sh
+tools/fix_razorpay_secret.py

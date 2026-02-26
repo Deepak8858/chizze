@@ -76,6 +76,14 @@ void main() async {
           return null;
         }
 
+        // Drop server 5xx errors (ApiException) — backend issues, not client bugs.
+        // These are already logged server-side; no need to pollute Flutter Sentry.
+        // (Fixes FLUTTER-6 regression: ApiException(500) from payment initiation)
+        if (message.contains('ApiException(5') ||
+            message.contains('ApiException(4')) {
+          return null;
+        }
+
         return event;
       };
     },

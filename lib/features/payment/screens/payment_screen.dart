@@ -404,7 +404,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
   }
 
-  void _handlePayment(CartState cartState, double total) async {
+  Future<void> _handlePayment(CartState cartState, double total) async {
     final authState = ref.read(authProvider);
     final userName = authState.user?.name ?? 'Chizze Customer';
     final userEmail = authState.user?.email ?? '';
@@ -473,7 +473,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       context.go('/order-confirmation/$orderId');
     } else {
       // Razorpay — initiate payment with the backend order ID
-      ref.read(paymentProvider.notifier).startPayment(
+      await ref.read(paymentProvider.notifier).startPayment(
             orderId: orderId,
             amount: total,
             customerEmail: userEmail,
