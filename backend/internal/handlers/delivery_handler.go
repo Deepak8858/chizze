@@ -173,9 +173,13 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 	})
 	if locErr == nil && existingLocs != nil && existingLocs.Total > 0 {
 		locID, _ := existingLocs.Documents[0]["$id"].(string)
-		_, _ = h.appwrite.UpdateDeliveryLocation(locID, locData)
+		if _, err := h.appwrite.UpdateDeliveryLocation(locID, locData); err != nil {
+			log.Printf("[delivery] UpdateDeliveryLocation failed for rider %s (loc %s): %v", userID, locID, err)
+		}
 	} else {
-		_, _ = h.appwrite.CreateDeliveryLocation("unique()", locData)
+		if _, err := h.appwrite.CreateDeliveryLocation("unique()", locData); err != nil {
+			log.Printf("[delivery] CreateDeliveryLocation failed for rider %s: %v", userID, err)
+		}
 	}
 
 	// Broadcast live location to customers tracking this rider's deliveries

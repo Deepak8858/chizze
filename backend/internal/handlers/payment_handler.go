@@ -91,6 +91,8 @@ func (h *PaymentHandler) Initiate(c *gin.Context) {
 	}
 	if _, err := h.appwrite.CreatePayment("unique()", paymentData); err != nil {
 		log.Printf("[ERROR] CreatePayment record failed for order=%s: %v", req.OrderID, err)
+		utils.InternalError(c, "Failed to create payment order")
+		return
 	}
 
 	utils.Success(c, gin.H{
@@ -149,17 +151,25 @@ func (h *PaymentHandler) Verify(c *gin.Context) {
 	}
 
 	// Update payment record
-	h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
+	if _, err := h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
 		"razorpay_payment_id": req.RazorpayPaymentID,
 		"razorpay_signature":  req.RazorpaySignature,
 		"status":              "success",
-	})
+	}); err != nil {
+		log.Printf("[ERROR] UpdatePayment failed for payment=%s order=%s: %v", paymentID, orderID, err)
+		utils.InternalError(c, "Failed to update payment record")
+		return
+	}
 
 	// Update order payment status
-	h.appwrite.UpdateOrder(orderID, map[string]interface{}{
+	if _, err := h.appwrite.UpdateOrder(orderID, map[string]interface{}{
 		"payment_status": models.PaymentPaid,
 		"payment_id":     req.RazorpayPaymentID,
-	})
+	}); err != nil {
+		log.Printf("[ERROR] UpdateOrder payment status failed for order=%s: %v", orderID, err)
+		utils.InternalError(c, "Payment verified but failed to update order")
+		return
+	}
 
 	utils.Success(c, gin.H{
 		"verified":   true,

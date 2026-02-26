@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"log"
+
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
@@ -36,6 +38,7 @@ func (h *NotificationHandler) List(c *gin.Context) {
 
 	result, err := h.appwrite.ListNotifications(userID, pg.PerPage, pg.Offset())
 	if err != nil {
+		log.Printf("[notifications] ListNotifications failed for user %s: %v", userID, err)
 		utils.InternalError(c, "Failed to fetch notifications")
 		return
 	}
