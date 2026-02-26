@@ -162,32 +162,40 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
     }
   }
 
-  void updateName(String name) {
+  Future<bool> updateName(String name) async {
     final oldName = state.name;
     state = state.copyWith(name: name);
-    _api.put(ApiConfig.profile, body: {'name': name}).then((r) {
+    try {
+      final r = await _api.put(ApiConfig.profile, body: {'name': name});
       if (!r.success) {
         debugPrint('[Profile] updateName failed: ${r.error}');
         state = state.copyWith(name: oldName);
+        return false;
       }
-    }).catchError((e) {
+      return true;
+    } catch (e) {
       debugPrint('[Profile] updateName error: $e');
       state = state.copyWith(name: oldName);
-    });
+      return false;
+    }
   }
 
-  void updateEmail(String email) {
+  Future<bool> updateEmail(String email) async {
     final oldEmail = state.email;
     state = state.copyWith(email: email);
-    _api.put(ApiConfig.profile, body: {'email': email}).then((r) {
+    try {
+      final r = await _api.put(ApiConfig.profile, body: {'email': email});
       if (!r.success) {
         debugPrint('[Profile] updateEmail failed: ${r.error}');
         state = state.copyWith(email: oldEmail);
+        return false;
       }
-    }).catchError((e) {
+      return true;
+    } catch (e) {
       debugPrint('[Profile] updateEmail error: $e');
       state = state.copyWith(email: oldEmail);
-    });
+      return false;
+    }
   }
 
   void toggleVeg() async {
@@ -214,6 +222,14 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
     state = state.copyWith(defaultAddressId: id);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyDefaultAddress, id);
+    // Sync to backend so the default persists across devices / reinstalls
+    _api.put(ApiConfig.profile, body: {'default_address_id': id}).then((r) {
+      if (!r.success) {
+        debugPrint('[Profile] setDefaultAddress sync failed: ${r.error}');
+      }
+    }).catchError((e) {
+      debugPrint('[Profile] setDefaultAddress sync error: $e');
+    });
   }
 }
 

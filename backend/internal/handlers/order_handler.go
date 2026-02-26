@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
@@ -70,6 +71,18 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	var req models.PlaceOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, "Invalid order data")
+		return
+	}
+
+	// --- Normalize payment method ---
+	// "razorpay" is a gateway name, not a payment method; normalize it to "online"
+	switch req.PaymentMethod {
+	case "cod", "upi", "card", "wallet", "netbanking", "online":
+		// valid — keep as-is
+	case "razorpay":
+		req.PaymentMethod = "online"
+	default:
+		utils.BadRequest(c, "Invalid payment method: "+req.PaymentMethod)
 		return
 	}
 
@@ -274,6 +287,8 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 
 	doc, err := h.appwrite.CreateOrder("unique()", orderData)
 	if err != nil {
+		log.Printf("[ERROR] CreateOrder failed for user=%s restaurant=%s payment_method=%s: %v",
+			userID, req.RestaurantID, req.PaymentMethod, err)
 		utils.InternalError(c, "Failed to create order")
 		return
 	}
@@ -283,11 +298,26 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		ownerID, _ := restaurant["owner_id"].(string)
 		if ownerID != "" {
 			orderID, _ := doc["$id"].(string)
+
+			// Get customer name for the broadcast
+			customerName := "Customer"
+			if user, uErr := h.appwrite.GetUser(userID); uErr == nil && user != nil {
+				if name, _ := user["name"].(string); name != "" {
+					customerName = name
+				}
+			}
+
 			h.broadcaster.BroadcastNewOrder(ownerID, orderID, map[string]interface{}{
-				"order_number":    orderNumber,
-				"restaurant_name": restaurantName,
-				"grand_total":     grandTotal,
-				"items_count":     len(verifiedItems),
+				"order_number":       orderNumber,
+				"restaurant_name":    restaurantName,
+				"grand_total":        grandTotal,
+				"items_count":        len(verifiedItems),
+				"customer_name":      customerName,
+				"delivery_address":   deliveryAddress,
+				"delivery_landmark":  deliveryLandmark,
+				"items":              verifiedItems,
+				"payment_method":     req.PaymentMethod,
+				"special_instructions": req.SpecialInstructions,
 			})
 		}
 	}
@@ -360,6 +390,17 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
+	// Enrich with customer name from users collection
+	if custID != "" {
+		if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
+			if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
+				if name, _ := user["name"].(string); name != "" {
+					order["customer_name"] = name
+				}
+			}
+		}
+	}
+
 	utils.Success(c, order)
 }
 
@@ -414,6 +455,20 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 		utils.InternalError(c, "Failed to fetch orders")
 		return
 	}
+
+	// Enrich orders with customer name from users collection
+	for _, order := range result.Documents {
+		if custID, _ := order["customer_id"].(string); custID != "" {
+			if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
+				if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
+					if name, _ := user["name"].(string); name != "" {
+						order["customer_name"] = name
+					}
+				}
+			}
+		}
+	}
+
 	utils.Paginated(c, result.Documents, pg.Page, pg.PerPage, result.Total)
 }
 
@@ -582,6 +637,11 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		updateData["picked_up_at"] = now
 	case models.OrderStatusDelivered:
 		updateData["delivered_at"] = now
+		// Mark COD orders as paid upon delivery
+		paymentMethod, _ := order["payment_method"].(string)
+		if paymentMethod == "cod" {
+			updateData["payment_status"] = "paid"
+		}
 	}
 
 	updated, err := h.appwrite.UpdateOrder(orderID, updateData)

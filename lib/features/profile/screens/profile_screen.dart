@@ -320,19 +320,33 @@ class ProfileScreen extends ConsumerWidget {
                 child: ElevatedButton(
                   onPressed: isSaving
                       ? null
-                      : () {
+                      : () async {
                           setSheetState(() => isSaving = true);
                           final notifier = ref.read(userProfileProvider.notifier);
-                          if (nameCtrl.text.trim() != profile.name) {
-                            notifier.updateName(nameCtrl.text.trim());
+                          bool ok = true;
+                          if (nameCtrl.text.trim().isEmpty) {
+                            ok = false;
+                          } else {
+                            if (nameCtrl.text.trim() != profile.name) {
+                              ok = await notifier.updateName(nameCtrl.text.trim());
+                            }
+                            if (ok && emailCtrl.text.trim() != profile.email) {
+                              ok = await notifier.updateEmail(emailCtrl.text.trim());
+                            }
                           }
-                          if (emailCtrl.text.trim() != profile.email) {
-                            notifier.updateEmail(emailCtrl.text.trim());
+                          if (ctx.mounted) {
+                            setSheetState(() => isSaving = false);
+                            if (ok) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Profile updated')),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Failed to update profile. Please try again.')),
+                              );
+                            }
                           }
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Profile updated')),
-                          );
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,

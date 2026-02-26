@@ -94,44 +94,11 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     try {
       final response = await _api.get(ApiConfig.orders);
       if (response.success && response.data != null) {
-        // Parse orders from API response
+        // Parse orders from API response using Order.fromMap for full field coverage
         final ordersData = response.data as List<dynamic>;
-        final orders = ordersData.map((d) {
-          final m = d as Map<String, dynamic>;
-          return Order(
-            id: m['\$id'] ?? '',
-            orderNumber: m['order_number'] ?? '',
-            customerId: m['customer_id'] ?? '',
-            restaurantId: m['restaurant_id'] ?? '',
-            restaurantName: m['restaurant_name'] ?? '',
-            deliveryAddressId: m['delivery_address_id'] ?? '',
-            items: ((m['items'] ?? []) as List).map((i) {
-              final item = i as Map<String, dynamic>;
-              return OrderItem(
-                id: item['id'] ?? '',
-                name: item['name'] ?? '',
-                quantity: item['quantity'] ?? 1,
-                price: (item['price'] ?? 0).toDouble(),
-                isVeg: item['is_veg'] ?? false,
-              );
-            }).toList(),
-            itemTotal: (m['item_total'] ?? 0).toDouble(),
-            deliveryFee: (m['delivery_fee'] ?? 0).toDouble(),
-            platformFee: (m['platform_fee'] ?? 0).toDouble(),
-            gst: (m['gst'] ?? 0).toDouble(),
-            discount: (m['discount'] ?? 0).toDouble(),
-            couponCode: m['coupon_code'],
-            grandTotal: (m['grand_total'] ?? 0).toDouble(),
-            paymentMethod: m['payment_method'] ?? 'razorpay',
-            paymentStatus: m['payment_status'] ?? 'pending',
-            paymentId: m['payment_id'],
-            status: OrderStatus.fromString(m['status'] ?? 'placed'),
-            specialInstructions: m['special_instructions'] ?? '',
-            deliveryInstructions: m['delivery_instructions'] ?? '',
-            estimatedDeliveryMin: m['estimated_delivery_min'] ?? 35,
-            placedAt: DateTime.tryParse(m['placed_at'] ?? '') ?? DateTime.now(),
-          );
-        }).toList();
+        final orders = ordersData
+            .map((d) => Order.fromMap(d as Map<String, dynamic>))
+            .toList();
         state = state.copyWith(orders: orders, isLoading: false);
       } else {
         state = state.copyWith(isLoading: false, error: response.error);
@@ -186,6 +153,30 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Fetch a single order by ID from the API and merge into local state.
+  /// Used as fallback when the order isn't in the provider yet.
+  Future<Order?> fetchOrderById(String orderId) async {
+    try {
+      final response = await _api.get('${ApiConfig.orders}/$orderId');
+      if (response.success && response.data != null) {
+        final order = Order.fromMap(response.data as Map<String, dynamic>);
+        // Merge into existing list (replace if exists, or prepend)
+        final existing = state.orders.indexWhere((o) => o.id == orderId);
+        final updatedOrders = [...state.orders];
+        if (existing >= 0) {
+          updatedOrders[existing] = order;
+        } else {
+          updatedOrders.insert(0, order);
+        }
+        state = state.copyWith(orders: updatedOrders);
+        return order;
+      }
+    } catch (_) {
+      // Silently fail — caller can handle null
+    }
+    return null;
   }
 }
 

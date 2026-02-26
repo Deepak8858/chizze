@@ -25,12 +25,26 @@ class OrderTrackingScreen extends ConsumerStatefulWidget {
 class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   bool _trackingStarted = false;
   String? _lastKnownRiderId;
+  bool _fetchAttempted = false;
 
   @override
   void initState() {
     super.initState();
+    // If order is not in local state, fetch it from the API
+    _ensureOrderLoaded();
     // Start rider tracking using the order's actual rider ID
     _startTracking();
+  }
+
+  void _ensureOrderLoaded() {
+    final ordersState = ref.read(ordersProvider);
+    final order = ordersState.orders
+        .where((o) => o.id == widget.orderId)
+        .firstOrNull;
+    if (order == null && !_fetchAttempted) {
+      _fetchAttempted = true;
+      ref.read(ordersProvider.notifier).fetchOrderById(widget.orderId);
+    }
   }
 
   void _startTracking() {
@@ -65,10 +79,27 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         .firstOrNull;
 
     if (order == null) {
+      // Show loading while we fetch the order from the API
       return Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(title: const Text('Order Tracking')),
-        body: const Center(child: Text('Order not found')),
+        body: ordersState.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Order not found'),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: () {
+                        ref.read(ordersProvider.notifier).fetchOrderById(widget.orderId);
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
       );
     }
 

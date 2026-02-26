@@ -11,7 +11,7 @@ def run(cmd: str) -> None:
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
         ssh.connect(HOST, username=USER, password=PASSWORD, timeout=15)
-        stdin, stdout, stderr = ssh.exec_command(cmd, timeout=60)
+        stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
         out = stdout.read().decode()
         err = stderr.read().decode()
         if out:

@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"math"
-	"time"
 
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
@@ -84,14 +83,15 @@ func (h *PaymentHandler) Initiate(c *gin.Context) {
 	// Store payment record in Appwrite
 	paymentData := map[string]interface{}{
 		"order_id":          req.OrderID,
-		"customer_id":       userID,
+		"user_id":           userID,
 		"razorpay_order_id": rzpOrder.ID,
 		"amount":            grandTotal,
-		"currency":          "INR",
-		"status":            "created",
-		"created_at":        time.Now().Format(time.RFC3339),
+		"status":            "pending",
+		"method":            "online",
 	}
-	h.appwrite.CreatePayment("unique()", paymentData)
+	if _, err := h.appwrite.CreatePayment("unique()", paymentData); err != nil {
+		log.Printf("[ERROR] CreatePayment record failed for order=%s: %v", req.OrderID, err)
+	}
 
 	utils.Success(c, gin.H{
 		"razorpay_order_id": rzpOrder.ID,
@@ -140,20 +140,19 @@ func (h *PaymentHandler) Verify(c *gin.Context) {
 	paymentDoc := paymentResult.Documents[0]
 	paymentID, _ := paymentDoc["$id"].(string)
 	orderID, _ := paymentDoc["order_id"].(string)
-	paymentCustomerID, _ := paymentDoc["customer_id"].(string)
+	paymentOwnerID, _ := paymentDoc["user_id"].(string)
 
 	// Verify ownership
-	if paymentCustomerID != userID {
+	if paymentOwnerID != userID {
 		utils.Forbidden(c, "Not your payment")
 		return
 	}
 
 	// Update payment record
-	now := time.Now().Format(time.RFC3339)
 	h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
 		"razorpay_payment_id": req.RazorpayPaymentID,
-		"status":              "captured",
-		"paid_at":             now,
+		"razorpay_signature":  req.RazorpaySignature,
+		"status":              "success",
 	})
 
 	// Update order payment status
@@ -229,8 +228,7 @@ func (h *PaymentHandler) Webhook(c *gin.Context) {
 
 			h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
 				"razorpay_payment_id": event.Payload.Payment.Entity.ID,
-				"status":              "captured",
-				"paid_at":             time.Now().Format(time.RFC3339),
+				"status":              "success",
 			})
 
 			h.appwrite.UpdateOrder(orderID, map[string]interface{}{
@@ -248,8 +246,7 @@ func (h *PaymentHandler) Webhook(c *gin.Context) {
 			orderID, _ := paymentDoc["order_id"].(string)
 
 			h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
-				"status":    "failed",
-				"failed_at": time.Now().Format(time.RFC3339),
+				"status": "failed",
 			})
 
 			h.appwrite.UpdateOrder(orderID, map[string]interface{}{

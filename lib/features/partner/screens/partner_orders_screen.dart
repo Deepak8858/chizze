@@ -217,6 +217,48 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
 
             const Divider(color: AppColors.divider, height: AppSpacing.xl),
 
+            // Customer name and delivery address
+            if (order.customerName != null && order.customerName!.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Icon(Icons.person_rounded, size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      order.customerName!,
+                      style: AppTypography.body2.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+            if (order.deliveryAddress != null && order.deliveryAddress!.isNotEmpty) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.location_on_rounded, size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      order.deliveryAddress! +
+                          (order.deliveryLandmark != null && order.deliveryLandmark!.isNotEmpty
+                              ? ' (${order.deliveryLandmark})'
+                              : ''),
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+
             // Items
             ...order.items.map(
               (item) => Padding(

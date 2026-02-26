@@ -32,6 +32,12 @@ func (g *gzipWriter) WriteString(s string) (int, error) {
 // Gzip compresses JSON responses for bandwidth savings (~70% reduction)
 func Gzip() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip gzip for WebSocket upgrade requests — the response writer wrapper
+		// breaks gorilla/websocket's Hijack() call for the 101 Switching Protocols handshake.
+		if strings.EqualFold(c.GetHeader("Upgrade"), "websocket") {
+			c.Next()
+			return
+		}
 		if !strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") {
 			c.Next()
 			return

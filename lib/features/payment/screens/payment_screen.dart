@@ -10,6 +10,7 @@ import '../../profile/providers/address_provider.dart';
 import '../../profile/providers/user_profile_provider.dart';
 import '../providers/payment_provider.dart';
 import '../../orders/providers/orders_provider.dart';
+import '../../orders/models/order.dart';
 
 /// Payment method selection + Razorpay checkout
 class PaymentScreen extends ConsumerStatefulWidget {
@@ -20,7 +21,7 @@ class PaymentScreen extends ConsumerStatefulWidget {
 }
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
-  String _selectedMethod = 'razorpay'; // razorpay | cod
+  String _selectedMethod = 'online'; // online | cod
   double _tip = 0;
 
   @override
@@ -33,7 +34,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       if (next.isSuccess && !(prev?.isSuccess ?? false)) {
         final orderId = next.orderId ?? '';
         ref.read(cartProvider.notifier).clearCart();
-        ref.read(ordersProvider.notifier).fetchOrders();
+        // Fetch the newly created order so it's available immediately
+        ref.read(ordersProvider.notifier).fetchOrderById(orderId);
         context.go('/order-confirmation/$orderId');
       }
     });
@@ -75,8 +77,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     icon: Icons.account_balance_wallet_rounded,
                     label: 'Pay Online',
                     subtitle: 'UPI · Cards · Wallets · Net Banking',
-                    isSelected: _selectedMethod == 'razorpay',
-                    onTap: () => setState(() => _selectedMethod = 'razorpay'),
+                    isSelected: _selectedMethod == 'online',
+                    onTap: () => setState(() => _selectedMethod = 'online'),
                     badge: 'Razorpay',
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -445,7 +447,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       return;
     }
 
-    final paymentMethod = _selectedMethod == 'cod' ? 'cod' : 'razorpay';
+    final paymentMethod = _selectedMethod == 'cod' ? 'cod' : 'online';
 
     // Step 1: Create order on backend
     final orderDoc = await ref.read(paymentProvider.notifier).placeBackendOrder(
@@ -464,9 +466,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (!mounted) return;
 
     if (_selectedMethod == 'cod') {
-      // COD — order already placed, go to confirmation
+      // COD — order already placed, add to local state immediately & navigate
       ref.read(cartProvider.notifier).clearCart();
-      ref.read(ordersProvider.notifier).fetchOrders();
+      ref.read(ordersProvider.notifier).addOrder(Order.fromMap(orderDoc));
+      ref.read(ordersProvider.notifier).fetchOrders(); // background refresh
       context.go('/order-confirmation/$orderId');
     } else {
       // Razorpay — initiate payment with the backend order ID

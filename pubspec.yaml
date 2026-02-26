@@ -7,6 +7,7 @@ environment:
   sdk: ^3.10.8
 
 dependencies:
+  sentry_flutter: ^9.14.0
   flutter:
     sdk: flutter
 
@@ -63,6 +64,7 @@ dependencies:
   razorpay_flutter: ^1.4.1
 
 dev_dependencies:
+  sentry_dart_plugin: ^3.2.1
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
@@ -78,3 +80,9 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/animations/
+
+sentry:
+  upload_debug_symbols: true
+  upload_source_maps: true
+  project: flutter
+  org: aditya-singh-wa

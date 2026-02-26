@@ -165,7 +165,7 @@ appwrite databases create-float-attribute --database-id $DB --collection-id orde
 appwrite databases create-string-attribute --database-id $DB --collection-id orders --key coupon_code --size 30 --required false
 appwrite databases create-float-attribute --database-id $DB --collection-id orders --key tip --required false
 appwrite databases create-float-attribute --database-id $DB --collection-id orders --key grand_total --required true
-appwrite databases create-enum-attribute --database-id $DB --collection-id orders --key payment_method --elements upi card cod wallet netbanking --required true
+appwrite databases create-enum-attribute --database-id $DB --collection-id orders --key payment_method --elements upi card cod wallet netbanking online --required true
 appwrite databases create-enum-attribute --database-id $DB --collection-id orders --key payment_status --elements pending paid failed refunded --required true
 appwrite databases create-string-attribute --database-id $DB --collection-id orders --key payment_id --size 100 --required false
 appwrite databases create-string-attribute --database-id $DB --collection-id orders --key razorpay_order_id --size 100 --required false
@@ -298,7 +298,7 @@ appwrite databases create-string-attribute --database-id $DB --collection-id pay
 appwrite databases create-string-attribute --database-id $DB --collection-id payments --key razorpay_signature --size 256 --required false
 appwrite databases create-float-attribute --database-id $DB --collection-id payments --key amount --required true
 appwrite databases create-enum-attribute --database-id $DB --collection-id payments --key status --elements pending success failed refunded --required true --default pending
-appwrite databases create-enum-attribute --database-id $DB --collection-id payments --key method --elements upi card cod wallet netbanking --required true
+appwrite databases create-enum-attribute --database-id $DB --collection-id payments --key method --elements upi card cod wallet netbanking online --required true
 
 Start-Sleep -Seconds 3
 appwrite databases create-index --database-id $DB --collection-id payments --key idx_order --type key --attributes order_id

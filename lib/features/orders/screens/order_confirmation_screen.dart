@@ -7,14 +7,37 @@ import '../../../shared/widgets/chizze_button.dart';
 import '../providers/orders_provider.dart';
 
 /// Post-payment order confirmation with animated success
-class OrderConfirmationScreen extends ConsumerWidget {
+class OrderConfirmationScreen extends ConsumerStatefulWidget {
   final String orderId;
   const OrderConfirmationScreen({super.key, required this.orderId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrderConfirmationScreen> createState() => _OrderConfirmationScreenState();
+}
+
+class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScreen> {
+  bool _fetchAttempted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureOrderLoaded();
+  }
+
+  void _ensureOrderLoaded() {
+    final ordersState = ref.read(ordersProvider);
+    final order = ordersState.orders.where((o) => o.id == widget.orderId).firstOrNull;
+    if (order == null && !_fetchAttempted) {
+      _fetchAttempted = true;
+      ref.read(ordersProvider.notifier).fetchOrderById(widget.orderId);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final ordersState = ref.watch(ordersProvider);
-    final order = ordersState.orders.where((o) => o.id == orderId).firstOrNull;
+    final order = ordersState.orders.where((o) => o.id == widget.orderId).firstOrNull;
+    final orderId = widget.orderId;
 
     return Scaffold(
       backgroundColor: AppColors.background,

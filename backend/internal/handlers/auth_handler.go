@@ -200,6 +200,11 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 		}
 	}
 
+	// Clear any previous token blacklist so the new session works.
+	// Logout blacklists by userID — re-login must clear it.
+	ctx := context.Background()
+	h.redis.Del(ctx, "token_blacklist:"+appwriteUserID)
+
 	// Issue our JWT (valid for 7 days)
 	token, err := h.issueJWT(appwriteUserID, role, 7*24*time.Hour)
 	if err != nil {
@@ -317,6 +322,10 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 			role = r
 		}
 	}
+
+	// Clear any previous token blacklist so the new session works
+	ctx := context.Background()
+	h.redis.Del(ctx, "token_blacklist:"+appwriteUserID)
 
 	token, err := h.issueJWT(appwriteUserID, role, 7*24*time.Hour)
 	if err != nil {

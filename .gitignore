@@ -91,3 +91,9 @@ backend/docker-compose.override.yml
 backend/server.exe
 backend/server
 tools/deploy_backend.py
+
+sentry.properties
+tools/test_api.py
+tools/ssh_cmd.py
+tools/appwrite_setup/add_attributes.cmd
+tools/ssh_cmd.py

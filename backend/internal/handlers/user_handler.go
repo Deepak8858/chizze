@@ -43,6 +43,10 @@ func NewUserHandler(aw *services.AppwriteService, cache *services.CacheService) 
 // @Router /api/v1/users/me [get]
 func (h *UserHandler) GetProfile(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	if userID == "" {
+		utils.Unauthorized(c, "Authentication required")
+		return
+	}
 
 	// Try cache first
 	var cached map[string]interface{}
@@ -75,6 +79,10 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 // @Router /api/v1/users/me [put]
 func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	if userID == "" {
+		utils.Unauthorized(c, "Authentication required")
+		return
+	}
 
 	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {

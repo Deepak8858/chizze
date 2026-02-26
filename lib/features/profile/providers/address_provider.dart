@@ -171,6 +171,7 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
           'landmark': updated.landmark,
           'latitude': updated.latitude,
           'longitude': updated.longitude,
+          'is_default': updated.isDefault,
         },
       );
       if (r.success) {

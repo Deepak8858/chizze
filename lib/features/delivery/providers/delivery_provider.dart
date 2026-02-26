@@ -96,17 +96,25 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     _locationStreamSub?.cancel();
 
     // Use continuous position stream from geolocator (10m distance filter)
-    _locationStreamSub = _location.getPositionStream().listen((loc) {
-      // Update local state
-      _lastHeading = loc.heading;
-      _lastSpeed = loc.speed;
-      state = state.copyWith(
-        partner: state.partner.copyWith(
-          currentLatitude: loc.latitude,
-          currentLongitude: loc.longitude,
-        ),
-      );
-    });
+    _locationStreamSub = _location.getPositionStream().listen(
+      (loc) {
+        if (!mounted) return;
+        // Update local state
+        _lastHeading = loc.heading;
+        _lastSpeed = loc.speed;
+        state = state.copyWith(
+          partner: state.partner.copyWith(
+            currentLatitude: loc.latitude,
+            currentLongitude: loc.longitude,
+          ),
+        );
+      },
+      onError: (error) {
+        // Gracefully handle location permission denied / GPS errors (Fixes FLUTTER-1)
+        debugPrint('[Delivery] Location stream error: $error');
+        _stopLocationTracking();
+      },
+    );
 
     // Push to backend every 15 seconds
     _locationTimer = Timer.periodic(const Duration(seconds: 15), (_) {
@@ -122,11 +130,14 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   }
 
   Future<void> _pushLocationUpdate() async {
-    // Use real GPS coordinates from state (updated by position stream)
-    if (state.partner.currentLatitude == 0) {
+    if (!mounted) return; // Guard against disposed state
+
+    // Validate both coordinates before pushing (Fixes FLUTTER-2/3)
+    if (state.partner.currentLatitude == 0 && state.partner.currentLongitude == 0) {
       // Try to get a one-shot position if stream hasn't delivered yet
       try {
         final loc = await _location.getCurrentPosition();
+        if (!mounted) return;
         state = state.copyWith(
           partner: state.partner.copyWith(
             currentLatitude: loc.latitude,
@@ -137,21 +148,27 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         return;
       }
     }
-    _api
-        .put(
-          ApiConfig.deliveryLocation,
-          body: {
-            'latitude': state.partner.currentLatitude,
-            'longitude': state.partner.currentLongitude,
-            'heading': _lastHeading,
-            'speed': _lastSpeed,
-          },
-        )
-        .then((r) {
-      if (!r.success) debugPrint('[Delivery] location update failed: ${r.error}');
-    }).catchError((e) {
+
+    // Skip if we still don't have valid coordinates
+    if (state.partner.currentLatitude == 0 && state.partner.currentLongitude == 0) return;
+
+    try {
+      final r = await _api.put(
+        ApiConfig.deliveryLocation,
+        body: {
+          'latitude': state.partner.currentLatitude,
+          'longitude': state.partner.currentLongitude,
+          'heading': _lastHeading,
+          'speed': _lastSpeed,
+        },
+      );
+      if (!r.success) {
+        debugPrint('[Delivery] location update failed: ${r.error}');
+      }
+    } catch (e) {
+      // Don't rethrow — the timer will retry in 15s anyway
       debugPrint('[Delivery] location update error: $e');
-    });
+    }
   }
 
   @override

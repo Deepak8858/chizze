@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'api_config.dart';
 import '../models/api_response.dart';
 import 'cache_service.dart';
@@ -201,17 +202,36 @@ class ApiClient {
   }
 
   ApiException _handleDioError(DioException e) {
+    // Report API errors to Sentry with request context
+    Sentry.addBreadcrumb(Breadcrumb(
+      message: 'API Error: ${e.requestOptions.method} ${e.requestOptions.path}',
+      category: 'http',
+      level: SentryLevel.error,
+      data: {
+        'url': e.requestOptions.uri.toString(),
+        'method': e.requestOptions.method,
+        'status_code': e.response?.statusCode?.toString() ?? 'none',
+      },
+    ));
+
     if (e.response != null) {
       final data = e.response?.data;
       final message = data is Map
           ? data['error'] ?? 'Request failed'
           : 'Request failed';
-      return ApiException(
+      final exception = ApiException(
         statusCode: e.response?.statusCode ?? 500,
         message: message.toString(),
       );
+      // Report server errors (5xx) to Sentry
+      if ((e.response?.statusCode ?? 0) >= 500) {
+        Sentry.captureException(exception, stackTrace: e.stackTrace);
+      }
+      return exception;
     }
-    return ApiException(statusCode: 0, message: e.message ?? 'Network error');
+    final exception = ApiException(statusCode: 0, message: e.message ?? 'Network error');
+    Sentry.captureException(exception, stackTrace: e.stackTrace);
+    return exception;
   }
 }
 

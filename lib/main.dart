@@ -7,6 +7,8 @@ import 'core/router/app_router.dart';
 import 'core/services/websocket_service.dart';
 import 'core/services/api_client.dart';
 import 'features/profile/providers/user_profile_provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,13 +30,25 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Global error handler — catches uncaught Flutter exceptions
+  // Global error handler — catches uncaught Flutter exceptions and reports to Sentry
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     debugPrint('[ErrorBoundary] ${details.exceptionAsString()}');
+    Sentry.captureException(details.exception, stackTrace: details.stack);
   };
 
-  runApp(const ProviderScope(child: ChizzeApp()));
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = 'https://18c1661519b0d5cdebbb190efc5e66bd@o4509849175326720.ingest.us.sentry.io/4510951045922816';
+      // Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
+      // We recommend adjusting this value in production.
+      options.tracesSampleRate = 1.0;
+      // The sampling rate for profiling is relative to tracesSampleRate
+      // Setting to 1.0 will profile 100% of sampled transactions:
+      options.profilesSampleRate = 1.0;
+    },
+    appRunner: () => runApp(SentryWidget(child: const ProviderScope(child: ChizzeApp()))),
+  );
 }
 
 class ChizzeApp extends ConsumerWidget {

@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 /// Order data model — maps to Appwrite `orders` collection
 class Order {
   final String id;
   final String orderNumber;
   final String customerId;
+  final String? customerName;
   final String restaurantId;
   final String restaurantName;
   final String? deliveryPartnerId;
@@ -45,6 +48,7 @@ class Order {
     required this.id,
     required this.orderNumber,
     required this.customerId,
+    this.customerName,
     required this.restaurantId,
     required this.restaurantName,
     this.deliveryPartnerId,
@@ -89,6 +93,7 @@ class Order {
       id: map['\$id'] ?? '',
       orderNumber: map['order_number'] ?? '',
       customerId: map['customer_id'] ?? '',
+      customerName: map['customer_name'],
       restaurantId: map['restaurant_id'] ?? '',
       restaurantName: map['restaurant_name'] ?? '',
       deliveryPartnerId: map['delivery_partner_id'],
@@ -101,11 +106,7 @@ class Order {
       deliveryLongitude: (map['delivery_longitude'] as num?)?.toDouble(),
       restaurantLatitude: (map['restaurant_latitude'] as num?)?.toDouble(),
       restaurantLongitude: (map['restaurant_longitude'] as num?)?.toDouble(),
-      items:
-          (map['items'] as List<dynamic>?)
-              ?.map((i) => OrderItem.fromMap(i as Map<String, dynamic>))
-              .toList() ??
-          [],
+      items: _parseItems(map['items']),
       itemTotal: (map['item_total'] ?? 0).toDouble(),
       deliveryFee: (map['delivery_fee'] ?? 0).toDouble(),
       platformFee: (map['platform_fee'] ?? 0).toDouble(),
@@ -143,10 +144,36 @@ class Order {
     );
   }
 
+  /// Parse items field which may be a JSON string (from Appwrite) or a List
+  static List<OrderItem> _parseItems(dynamic raw) {
+    if (raw == null) return [];
+    List<dynamic> itemsList;
+    if (raw is String) {
+      try {
+        final decoded = json.decode(raw);
+        if (decoded is List) {
+          itemsList = decoded;
+        } else {
+          return [];
+        }
+      } catch (_) {
+        return [];
+      }
+    } else if (raw is List) {
+      itemsList = raw;
+    } else {
+      return [];
+    }
+    return itemsList
+        .map((i) => OrderItem.fromMap(i as Map<String, dynamic>))
+        .toList();
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'order_number': orderNumber,
       'customer_id': customerId,
+      'customer_name': customerName,
       'restaurant_id': restaurantId,
       'restaurant_name': restaurantName,
       'delivery_address_id': deliveryAddressId,
@@ -181,6 +208,7 @@ class Order {
     OrderStatus? status,
     String? paymentStatus,
     String? paymentId,
+    String? customerName,
     String? deliveryPartnerId,
     String? deliveryPartnerName,
     String? deliveryPartnerPhone,
@@ -193,6 +221,7 @@ class Order {
       id: id,
       orderNumber: orderNumber,
       customerId: customerId,
+      customerName: customerName ?? this.customerName,
       restaurantId: restaurantId,
       restaurantName: restaurantName,
       deliveryPartnerId: deliveryPartnerId ?? this.deliveryPartnerId,

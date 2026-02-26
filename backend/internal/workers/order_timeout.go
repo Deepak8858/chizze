@@ -86,8 +86,10 @@ func (w *OrderTimeout) process() {
 			log.Printf("[worker] OrderTimeout: auto-canceling order %s (placed %v ago, limit %v)", orderID, now.Sub(createdAt).Round(time.Second), w.timeout)
 
 			updates := map[string]interface{}{
-				"status":      "cancelled",
-				"cancel_reason": "auto_timeout",
+				"status":              "cancelled",
+				"cancellation_reason": "auto_timeout",
+				"cancelled_by":        "system",
+				"cancelled_at":        now.Format(time.RFC3339),
 			}
 
 			_, err := w.awService.UpdateOrder(orderID, updates)

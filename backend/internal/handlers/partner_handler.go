@@ -171,6 +171,18 @@ func (h *PartnerHandler) ListOrders(c *gin.Context) {
 		} else {
 			order["is_new"] = false
 		}
+
+		// Enrich with customer name from users collection
+		if custID, _ := order["customer_id"].(string); custID != "" {
+			if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
+				if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
+					if name, _ := user["name"].(string); name != "" {
+						order["customer_name"] = name
+					}
+				}
+			}
+		}
+
 		enriched = append(enriched, order)
 	}
 
