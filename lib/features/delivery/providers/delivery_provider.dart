@@ -91,9 +91,21 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   }
 
   /// Start real GPS location tracking when online
-  void _startLocationTracking() {
+  Future<void> _startLocationTracking() async {
     _locationTimer?.cancel();
     _locationStreamSub?.cancel();
+
+    // Pre-check permissions before subscribing (Fixes FLUTTER-1)
+    try {
+      final hasPermission = await _location.checkPermissions();
+      if (!hasPermission || !mounted) {
+        debugPrint('[Delivery] Location permission not granted — skipping tracking');
+        return;
+      }
+    } catch (e) {
+      debugPrint('[Delivery] Permission check failed: $e');
+      return;
+    }
 
     // Use continuous position stream from geolocator (10m distance filter)
     _locationStreamSub = _location.getPositionStream().listen(

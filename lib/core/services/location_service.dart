@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'map_config.dart';
@@ -82,8 +83,19 @@ class LocationService {
   }
 
   /// Start continuous location updates (for delivery partner)
-  Stream<LocationData> getPositionStream() {
-    return Geolocator.getPositionStream(
+  ///
+  /// Returns an error-safe stream that handles [PermissionDeniedException]
+  /// and other geolocator errors gracefully instead of propagating to
+  /// PlatformDispatcher (Fixes FLUTTER-1).
+  Stream<LocationData> getPositionStream() async* {
+    // Pre-check permissions to avoid PermissionDeniedException on the stream
+    final hasPermission = await checkPermissions();
+    if (!hasPermission) {
+      // Yield nothing — caller's onError won't fire, stream just ends
+      return;
+    }
+
+    yield* Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 10, // update every 10 meters
@@ -96,7 +108,11 @@ class LocationService {
         speed: position.speed,
         timestamp: position.timestamp,
       ),
-    );
+    ).handleError((error, stackTrace) {
+      // Swallow PermissionDeniedException and other geolocator errors
+      // so they never reach PlatformDispatcher.onError as unhandled fatals.
+      debugPrint('[LocationService] Stream error (handled): $error');
+    });
   }
 
   void dispose() {

@@ -223,10 +223,9 @@ class ApiClient {
         statusCode: e.response?.statusCode ?? 500,
         message: message.toString(),
       );
-      // Report server errors (5xx) to Sentry
-      if ((e.response?.statusCode ?? 0) >= 500) {
-        Sentry.captureException(exception, stackTrace: e.stackTrace);
-      }
+      // Don't auto-report 5xx errors — callers handle them gracefully and
+      // the breadcrumb above provides sufficient context. Auto-capturing
+      // caused noisy duplicate Sentry issues (FLUTTER-2/6/7).
       return exception;
     }
     final exception = ApiException(statusCode: 0, message: e.message ?? 'Network error');

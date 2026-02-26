@@ -31,10 +31,14 @@ void main() async {
   ]);
 
   // Global error handler — catches uncaught Flutter exceptions and reports to Sentry
+  // Note: SentryFlutter.init will override FlutterError.onError with its own handler
+  // that respects beforeSend, so we set this BEFORE init as a pre-init safety net.
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     debugPrint('[ErrorBoundary] ${details.exceptionAsString()}');
-    Sentry.captureException(details.exception, stackTrace: details.stack);
+    // Don't manually report — SentryFlutter's onError handler will take over
+    // after init and apply beforeSend filters. Manual capture here would
+    // bypass those filters and cause duplicate/noisy events.
   };
 
   await SentryFlutter.init(
@@ -46,6 +50,34 @@ void main() async {
       // The sampling rate for profiling is relative to tracesSampleRate
       // Setting to 1.0 will profile 100% of sampled transactions:
       options.profilesSampleRate = 1.0;
+
+      // Filter out transient/non-actionable errors before they reach Sentry
+      // (Fixes FLUTTER-1, FLUTTER-8, FLUTTER-A, FLUTTER-9)
+      options.beforeSend = (SentryEvent event, Hint hint) {
+        final throwable = event.throwable;
+        final message = throwable?.toString() ?? '';
+
+        // Drop PermissionDeniedException — handled gracefully in location code
+        if (message.contains('PermissionDeniedException') ||
+            message.contains('User denied permissions')) {
+          return null;
+        }
+
+        // Drop transient DNS/network errors — not bugs, user connectivity issues
+        if (message.contains('Failed host lookup') ||
+            message.contains('SocketException') ||
+            message.contains('No address associated with hostname') ||
+            message.contains('WebSocketChannelException')) {
+          return null;
+        }
+
+        // Drop font loading failures — network-dependent, not actionable
+        if (message.contains('Failed to load font')) {
+          return null;
+        }
+
+        return event;
+      };
     },
     appRunner: () => runApp(SentryWidget(child: const ProviderScope(child: ChizzeApp()))),
   );
