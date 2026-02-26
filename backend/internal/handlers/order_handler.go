@@ -650,6 +650,23 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
+	// Update delivery partner stats when order is delivered
+	if req.Status == models.OrderStatusDelivered {
+		if dpUserID, _ := order["delivery_partner_id"].(string); dpUserID != "" {
+			dpResult, dpErr := h.appwrite.GetDeliveryPartner(dpUserID)
+			if dpErr == nil && dpResult != nil && dpResult.Total > 0 {
+				dpDoc := dpResult.Documents[0]
+				dpDocID, _ := dpDoc["$id"].(string)
+				currentDeliveries := getFloat(dpDoc, "total_deliveries")
+				_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, map[string]interface{}{
+					"total_deliveries": int(currentDeliveries) + 1,
+					"current_order_id": "",
+					"status":           "available",
+				})
+			}
+		}
+	}
+
 	// Send notifications on delivery status changes
 	customerID, _ := order["customer_id"].(string)
 	orderNumber, _ := order["order_number"].(string)

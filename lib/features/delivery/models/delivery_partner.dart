@@ -287,8 +287,8 @@ class DeliveryMetrics {
       todayEarnings: (json['today_earnings'] as num?)?.toDouble() ?? 0,
       todayDeliveries: (json['today_deliveries'] as num?)?.toInt() ?? 0,
       todayDistanceKm: (json['today_distance_km'] as num?)?.toDouble() ?? 0,
-      hoursOnline: (json['hours_online'] as num?)?.toDouble() ?? 0,
-      tipsEarned: (json['tips_earned'] as num?)?.toDouble() ?? 0,
+      hoursOnline: (json['hours_online_today'] as num?)?.toDouble() ?? 0,
+      tipsEarned: (json['tips_today'] as num?)?.toDouble() ?? 0,
       weeklyEarningsGoal:
           (json['weekly_earnings_goal'] as num?)?.toDouble() ?? 15000,
       weeklyEarningsCurrent:

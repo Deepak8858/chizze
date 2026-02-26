@@ -278,7 +278,8 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         isLoading: false,
         unacknowledgedNewOrders: newCount,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[PartnerNotifier] _loadData error: $e');
       // On error, preserve existing data but stop loading
       state = state.copyWith(isLoading: false);
     } finally {

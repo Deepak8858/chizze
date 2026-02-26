@@ -187,12 +187,21 @@ func (w *DeliveryMatcher) process(ctx context.Context) {
 
 		// 7. Create delivery request document in Appwrite
 		reqData := map[string]interface{}{
-			"order_id":   orderID,
-			"rider_id":   riderID,
-			"status":     "pending",
-			"created_at": time.Now().UTC().Format(time.RFC3339),
+			"order_id":             orderID,
+			"rider_id":            riderID,
+			"status":              "pending",
+			"restaurant_name":     restName,
+			"restaurant_address":  restAddr,
+			"restaurant_latitude": restLat,
+			"restaurant_longitude": restLng,
+			"customer_address":    custAddr,
+			"customer_latitude":   custLat,
+			"customer_longitude":  custLng,
+			"distance_km":         math.Round(totalDistKm*10) / 10,
+			"estimated_earning":   estimatedEarning,
+			"expires_at":          expiresAt,
 		}
-		_, err = w.awService.CreateDeliveryRequest("", reqData)
+		_, err = w.awService.CreateDeliveryRequest("unique()", reqData)
 		if err != nil {
 			log.Printf("[worker] DeliveryMatcher: failed creating delivery request for order %s: %v", orderID, err)
 			_ = w.redisClient.Del(ctx, pendingKey)
@@ -231,6 +240,7 @@ func (w *DeliveryMatcher) process(ctx context.Context) {
 			"status":                "ready",
 			"special_instructions":  doc["special_instructions"],
 			"placed_at":             doc["placed_at"],
+			"customer_name":         custName,
 		}
 
 		// 9. Send enriched WS payload matching DeliveryRequest.fromMap() schema
@@ -254,10 +264,8 @@ func (w *DeliveryMatcher) process(ctx context.Context) {
 			"expires_at":          expiresAt,
 		})
 
-		// 10. Notify customer that a rider is being assigned
-		if w.broadcaster != nil && customerID != "" {
-			w.broadcaster.BroadcastOrderUpdate(customerID, orderID, "rider_assigned", "A delivery partner is on the way")
-		}
+		// Note: do NOT notify customer here — the rider has not accepted yet.
+		// Customer will be notified when the rider actually accepts (in AcceptOrder handler).
 	}
 }
 

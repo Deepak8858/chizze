@@ -155,9 +155,11 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
           await prefs.setString(_keyDefaultAddress, state.defaultAddressId);
         }
       }
-    } on ApiException {
+    } on ApiException catch (e) {
+      debugPrint('[Profile] fetchProfile ApiException: ${e.message}');
       // Keep current state
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Profile] fetchProfile error: $e');
       // Keep current state
     }
   }

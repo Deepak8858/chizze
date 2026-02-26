@@ -7,11 +7,16 @@ import 'core/router/app_router.dart';
 import 'core/services/websocket_service.dart';
 import 'core/services/api_client.dart';
 import 'features/profile/providers/user_profile_provider.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'core/services/map_config.dart';
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Set Mapbox access token before any MapWidget is created (fixes FLUTTER-B)
+  MapboxOptions.setAccessToken(MapConfig.accessToken);
 
   // Initialize Firebase (non-fatal if config not present)
   try {

@@ -65,9 +65,13 @@ func (h *DeliveryHandler) ToggleOnline(c *gin.Context) {
 	}
 
 	partnerID, _ := partnerResult.Documents[0]["$id"].(string)
-	updated, err := h.appwrite.UpdateDeliveryPartner(partnerID, map[string]interface{}{
+	updateFields := map[string]interface{}{
 		"is_online": req.IsOnline,
-	})
+	}
+	if req.IsOnline {
+		updateFields["login_at"] = time.Now().Format(time.RFC3339)
+	}
+	updated, err := h.appwrite.UpdateDeliveryPartner(partnerID, updateFields)
 	if err != nil {
 		utils.InternalError(c, "Failed to update status")
 		return
@@ -266,11 +270,18 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 		return
 	}
 
-	// Assign partner to order without changing status
-	_, err = h.appwrite.UpdateOrder(orderID, map[string]interface{}{
-		"delivery_partner_id": userID,
-		"accepted_at":         time.Now().Format(time.RFC3339),
-	})
+	// Extract partner name and phone from profile
+	partnerName, _ := partnerResult.Documents[0]["name"].(string)
+	partnerPhone, _ := partnerResult.Documents[0]["phone"].(string)
+
+	// Assign partner to order with name/phone for enrichment
+	updateData := map[string]interface{}{
+		"delivery_partner_id":    userID,
+		"delivery_partner_name":  partnerName,
+		"delivery_partner_phone": partnerPhone,
+		"accepted_at":            time.Now().Format(time.RFC3339),
+	}
+	_, err = h.appwrite.UpdateOrder(orderID, updateData)
 	if err != nil {
 		utils.InternalError(c, "Failed to accept order")
 		return
@@ -336,32 +347,100 @@ func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 
 	mode := c.DefaultQuery("mode", "assigned") // assigned or available
 
-	var queries []string
+	var allDocs []map[string]interface{}
+	totalCount := 0
+
 	if mode == "available" {
-		// Show ready orders without a delivery partner
-		queries = []string{
+		// Query both null and empty delivery_partner_id (Appwrite has no OR, so we merge)
+		queriesNull := []string{
+			appwrite.QueryEqual("status", models.OrderStatusReady),
+			appwrite.QueryIsNull("delivery_partner_id"),
+			appwrite.QueryOrderDesc("placed_at"),
+			appwrite.QueryLimit(pg.PerPage),
+			appwrite.QueryOffset(pg.Offset()),
+		}
+		resultNull, err := h.appwrite.ListOrders(queriesNull)
+		if err != nil {
+			utils.InternalError(c, "Failed to fetch orders")
+			return
+		}
+
+		queriesEmpty := []string{
 			appwrite.QueryEqual("status", models.OrderStatusReady),
 			appwrite.QueryEqual("delivery_partner_id", ""),
 			appwrite.QueryOrderDesc("placed_at"),
 			appwrite.QueryLimit(pg.PerPage),
 			appwrite.QueryOffset(pg.Offset()),
 		}
+		resultEmpty, errE := h.appwrite.ListOrders(queriesEmpty)
+
+		// Merge and deduplicate
+		seen := make(map[string]bool)
+		if resultNull != nil {
+			for _, d := range resultNull.Documents {
+				id, _ := d["$id"].(string)
+				if !seen[id] {
+					seen[id] = true
+					allDocs = append(allDocs, d)
+				}
+			}
+			totalCount = resultNull.Total
+		}
+		if errE == nil && resultEmpty != nil {
+			for _, d := range resultEmpty.Documents {
+				id, _ := d["$id"].(string)
+				if !seen[id] {
+					seen[id] = true
+					allDocs = append(allDocs, d)
+				}
+			}
+			if resultEmpty.Total > totalCount {
+				totalCount = resultEmpty.Total
+			}
+		}
 	} else {
 		// Show orders assigned to this partner
-		queries = []string{
+		queries := []string{
 			appwrite.QueryEqual("delivery_partner_id", userID),
 			appwrite.QueryOrderDesc("placed_at"),
 			appwrite.QueryLimit(pg.PerPage),
 			appwrite.QueryOffset(pg.Offset()),
 		}
+		result, err := h.appwrite.ListOrders(queries)
+		if err != nil {
+			utils.InternalError(c, "Failed to fetch orders")
+			return
+		}
+		allDocs = result.Documents
+		totalCount = result.Total
 	}
 
-	result, err := h.appwrite.ListOrders(queries)
-	if err != nil {
-		utils.InternalError(c, "Failed to fetch orders")
-		return
+	// Enrich orders with customer name and delivery partner details
+	for _, order := range allDocs {
+		if custID, _ := order["customer_id"].(string); custID != "" {
+			if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
+				if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
+					if name, _ := user["name"].(string); name != "" {
+						order["customer_name"] = name
+					}
+				}
+			}
+		}
+		if dpID, _ := order["delivery_partner_id"].(string); dpID != "" {
+			if _, exists := order["delivery_partner_name"]; !exists || order["delivery_partner_name"] == nil {
+				if dp, dpErr := h.appwrite.GetDeliveryPartner(dpID); dpErr == nil && dp != nil && dp.Total > 0 {
+					if name, _ := dp.Documents[0]["name"].(string); name != "" {
+						order["delivery_partner_name"] = name
+					}
+					if phone, _ := dp.Documents[0]["phone"].(string); phone != "" {
+						order["delivery_partner_phone"] = phone
+					}
+				}
+			}
+		}
 	}
-	utils.Paginated(c, result.Documents, pg.Page, pg.PerPage, result.Total)
+
+	utils.Paginated(c, allDocs, pg.Page, pg.PerPage, totalCount)
 }
 
 // Dashboard returns delivery partner dashboard metrics
@@ -430,8 +509,12 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 	}
 	weekResult, _ := h.appwrite.ListOrders(weekQueries)
 	weeklyCompleted := 0
+	weeklyEarningsCurrent := 0.0
 	if weekResult != nil {
 		weeklyCompleted = len(weekResult.Documents)
+		for _, wo := range weekResult.Documents {
+			weeklyEarningsCurrent += getFloat(wo, "delivery_fee") + getFloat(wo, "tip")
+		}
 	}
 
 	isOnline, _ := partner["is_online"].(bool)
@@ -468,29 +551,54 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 	}
 
 	resp := gin.H{
-		"$id":                partnerID,
-		"user_id":            partnerUserID,
-		"name":               partnerName,
-		"phone":              partnerPhone,
-		"avatar_url":         avatarURL,
-		"is_online":          isOnline,
-		"rating":             rating,
-		"total_deliveries":   int(totalDeliveries),
-		"total_earnings":     totalEarnings,
-		"vehicle_type":       vehicleType,
-		"vehicle_number":     vehicleNumber,
-		"today_earnings":     todayEarnings,
-		"today_deliveries":   todayDeliveries,
-		"today_distance_km":  todayDistanceKm,
-		"weekly_goal":        50,
-		"weekly_completed":   weeklyCompleted,
-		"current_latitude":   curLat,
-		"current_longitude":  curLng,
-		"hours_online_today": hoursOnlineToday,
-		"tips_today":         tipsToday,
+		"$id":                     partnerID,
+		"user_id":                 partnerUserID,
+		"name":                    partnerName,
+		"phone":                   partnerPhone,
+		"avatar_url":              avatarURL,
+		"is_online":               isOnline,
+		"rating":                  rating,
+		"total_deliveries":        int(totalDeliveries),
+		"total_earnings":          totalEarnings,
+		"vehicle_type":            vehicleType,
+		"vehicle_number":          vehicleNumber,
+		"today_earnings":          todayEarnings,
+		"today_deliveries":        todayDeliveries,
+		"today_distance_km":       todayDistanceKm,
+		"weekly_goal":             50,
+		"weekly_completed":        weeklyCompleted,
+		"weekly_earnings_goal":    15000.0,
+		"weekly_earnings_current": weeklyEarningsCurrent,
+		"current_latitude":        curLat,
+		"current_longitude":       curLng,
+		"hours_online_today":      hoursOnlineToday,
+		"tips_today":              tipsToday,
+		"is_on_delivery":          activeDeliveryOrder != nil,
 	}
 
 	if activeDeliveryOrder != nil {
+		// Enrich active order with customer name and delivery partner details
+		if custID, _ := activeDeliveryOrder["customer_id"].(string); custID != "" {
+			if _, exists := activeDeliveryOrder["customer_name"]; !exists || activeDeliveryOrder["customer_name"] == nil {
+				if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
+					if name, _ := user["name"].(string); name != "" {
+						activeDeliveryOrder["customer_name"] = name
+					}
+				}
+			}
+		}
+		if dpID, _ := activeDeliveryOrder["delivery_partner_id"].(string); dpID != "" {
+			if _, exists := activeDeliveryOrder["delivery_partner_name"]; !exists || activeDeliveryOrder["delivery_partner_name"] == nil {
+				if dp, dpErr := h.appwrite.GetDeliveryPartner(dpID); dpErr == nil && dp != nil && dp.Total > 0 {
+					if name, _ := dp.Documents[0]["name"].(string); name != "" {
+						activeDeliveryOrder["delivery_partner_name"] = name
+					}
+					if phone, _ := dp.Documents[0]["phone"].(string); phone != "" {
+						activeDeliveryOrder["delivery_partner_phone"] = phone
+					}
+				}
+			}
+		}
 		resp["active_order"] = activeDeliveryOrder
 	}
 
