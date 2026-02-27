@@ -54,6 +54,7 @@ const (
 	CollectionGoldSubscriptions = "gold_subscriptions"
 	CollectionReferrals         = "referrals"
 	CollectionScheduledOrders   = "scheduled_orders"
+	CollectionDeliveryIssues    = "delivery_issues"
 )
 
 // AppError is a structured error for API responses

@@ -399,3 +399,16 @@ func (s *AppwriteService) UpdateScheduledOrder(id string, data map[string]interf
 func (s *AppwriteService) DeleteScheduledOrder(id string) error {
 	return s.client.DeleteDocument(models.CollectionScheduledOrders, id)
 }
+
+// ─── Delivery Issues ───
+
+func (s *AppwriteService) CreateDeliveryIssue(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionDeliveryIssues, id, data)
+}
+
+func (s *AppwriteService) ListDeliveryIssues(orderID string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionDeliveryIssues, []string{
+		appwrite.QueryEqual("order_id", orderID),
+		appwrite.QueryOrderDesc("created_at"),
+	})
+}

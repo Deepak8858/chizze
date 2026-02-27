@@ -50,9 +50,25 @@ void main() {
     });
 
     test('value matches API status string', () {
-      expect(OrderStatus.placed.value, 'placed');
-      expect(OrderStatus.pickedUp.value, 'pickedUp');
-      expect(OrderStatus.outForDelivery.value, 'outForDelivery');
+      const expectedValues = {
+        OrderStatus.placed: 'placed',
+        OrderStatus.confirmed: 'confirmed',
+        OrderStatus.preparing: 'preparing',
+        OrderStatus.ready: 'ready',
+        OrderStatus.pickedUp: 'pickedUp',
+        OrderStatus.outForDelivery: 'outForDelivery',
+        OrderStatus.delivered: 'delivered',
+        OrderStatus.cancelled: 'cancelled',
+      };
+      // Ensure every enum member is covered
+      expect(expectedValues.length, OrderStatus.values.length);
+      for (final status in OrderStatus.values) {
+        expect(
+          status.value,
+          expectedValues[status],
+          reason: '${status.name}.value should be ${expectedValues[status]}',
+        );
+      }
     });
 
     test('label and emoji are non-empty', () {

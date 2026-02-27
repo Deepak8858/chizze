@@ -547,7 +547,7 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 
 // UpdateStatus updates order status with role-based validation
 // @Summary Update order status
-// @Description Updates order status with role-based validation; restaurant owners set confirmed/preparing/ready, delivery partners set picked_up/out_for_delivery/delivered
+// @Description Updates order status with role-based validation; restaurant owners set confirmed/preparing/ready, delivery partners set pickedUp/outForDelivery/delivered
 // @Tags Orders
 // @Accept json
 // @Produce json

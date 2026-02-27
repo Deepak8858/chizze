@@ -1235,6 +1235,22 @@ func (h *DeliveryHandler) ReportIssue(c *gin.Context) {
 		body += " (" + details + ")"
 	}
 
+	// Persist delivery issue record
+	_, issueErr := h.appwrite.CreateDeliveryIssue("unique()", map[string]interface{}{
+		"order_id":            orderID,
+		"reporter_id":         userID,
+		"delivery_partner_id": assignedPartner,
+		"reason":              reason,
+		"details":             details,
+		"order_status":        status,
+		"order_number":        orderNumber,
+		"review_status":       "open",
+		"created_at":          time.Now().Format(time.RFC3339),
+	})
+	if issueErr != nil {
+		log.Printf("[ReportIssue] Failed to persist delivery issue for order %s: %v", orderID, issueErr)
+	}
+
 	// Notify customer
 	if customerID, _ := order["customer_id"].(string); customerID != "" {
 		_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
@@ -47,12 +48,32 @@ class CouponsState {
   final List<Coupon> available;
   final String? appliedCouponId;
   final bool isLoading;
+  final String? error;
 
   const CouponsState({
     this.available = const [],
     this.appliedCouponId,
     this.isLoading = false,
+    this.error,
   });
+
+  CouponsState copyWith({
+    List<Coupon>? available,
+    String? appliedCouponId,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+    bool clearCoupon = false,
+  }) {
+    return CouponsState(
+      available: available ?? this.available,
+      appliedCouponId: clearCoupon
+          ? null
+          : (appliedCouponId ?? this.appliedCouponId),
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : (error ?? this.error),
+    );
+  }
 
   Coupon? get appliedCoupon => appliedCouponId != null
       ? available.where((c) => c.id == appliedCouponId).firstOrNull
@@ -69,6 +90,7 @@ class CouponsNotifier extends StateNotifier<CouponsState> {
 
   /// Fetch coupons from API
   Future<void> fetchCoupons() async {
+    state = state.copyWith(isLoading: true, clearError: true);
     try {
       final response = await _api.get(ApiConfig.coupons);
       if (response.success && response.data != null) {
@@ -92,18 +114,22 @@ class CouponsNotifier extends StateNotifier<CouponsState> {
             isActive: m['is_active'] ?? true,
           );
         }).toList();
-        state = CouponsState(
-          available: coupons,
-          appliedCouponId: state.appliedCouponId,
-        );
+        state = state.copyWith(available: coupons, isLoading: false);
+      } else {
+        state = state.copyWith(isLoading: false);
       }
-    } on ApiException {
-      // Keep current state on error
-    } catch (_) {}
+    } on ApiException catch (e) {
+      debugPrint('[CouponsProvider] API error fetching coupons: ${e.message}');
+      state = state.copyWith(isLoading: false, error: e.message);
+    } catch (e) {
+      debugPrint('[CouponsProvider] Unexpected error fetching coupons: $e');
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
   }
 
   /// Validate coupon via API before applying
   Future<bool> validateAndApply(String code, double orderTotal) async {
+    state = state.copyWith(isLoading: true, clearError: true);
     try {
       final response = await _api.post(
         ApiConfig.validateCoupon,
@@ -112,22 +138,29 @@ class CouponsNotifier extends StateNotifier<CouponsState> {
       if (response.success) {
         final coupon = state.available.where((c) => c.code == code).firstOrNull;
         if (coupon != null) {
-          applyCoupon(coupon.id);
+          state = state.copyWith(appliedCouponId: coupon.id, isLoading: false);
           return true;
         }
       }
-    } on ApiException {
-      // Validation failed
-    } catch (_) {}
+      state = state.copyWith(isLoading: false);
+    } on ApiException catch (e) {
+      debugPrint(
+        '[CouponsProvider] Validation error for code $code: ${e.message}',
+      );
+      state = state.copyWith(isLoading: false, error: e.message);
+    } catch (e) {
+      debugPrint('[CouponsProvider] Unexpected validation error: $e');
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
     return false;
   }
 
   void applyCoupon(String id) {
-    state = CouponsState(available: state.available, appliedCouponId: id);
+    state = state.copyWith(appliedCouponId: id, clearError: true);
   }
 
   void removeCoupon() {
-    state = CouponsState(available: state.available, appliedCouponId: null);
+    state = state.copyWith(clearCoupon: true, clearError: true);
   }
 
 
