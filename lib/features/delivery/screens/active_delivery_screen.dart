@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/services/route_service.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../../../shared/widgets/delivery_map.dart';
@@ -11,11 +12,56 @@ import '../models/delivery_partner.dart';
 import '../providers/delivery_provider.dart';
 
 /// Active delivery — step-by-step flow with order info
-class ActiveDeliveryScreen extends ConsumerWidget {
+class ActiveDeliveryScreen extends ConsumerStatefulWidget {
   const ActiveDeliveryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ActiveDeliveryScreen> createState() =>
+      _ActiveDeliveryScreenState();
+}
+
+class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
+  List<List<double>>? _routeCoordinates;
+  double? _lastOriginLat;
+  double? _lastOriginLng;
+  double? _lastDestLat;
+  double? _lastDestLng;
+
+  void _fetchRouteIfNeeded(
+    double originLat,
+    double originLng,
+    double destLat,
+    double destLng,
+  ) {
+    // Avoid re-fetching if origin/dest haven't meaningfully changed (0.0005° ≈ 50m)
+    if (_lastOriginLat != null &&
+        (originLat - _lastOriginLat!).abs() < 0.0005 &&
+        (originLng - _lastOriginLng!).abs() < 0.0005 &&
+        (destLat - _lastDestLat!).abs() < 0.0005 &&
+        (destLng - _lastDestLng!).abs() < 0.0005) {
+      return;
+    }
+    _lastOriginLat = originLat;
+    _lastOriginLng = originLng;
+    _lastDestLat = destLat;
+    _lastDestLng = destLng;
+
+    RouteService.instance
+        .getRoute(
+          originLat: originLat,
+          originLng: originLng,
+          destLat: destLat,
+          destLng: destLng,
+        )
+        .then((coords) {
+          if (mounted && coords != null) {
+            setState(() => _routeCoordinates = coords);
+          }
+        });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final dState = ref.watch(deliveryProvider);
     final delivery = dState.activeDelivery;
 
@@ -50,6 +96,23 @@ class ActiveDeliveryScreen extends ConsumerWidget {
     final request = delivery.request;
     final step = delivery.currentStep;
 
+    // Determine route origin → destination based on current delivery step
+    final riderLat = dState.partner.currentLatitude;
+    final riderLng = dState.partner.currentLongitude;
+    final bool headingToRestaurant =
+        step == DeliveryStep.goToRestaurant || step == DeliveryStep.pickUp;
+    final destLat = headingToRestaurant
+        ? request.restaurantLatitude
+        : request.customerLatitude;
+    final destLng = headingToRestaurant
+        ? request.restaurantLongitude
+        : request.customerLongitude;
+
+    // Fetch route asynchronously (debounced by position delta)
+    if (riderLat != 0 && riderLng != 0 && destLat != 0 && destLng != 0) {
+      _fetchRouteIfNeeded(riderLat, riderLng, destLat, destLng);
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -76,6 +139,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                   DeliveryMap(
                     height: 200,
                     trackRider: true,
+                    routeCoordinates: _routeCoordinates,
                     markers: [
                       MapMarker(
                         type: MapMarkerType.restaurant,

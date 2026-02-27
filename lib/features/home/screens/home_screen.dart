@@ -21,13 +21,17 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
-    final userName = authState.user?.name ?? 'Foodie';
+    final profile = ref.watch(userProfileProvider);
+    // Prefer profile name from backend (always set during onboarding),
+    // fall back to Appwrite account name, then generic greeting.
+    final userName = profile.name.isNotEmpty
+        ? profile.name
+        : (authState.user?.name ?? 'Foodie');
     final restaurantState = ref.watch(restaurantProvider);
     final restaurants = restaurantState.restaurants;
 
     // Get delivery address: prefer default saved address, fall back to profile address
     final addresses = ref.watch(addressProvider);
-    final profile = ref.watch(userProfileProvider);
     final defaultAddr = addresses.where((a) => a.isDefault).firstOrNull ?? 
                         (addresses.isNotEmpty ? addresses.first : null);
     final deliveryLabel = defaultAddr?.label ?? 'Home';

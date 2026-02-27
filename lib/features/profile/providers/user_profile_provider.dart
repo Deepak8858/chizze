@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
@@ -104,12 +105,15 @@ class UserProfile {
 /// Profile state notifier — API-backed
 class UserProfileNotifier extends StateNotifier<UserProfile> {
   final ApiClient _api;
+  final bool _shouldFetch;
 
   static const _keyIsVeg = 'chizze_pref_is_veg';
   static const _keyDarkMode = 'chizze_pref_dark_mode';
   static const _keyDefaultAddress = 'chizze_pref_default_address';
 
-  UserProfileNotifier(this._api) : super(UserProfile.empty) {
+  UserProfileNotifier(this._api, {bool shouldFetch = true})
+    : _shouldFetch = shouldFetch,
+      super(UserProfile.empty) {
     _loadPrefsAndFetch();
   }
 
@@ -120,7 +124,9 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
       darkMode: prefs.getBool(_keyDarkMode) ?? true,
       defaultAddressId: prefs.getString(_keyDefaultAddress) ?? '',
     );
-    await fetchProfile();
+    if (_shouldFetch) {
+      await fetchProfile();
+    }
   }
 
   /// Fetch profile from API
@@ -238,5 +244,11 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
 final userProfileProvider =
     StateNotifierProvider<UserProfileNotifier, UserProfile>((ref) {
       final api = ref.watch(apiClientProvider);
-      return UserProfileNotifier(api);
+      // Only fetch profile when user is authenticated (JWT is available).
+      // This also re-creates the notifier when auth status changes (e.g. after
+      // onboarding completes), ensuring profile data is always fresh.
+      final isAuthenticated = ref.watch(
+        authProvider.select((s) => s.isAuthenticated),
+      );
+      return UserProfileNotifier(api, shouldFetch: isAuthenticated);
     });

@@ -293,7 +293,10 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 
 	// Clear the pending_delivery key so matcher doesn't re-broadcast this order
 	if h.redis != nil {
-		h.redis.Del(context.Background(), "pending_delivery:"+orderID)
+		ctx := context.Background()
+		h.redis.Del(ctx, "pending_delivery:"+orderID)
+		// Clean up rejected riders set since order is now accepted
+		h.redis.Del(ctx, "rejected_riders:"+orderID)
 	}
 
 	// Notify customer that a delivery partner accepted their order
@@ -1152,7 +1155,12 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 
 	// Clear the pending_delivery key so matcher can re-broadcast to other riders
 	if h.redis != nil {
-		h.redis.Del(context.Background(), "pending_delivery:"+orderID)
+		ctx := context.Background()
+		h.redis.Del(ctx, "pending_delivery:"+orderID)
+		// Track this rider as having rejected the order so matcher won't re-send to them
+		rejectedKey := "rejected_riders:" + orderID
+		h.redis.SAdd(ctx, rejectedKey, userID)
+		h.redis.Expire(ctx, rejectedKey, 30*time.Minute)
 	}
 
 	// If the order was already assigned to this partner, unassign

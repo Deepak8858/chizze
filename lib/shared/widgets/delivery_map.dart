@@ -294,6 +294,31 @@ class _DeliveryMapState extends State<DeliveryMap> {
     if (widget.markers != oldWidget.markers) {
       _refreshMarkers();
     }
+    // When route coordinates change, refresh the route line
+    if (widget.routeCoordinates != oldWidget.routeCoordinates) {
+      _refreshRoute();
+    }
+  }
+
+  Future<void> _refreshRoute() async {
+    if (_mapboxMap == null || !mounted) return;
+    try {
+      // Remove existing route layer and source if present
+      final style = _mapboxMap!.style;
+      if (await style.styleLayerExists('route-layer')) {
+        await style.removeStyleLayer('route-layer');
+      }
+      if (await style.styleSourceExists('route-source')) {
+        await style.removeStyleSource('route-source');
+      }
+      // Re-add if new coordinates are provided
+      if (widget.routeCoordinates != null &&
+          widget.routeCoordinates!.isNotEmpty) {
+        await _addRouteLine();
+      }
+    } catch (e) {
+      debugPrint('[DeliveryMap] _refreshRoute error: $e');
+    }
   }
 
   Future<void> _refreshMarkers() async {

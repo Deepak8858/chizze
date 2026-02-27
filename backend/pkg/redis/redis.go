@@ -166,9 +166,27 @@ func (c *Client) GeoSearch(ctx context.Context, key string, q *redis.GeoSearchQu
 	return c.rdb.GeoSearch(ctx, key, q).Result()
 }
 
+// GeoPos returns the longitude and latitude for one or more members of a geo set.
+// Returns nil entries for members that don't exist.
+func (c *Client) GeoPos(ctx context.Context, key string, members ...string) ([]*redis.GeoPos, error) {
+	return c.rdb.GeoPos(ctx, key, members...).Result()
+}
+
 // ZRem removes one or more members from a sorted set (used to remove riders from geo set).
 func (c *Client) ZRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
 	return c.rdb.ZRem(ctx, key, members...).Result()
+}
+
+// ─── Set Helpers ───
+
+// SAdd adds one or more members to a set.
+func (c *Client) SAdd(ctx context.Context, key string, members ...interface{}) (int64, error) {
+	return c.rdb.SAdd(ctx, key, members...).Result()
+}
+
+// SMembers returns all members in a set.
+func (c *Client) SMembers(ctx context.Context, key string) ([]string, error) {
+	return c.rdb.SMembers(ctx, key).Result()
 }
 
 // ─── List Helpers (for notification queue) ───

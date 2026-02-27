@@ -97,8 +97,7 @@ class Restaurant {
       'is_promoted': isPromoted,
       'opening_time': openingTime,
       'closing_time': closingTime,
+      'created_at': createdAt.toIso8601String(),
     };
   }
-
-
 }

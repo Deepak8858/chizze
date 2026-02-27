@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:appwrite/enums.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/chizze_button.dart';
@@ -257,11 +258,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             onTap: authState.isLoading
                 ? null
                 : () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Google sign-in coming soon!'),
-                      ),
-                    );
+                    ref
+                        .read(authProvider.notifier)
+                        .loginWithOAuth(OAuthProvider.google);
                   },
           ),
         ),
@@ -276,11 +275,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             onTap: authState.isLoading
                 ? null
                 : () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Apple sign-in coming soon!'),
-                      ),
-                    );
+                    ref
+                        .read(authProvider.notifier)
+                        .loginWithOAuth(OAuthProvider.apple);
                   },
           ),
         ),

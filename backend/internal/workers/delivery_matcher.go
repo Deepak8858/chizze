@@ -115,10 +115,10 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		customerID, _ := doc["customer_id"].(string)
 
 		// 2. Check Redis lock to prevent re-matching an already-pending order
-		// Use 5-minute TTL so the lock doesn't expire before the rider can accept/reject.
+		// Use 2-minute TTL so the lock doesn't expire before the rider can accept/reject.
 		// The lock is explicitly cleared on accept (AcceptOrder) or reject (RejectOrder).
 		pendingKey := "pending_delivery:" + orderID
-		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 5*time.Minute)
+		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 2*time.Minute)
 		if lockErr != nil || !acquired {
 			// Already pending assignment — skip
 			continue
@@ -146,6 +146,28 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			continue
 		}
 
+		// 4b. Filter out riders who already rejected this order
+		rejectedKey := "rejected_riders:" + orderID
+		rejectedSet, _ := w.redisClient.SMembers(ctx, rejectedKey)
+		if len(rejectedSet) > 0 {
+			rejectedMap := make(map[string]bool, len(rejectedSet))
+			for _, rid := range rejectedSet {
+				rejectedMap[rid] = true
+			}
+			var filtered []string
+			for _, rid := range riderIDs {
+				if !rejectedMap[rid] {
+					filtered = append(filtered, rid)
+				}
+			}
+			riderIDs = filtered
+		}
+		if len(riderIDs) == 0 {
+			log.Printf("[worker] DeliveryMatcher: all nearby riders rejected order %s — clearing lock for retry", orderID)
+			_ = w.redisClient.Del(ctx, pendingKey)
+			continue
+		}
+
 		// 5. Get customer delivery address info
 		addrID, _ := doc["delivery_address_id"].(string)
 		custName := "Customer"
@@ -169,7 +191,13 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		}
 
 		// 6. Calculate distances and estimated earning
-		pickupDistKm := w.geoService.Distance(restLat, restLng, restLat, restLng) // rider → restaurant (approx 0 for now)
+		// Look up rider's current position from Redis geo set
+		pickupDistKm := 0.0
+		if positions, gErr := w.redisClient.GeoPos(ctx, "rider_locations", riderIDs[0]); gErr == nil && len(positions) > 0 && positions[0] != nil {
+			riderLat := positions[0].Latitude
+			riderLng := positions[0].Longitude
+			pickupDistKm = w.geoService.Distance(riderLat, riderLng, restLat, restLng)
+		}
 		deliveryDistKm := 0.0
 		if custLat != 0 && custLng != 0 {
 			deliveryDistKm = w.geoService.Distance(restLat, restLng, custLat, custLng)
@@ -212,8 +240,8 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			continue
 		}
 
-		// Update Redis lock with rider ID for reference (keep 5-minute TTL)
-		_ = w.redisClient.Set(ctx, pendingKey, riderID, 5*time.Minute)
+		// Update Redis lock with rider ID for reference (keep 2-minute TTL)
+		_ = w.redisClient.Set(ctx, pendingKey, riderID, 2*time.Minute)
 
 		log.Printf("[worker] DeliveryMatcher: assigned rider %s to order %s", riderID, orderID)
 

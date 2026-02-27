@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../core/auth/auth_provider.dart';
@@ -147,24 +148,52 @@ class ProfileScreen extends ConsumerWidget {
     WidgetRef ref,
     UserProfile profile,
   ) {
+    final hasAvatar =
+        profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty;
     return Column(
       children: [
         Container(
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
+            gradient: hasAvatar ? null : AppColors.primaryGradient,
             shape: BoxShape.circle,
           ),
-          child: Center(
-            child: Text(
-              profile.initials,
-              style: AppTypography.h1.copyWith(fontSize: 30),
-            ),
-          ),
+          clipBehavior: Clip.antiAlias,
+          child: hasAvatar
+              ? CachedNetworkImage(
+                  imageUrl: profile.avatarUrl!,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Center(
+                    child: Text(
+                      profile.initials,
+                      style: AppTypography.h1.copyWith(fontSize: 30),
+                    ),
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient,
+                    ),
+                    child: Center(
+                      child: Text(
+                        profile.initials,
+                        style: AppTypography.h1.copyWith(fontSize: 30),
+                      ),
+                    ),
+                  ),
+                )
+              : Center(
+                  child: Text(
+                    profile.initials,
+                    style: AppTypography.h1.copyWith(fontSize: 30),
+                  ),
+                ),
         ),
         const SizedBox(height: AppSpacing.md),
-        Text(profile.name, style: AppTypography.h2.copyWith(fontSize: 20)),
+        Text(
+          profile.name.isNotEmpty ? profile.name : 'Set up your profile',
+          style: AppTypography.h2.copyWith(fontSize: 20),
+        ),
         const SizedBox(height: 4),
         Text(profile.phone, style: AppTypography.caption),
         if (profile.email.isNotEmpty)

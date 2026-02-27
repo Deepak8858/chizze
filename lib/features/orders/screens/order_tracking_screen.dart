@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/services/route_service.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../../../shared/widgets/delivery_map.dart';
@@ -26,6 +29,49 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   bool _trackingStarted = false;
   String? _lastKnownRiderId;
   bool _fetchAttempted = false;
+  Timer? _pollTimer;
+
+  List<List<double>>? _routeCoordinates;
+  double? _lastRouteOriginLat;
+  double? _lastRouteOriginLng;
+  double? _lastRouteDestLat;
+  double? _lastRouteDestLng;
+
+  void _fetchRouteIfNeeded(
+    double originLat,
+    double originLng,
+    double destLat,
+    double destLng,
+  ) {
+    if (_lastRouteOriginLat != null &&
+        (originLat - _lastRouteOriginLat!).abs() < 0.0005 &&
+        (originLng - _lastRouteOriginLng!).abs() < 0.0005 &&
+        (destLat - _lastRouteDestLat!).abs() < 0.0005 &&
+        (destLng - _lastRouteDestLng!).abs() < 0.0005) {
+      return;
+    }
+    _lastRouteOriginLat = originLat;
+    _lastRouteOriginLng = originLng;
+    _lastRouteDestLat = destLat;
+    _lastRouteDestLng = destLng;
+
+    RouteService.instance
+        .getRoute(
+          originLat: originLat,
+          originLng: originLng,
+          destLat: destLat,
+          destLng: destLng,
+        )
+        .then((coords) {
+          if (mounted && coords != null) {
+            setState(() => _routeCoordinates = coords);
+          }
+        });
+  }
+
+  /// Polling interval for fetching the latest order status.
+  /// Acts as a fallback when Appwrite Realtime / WebSocket push is unreliable.
+  static const _pollInterval = Duration(seconds: 10);
 
   @override
   void initState() {
@@ -34,6 +80,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     _ensureOrderLoaded();
     // Start rider tracking using the order's actual rider ID
     _startTracking();
+    // Start periodic polling as a reliable fallback for push channels
+    _startPolling();
   }
 
   void _ensureOrderLoaded() {
@@ -63,8 +111,34 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     }
   }
 
+  /// Periodically fetch the latest order from the API. This guarantees the
+  /// customer sees status changes even when Appwrite Realtime or WebSocket
+  /// push channels are temporarily disconnected.
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(_pollInterval, (_) {
+      // Stop polling once the order reaches a terminal state
+      final order = ref
+          .read(ordersProvider)
+          .orders
+          .where((o) => o.id == widget.orderId)
+          .firstOrNull;
+      if (order != null && !order.status.isActive) {
+        _stopPolling();
+        return;
+      }
+      ref.read(ordersProvider.notifier).fetchOrderById(widget.orderId);
+    });
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
   @override
   void dispose() {
+    _stopPolling();
     if (_trackingStarted) {
       ref.read(riderLocationProvider.notifier).stopTracking();
     }
@@ -126,8 +200,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+      body: RefreshIndicator(
+        onRefresh: () => ref
+            .read(ordersProvider.notifier)
+            .fetchOrderById(widget.orderId)
+            .then((_) {}),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -144,11 +224,21 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                   // Use midpoint of restaurant and customer as rider fallback
                   final fallbackLat = (order.restaurantLatitude! + order.deliveryLatitude!) / 2;
                   final fallbackLng = (order.restaurantLongitude! + order.deliveryLongitude!) / 2;
+                    // Fetch route between rider and customer
+                    final rLat = riderLocation?.latitude ?? fallbackLat;
+                    final rLng = riderLocation?.longitude ?? fallbackLng;
+                    _fetchRouteIfNeeded(
+                      rLat,
+                      rLng,
+                      order.deliveryLatitude!,
+                      order.deliveryLongitude!,
+                    );
                   return Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.xl),
                     child: DeliveryMap(
                       height: 220,
                       trackRider: true,
+                        routeCoordinates: _routeCoordinates,
                       markers: [
                         MapMarker(
                           type: MapMarkerType.restaurant,
@@ -224,6 +314,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

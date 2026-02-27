@@ -670,8 +670,14 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 				dpDoc := dpResult.Documents[0]
 				dpDocID, _ := dpDoc["$id"].(string)
 				currentDeliveries := getFloat(dpDoc, "total_deliveries")
+				currentEarnings := getFloat(dpDoc, "total_earnings")
+				// Calculate delivery earning: delivery_fee + tip from the order
+				deliveryFee := getFloat(order, "delivery_fee")
+				tip := getFloat(order, "tip")
+				orderEarning := deliveryFee + tip
 				_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, map[string]interface{}{
 					"total_deliveries": int(currentDeliveries) + 1,
+					"total_earnings":   currentEarnings + orderEarning,
 					"current_order_id": "",
 					"status":           "available",
 				})
@@ -714,9 +720,28 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 				"is_read":    false,
 				"created_at": now,
 			})
-			// Broadcast via WebSocket for instant updates to customer
+			// Broadcast via WebSocket for instant updates to customer.
+			// Include delivery partner details so the client can update UI
+			// without a round-trip fetch.
 			if h.broadcaster != nil {
-				h.broadcaster.BroadcastOrderUpdate(customerID, orderID, req.Status, notifBody)
+				dpID, _ := order["delivery_partner_id"].(string)
+				dpName, _ := order["delivery_partner_name"].(string)
+				dpPhone, _ := order["delivery_partner_phone"].(string)
+				extra := map[string]interface{}{}
+				if dpID != "" {
+					extra["delivery_partner_id"] = dpID
+				}
+				if dpName != "" {
+					extra["delivery_partner_name"] = dpName
+				}
+				if dpPhone != "" {
+					extra["delivery_partner_phone"] = dpPhone
+				}
+				if len(extra) > 0 {
+					h.broadcaster.BroadcastOrderUpdateFull(customerID, orderID, req.Status, notifBody, extra)
+				} else {
+					h.broadcaster.BroadcastOrderUpdate(customerID, orderID, req.Status, notifBody)
+				}
 			}
 		}
 	}

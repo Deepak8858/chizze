@@ -116,7 +116,10 @@ class CouponsNotifier extends StateNotifier<CouponsState> {
         }).toList();
         state = state.copyWith(available: coupons, isLoading: false);
       } else {
-        state = state.copyWith(isLoading: false);
+        state = state.copyWith(
+          isLoading: false,
+          error: response.error ?? 'Failed to load coupons',
+        );
       }
     } on ApiException catch (e) {
       debugPrint('[CouponsProvider] API error fetching coupons: ${e.message}');
@@ -141,8 +144,16 @@ class CouponsNotifier extends StateNotifier<CouponsState> {
           state = state.copyWith(appliedCouponId: coupon.id, isLoading: false);
           return true;
         }
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Coupon validated by server but not available locally',
+        );
+        return false;
       }
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(
+        isLoading: false,
+        error: response.error ?? 'Coupon validation failed',
+      );
     } on ApiException catch (e) {
       debugPrint(
         '[CouponsProvider] Validation error for code $code: ${e.message}',
