@@ -137,7 +137,7 @@ class WebSocketService {
   }
 
   /// Connect to the WebSocket endpoint (requires auth token)
-  void connect() {
+  Future<void> connect() async {
     final token = _apiClient.currentToken;
     if (token == null || token.isEmpty) {
       debugPrint('[WS] No auth token — skipping connect');
@@ -155,6 +155,8 @@ class WebSocketService {
     try {
       _channel = WebSocketChannel.connect(wsUrl);
 
+      await _channel!.ready;
+
       _channel!.stream.listen(
         _onMessage,
         onError: _onError,
@@ -167,6 +169,7 @@ class WebSocketService {
       debugPrint('[WS] Connected');
     } catch (e) {
       debugPrint('[WS] Connection failed: $e');
+      _channel = null;
       _setState(WsConnectionState.disconnected);
       _scheduleReconnect();
     }
@@ -210,6 +213,7 @@ class WebSocketService {
 
   void _onError(Object error) {
     debugPrint('[WS] Error: $error');
+    _heartbeatTimer?.cancel();
     _setState(WsConnectionState.disconnected);
     _scheduleReconnect();
   }

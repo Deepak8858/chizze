@@ -191,62 +191,7 @@ class DeliveryRequest {
     );
   }
 
-  static DeliveryRequest mock() {
-    final now = DateTime.now();
-    return DeliveryRequest(
-      id: 'req1',
-      order: Order(
-        id: 'do1',
-        orderNumber: 'CHZ-500001',
-        customerId: 'c1',
-        restaurantId: 'r1',
-        restaurantName: 'Biryani Blues',
-        deliveryAddressId: 'a1',
-        items: const [
-          OrderItem(
-            id: 'm1',
-            name: 'Chicken Biryani',
-            quantity: 2,
-            price: 299,
-            isVeg: false,
-          ),
-          OrderItem(
-            id: 'm4',
-            name: 'Raita',
-            quantity: 1,
-            price: 49,
-            isVeg: true,
-          ),
-        ],
-        itemTotal: 647,
-        deliveryFee: 0,
-        platformFee: 5,
-        gst: 32.35,
-        discount: 0,
-        grandTotal: 684.35,
-        paymentMethod: 'upi',
-        paymentStatus: 'paid',
-        status: OrderStatus.ready,
-        estimatedDeliveryMin: 25,
-        placedAt: now.subtract(const Duration(minutes: 15)),
-      ),
-      restaurantName: 'Biryani Blues',
-      restaurantCuisine: 'Hyderabadi Biryani',
-      restaurantAddress: '12, Jubilee Hills, Hyderabad',
-      restaurantLatitude: 17.4486,
-      restaurantLongitude: 78.3810,
-      customerName: 'Rahul S.',
-      customerAddress: '45, Madhapur, Hyderabad',
-      customerLatitude: 17.4401,
-      customerLongitude: 78.3911,
-      pickupDistanceKm: 1.5,
-      deliveryDistanceKm: 2.7,
-      distanceKm: 4.2,
-      estimatedEarning: 65,
-      specialInstructions: 'Leave at the gate',
-      expiresAt: now.add(const Duration(seconds: 30)),
-    );
-  }
+
 }
 
 /// Delivery metrics for dashboard
@@ -283,12 +228,21 @@ class DeliveryMetrics {
 
   /// Parse from dashboard API response
   factory DeliveryMetrics.fromDashboard(Map<String, dynamic> json) {
+    final hoursOnline =
+      (json['hours_online_today'] as num?)?.toDouble() ??
+      (json['hours_online'] as num?)?.toDouble() ??
+      0;
+    final tipsEarned =
+      (json['tips_today'] as num?)?.toDouble() ??
+      (json['tips_earned'] as num?)?.toDouble() ??
+      0;
+
     return DeliveryMetrics(
       todayEarnings: (json['today_earnings'] as num?)?.toDouble() ?? 0,
       todayDeliveries: (json['today_deliveries'] as num?)?.toInt() ?? 0,
       todayDistanceKm: (json['today_distance_km'] as num?)?.toDouble() ?? 0,
-      hoursOnline: (json['hours_online_today'] as num?)?.toDouble() ?? 0,
-      tipsEarned: (json['tips_today'] as num?)?.toDouble() ?? 0,
+      hoursOnline: hoursOnline,
+      tipsEarned: tipsEarned,
       weeklyEarningsGoal:
           (json['weekly_earnings_goal'] as num?)?.toDouble() ?? 15000,
       weeklyEarningsCurrent:
@@ -321,17 +275,7 @@ class DeliveryMetrics {
     );
   }
 
-  static const mock = DeliveryMetrics(
-    todayEarnings: 850,
-    todayDeliveries: 12,
-    todayDistanceKm: 38.5,
-    hoursOnline: 6.5,
-    tipsEarned: 180,
-    weeklyEarningsGoal: 15000,
-    weeklyEarningsCurrent: 8200,
-    weeklyGoal: 50,
-    weeklyCompleted: 34,
-  );
+
 }
 
 /// Active delivery step

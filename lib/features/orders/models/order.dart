@@ -262,77 +262,7 @@ class Order {
     );
   }
 
-  /// Mock orders for UI development
-  static List<Order> get mockList => [
-    Order(
-      id: 'o1',
-      orderNumber: 'CHZ-240001',
-      customerId: 'u1',
-      restaurantId: 'r1',
-      restaurantName: 'Biryani Blues',
-      deliveryAddressId: 'a1',
-      items: [
-        const OrderItem(
-          id: 'm1',
-          name: 'Chicken Biryani',
-          quantity: 2,
-          price: 299,
-          isVeg: false,
-        ),
-        const OrderItem(
-          id: 'm4',
-          name: 'Dal Makhani',
-          quantity: 1,
-          price: 219,
-          isVeg: true,
-        ),
-      ],
-      itemTotal: 817,
-      deliveryFee: 0,
-      platformFee: 5,
-      gst: 40.85,
-      discount: 0,
-      grandTotal: 862.85,
-      paymentMethod: 'upi',
-      paymentStatus: 'paid',
-      paymentId: 'pay_test_001',
-      status: OrderStatus.delivered,
-      estimatedDeliveryMin: 35,
-      placedAt: DateTime.now().subtract(const Duration(days: 2)),
-      deliveredAt: DateTime.now().subtract(const Duration(days: 2, hours: -1)),
-    ),
-    Order(
-      id: 'o2',
-      orderNumber: 'CHZ-240002',
-      customerId: 'u1',
-      restaurantId: 'r2',
-      restaurantName: 'Pizza Paradise',
-      deliveryAddressId: 'a1',
-      items: [
-        const OrderItem(
-          id: 'm1',
-          name: 'Margherita Pizza',
-          quantity: 1,
-          price: 399,
-          isVeg: true,
-        ),
-      ],
-      itemTotal: 399,
-      deliveryFee: 40,
-      platformFee: 5,
-      gst: 19.95,
-      discount: 0,
-      grandTotal: 463.95,
-      paymentMethod: 'card',
-      paymentStatus: 'paid',
-      status: OrderStatus.outForDelivery,
-      deliveryPartnerId: 'dp1',
-      deliveryPartnerName: 'Ravi Kumar',
-      deliveryPartnerPhone: '+919876543210',
-      estimatedDeliveryMin: 15,
-      placedAt: DateTime.now().subtract(const Duration(minutes: 40)),
-    ),
-  ];
+
 }
 
 /// Individual item in an order
@@ -380,8 +310,8 @@ enum OrderStatus {
   confirmed('confirmed', 'Confirmed', '✅'),
   preparing('preparing', 'Preparing', '👨‍🍳'),
   ready('ready', 'Ready for Pickup', '📦'),
-  pickedUp('picked_up', 'Picked Up', '🏍️'),
-  outForDelivery('out_for_delivery', 'Out for Delivery', '🚀'),
+  pickedUp('pickedUp', 'Picked Up', '🏍️'),
+  outForDelivery('outForDelivery', 'Out for Delivery', '🚀'),
   delivered('delivered', 'Delivered', '🎉'),
   cancelled('cancelled', 'Cancelled', '❌');
 
@@ -390,11 +320,33 @@ enum OrderStatus {
   final String emoji;
   const OrderStatus(this.value, this.label, this.emoji);
 
+  static String _normalizeStatus(String value) {
+    switch (value) {
+      case 'picked_up':
+        return 'pickedUp';
+      case 'out_for_delivery':
+        return 'outForDelivery';
+      default:
+        return value;
+    }
+  }
+
   static OrderStatus fromString(String value) {
+    final normalized = _normalizeStatus(value);
     return OrderStatus.values.firstWhere(
-      (s) => s.value == value,
+      (s) => s.value == normalized,
       orElse: () => OrderStatus.placed,
     );
+  }
+
+  /// Returns null for unknown values instead of falling back to [placed].
+  /// Use this when processing WebSocket events to avoid reverting status.
+  static OrderStatus? tryFromString(String value) {
+    final normalized = _normalizeStatus(value);
+    for (final s in OrderStatus.values) {
+      if (s.value == normalized) return s;
+    }
+    return null;
   }
 
   /// Progress percentage (0.0 to 1.0)

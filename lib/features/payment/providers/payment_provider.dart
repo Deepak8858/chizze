@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
@@ -6,7 +5,6 @@ import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
 import '../../cart/providers/cart_provider.dart';
-import '../../orders/models/order.dart' as app;
 
 /// Razorpay configuration
 class RazorpayConfig {
@@ -256,47 +254,6 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       isProcessing: false,
       error:
           'External wallet: ${response.walletName}. Please complete payment.',
-    );
-  }
-
-  /// Create a mock order from current cart for UI development
-  app.Order createOrderFromCart(CartState cartState) {
-    final now = DateTime.now();
-    final orderNumber = 'CHZ-${(100000 + Random().nextInt(900000))}';
-
-    return app.Order(
-      id: 'order_${now.millisecondsSinceEpoch}',
-      orderNumber: orderNumber,
-      customerId: 'current_user',
-      restaurantId: cartState.restaurantId ?? '',
-      restaurantName: cartState.restaurantName ?? '',
-      deliveryAddressId: 'default_address',
-      items: cartState.items
-          .map(
-            (ci) => app.OrderItem(
-              id: ci.menuItem.id,
-              name: ci.menuItem.name,
-              quantity: ci.quantity,
-              price: ci.menuItem.price,
-              isVeg: ci.menuItem.isVeg,
-            ),
-          )
-          .toList(),
-      itemTotal: cartState.itemTotal,
-      deliveryFee: cartState.deliveryFee,
-      platformFee: cartState.platformFee,
-      gst: cartState.gst,
-      discount: cartState.discount,
-      couponCode: cartState.couponCode,
-      grandTotal: cartState.grandTotal,
-      paymentMethod: 'razorpay',
-      paymentStatus: state.isSuccess ? 'paid' : 'pending',
-      paymentId: state.paymentId,
-      status: app.OrderStatus.placed,
-      specialInstructions: cartState.specialInstructions,
-      deliveryInstructions: cartState.deliveryInstructions,
-      estimatedDeliveryMin: 35,
-      placedAt: now,
     );
   }
 

@@ -7,6 +7,7 @@ import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/realtime_service.dart';
+import '../../../core/services/websocket_service.dart';
 import '../../../features/orders/models/order.dart';
 import '../models/partner_order.dart';
 import '../services/order_notification_service.dart';
@@ -88,24 +89,28 @@ class PartnerState {
       .toList();
 }
 
-/// Partner notifier — API-backed with Realtime + polling fallback + notifications
+/// Partner notifier — API-backed with Realtime + WebSocket + polling fallback + notifications
 class PartnerNotifier extends StateNotifier<PartnerState> {
   final ApiClient _api;
   final RealtimeService _realtime;
+  final WebSocketService _ws;
   final OrderNotificationService _notificationService;
   StreamSubscription? _realtimeSub;
+  StreamSubscription? _wsSub;
   Timer? _pollingTimer;
   Timer? _reconnectTimer;
   Set<String> _knownOrderIds = {};
   bool _realtimeConnected = false;
   bool _isLoadingGuard = false;
+  bool _pendingReload = false; // queue a reload if one is skipped due to guard
   int _reconnectAttempts = 0;
 
-  PartnerNotifier(this._api, this._realtime, this._notificationService)
+  PartnerNotifier(this._api, this._realtime, this._ws, this._notificationService)
       : super(const PartnerState()) {
     _initNotifications();
     _loadData();
     _subscribeToRealtime();
+    _subscribeToWebSocket();
   }
 
   Future<void> _initNotifications() async {
@@ -159,6 +164,21 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     }
   }
 
+  /// Listen for order_update events via WebSocket (Go backend hub) as a
+  /// redundant real-time channel. This ensures instant status updates even when
+  /// Appwrite Realtime is slow or disconnected.
+  void _subscribeToWebSocket() {
+    try {
+      _wsSub = _ws.orderUpdates.listen((event) {
+        // An order status changed — reload data to refresh the dashboard.
+        // The WS event is targeted at the restaurant owner by the backend.
+        _loadData(notifyNewOrders: false);
+      });
+    } catch (e) {
+      debugPrint('[PartnerNotifier] WS subscribe error: $e');
+    }
+  }
+
   /// Polling fallback: fetch orders every 15 seconds when Realtime is down
   void _startPollingFallback() {
     if (_pollingTimer?.isActive == true) return; // Already polling
@@ -198,6 +218,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
   @override
   void dispose() {
     _realtimeSub?.cancel();
+    _wsSub?.cancel();
     _pollingTimer?.cancel();
     _reconnectTimer?.cancel();
     _notificationService.dispose();
@@ -205,8 +226,14 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
   }
 
   Future<void> _loadData({bool notifyNewOrders = false}) async {
-    if (_isLoadingGuard) return; // Prevent concurrent loads
+    if (_isLoadingGuard) {
+      // A load is already in progress — queue a reload so we don't drop
+      // realtime events that arrive during the current fetch.
+      _pendingReload = true;
+      return;
+    }
     _isLoadingGuard = true;
+    _pendingReload = false;
     state = state.copyWith(isLoading: true);
     try {
       // Fetch dashboard metrics + active orders in parallel
@@ -284,6 +311,11 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
       state = state.copyWith(isLoading: false);
     } finally {
       _isLoadingGuard = false;
+      // If a reload was requested while we were loading, do it now
+      if (_pendingReload) {
+        _pendingReload = false;
+        _loadData(notifyNewOrders: notifyNewOrders);
+      }
     }
   }
 
@@ -456,6 +488,7 @@ final partnerProvider = StateNotifierProvider<PartnerNotifier, PartnerState>((
 ) {
   final api = ref.watch(apiClientProvider);
   final realtime = ref.watch(realtimeServiceProvider);
+  final ws = ref.watch(webSocketServiceProvider);
   final notificationService = OrderNotificationService();
-  return PartnerNotifier(api, realtime, notificationService);
+  return PartnerNotifier(api, realtime, ws, notificationService);
 });

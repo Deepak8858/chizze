@@ -201,45 +201,7 @@ class GoldNotifier extends StateNotifier<GoldState> {
     }
   }
 
-  // Mock plans available as static getter for fallback/testing
-  static const mockPlans = [
-    GoldPlan(
-      id: 'monthly',
-      name: 'Gold Monthly',
-      description: 'Perfect to try Gold benefits',
-      price: 149,
-      durationDays: 30,
-      benefits: [
-        'Free delivery on all orders',
-        'Extra 10% off on every order',
-        'Priority customer support',
-      ],
-    ),
-    GoldPlan(
-      id: 'quarterly',
-      name: 'Gold Quarterly',
-      description: 'Best value for regulars',
-      price: 349,
-      durationDays: 90,
-      benefits: [
-        'All Monthly benefits',
-        'Exclusive Gold-only deals',
-        'Early access to new restaurants',
-      ],
-    ),
-    GoldPlan(
-      id: 'annual',
-      name: 'Gold Annual',
-      description: 'Maximum savings',
-      price: 999,
-      durationDays: 365,
-      benefits: [
-        'All Quarterly benefits',
-        'Birthday month special offers',
-        'VIP event invitations',
-      ],
-    ),
-  ];
+
 }
 
 final goldProvider =

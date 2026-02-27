@@ -8,8 +8,8 @@ const (
 	OrderStatusConfirmed      = "confirmed"
 	OrderStatusPreparing      = "preparing"
 	OrderStatusReady          = "ready"
-	OrderStatusPickedUp       = "picked_up"
-	OrderStatusOutForDelivery = "out_for_delivery"
+	OrderStatusPickedUp       = "pickedUp"
+	OrderStatusOutForDelivery = "outForDelivery"
 	OrderStatusDelivered      = "delivered"
 	OrderStatusCancelled      = "cancelled"
 )

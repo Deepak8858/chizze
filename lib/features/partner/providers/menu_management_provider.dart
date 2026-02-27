@@ -103,7 +103,7 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
       }
     } catch (_) {}
 
-    // No mock fallback — show empty state
+    // API failed — show empty state
     state = state.copyWith(
       categories: const [],
       items: const [],

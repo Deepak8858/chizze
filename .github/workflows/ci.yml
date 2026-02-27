@@ -53,14 +53,13 @@ jobs:
           version: latest
           working-directory: backend
           args: --timeout=5m
-        continue-on-error: true
 
       - name: Build
         run: go build -o /dev/null ./cmd/server
 
       - name: Run tests
         run: |
-          go test -v -race -coverprofile=coverage.out -covermode=atomic ./... || true
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
           if [ -f coverage.out ]; then go tool cover -func=coverage.out | tail -1; fi
 
       - name: Upload coverage
@@ -220,7 +219,6 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script_stop: true
           script: |
             set -e
             cd /opt/chizze

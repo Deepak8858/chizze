@@ -30,7 +30,7 @@ class RestaurantListState {
   }
 }
 
-/// Fetches restaurants from Go backend API with mock fallback in dev
+/// Fetches restaurants from Go backend API
 class RestaurantNotifier extends StateNotifier<RestaurantListState> {
   final ApiClient _api;
 

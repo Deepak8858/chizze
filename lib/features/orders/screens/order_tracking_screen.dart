@@ -190,7 +190,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
             const SizedBox(height: AppSpacing.xl),
 
             // ─── Delivery Partner ───
-            if (order.status.index >= OrderStatus.pickedUp.index)
+            if (order.deliveryPartnerId != null &&
+                order.deliveryPartnerId!.isNotEmpty)
               _buildDeliveryPartner(order),
 
             const SizedBox(height: AppSpacing.xl),
@@ -240,7 +241,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                 Text(order.status.label, style: AppTypography.h2),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  _statusDescription(order.status),
+                  _statusDescription(order.status, order: order),
                   style: AppTypography.body2,
                 ),
               ],
@@ -528,7 +529,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     );
   }
 
-  String _statusDescription(OrderStatus status) {
+  String _statusDescription(OrderStatus status, {Order? order}) {
     switch (status) {
       case OrderStatus.placed:
         return 'Waiting for restaurant to confirm';
@@ -537,6 +538,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       case OrderStatus.preparing:
         return 'Chef is preparing your food';
       case OrderStatus.ready:
+        if (order?.deliveryPartnerId != null &&
+            order!.deliveryPartnerId!.isNotEmpty) {
+          final name = order.deliveryPartnerName ?? 'A delivery partner';
+          return '$name is on the way to pick up your order';
+        }
         return 'Food is packed and ready for pickup';
       case OrderStatus.pickedUp:
         return 'Delivery partner has picked up your order';

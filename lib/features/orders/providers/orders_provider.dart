@@ -34,7 +34,7 @@ class OrdersState {
       orders.where((o) => !o.status.isActive).toList();
 }
 
-/// Orders notifier — fetches from API with mock fallback + Realtime updates
+/// Orders notifier — API-backed with Realtime updates
 class OrdersNotifier extends StateNotifier<OrdersState> {
   final ApiClient _api;
   final RealtimeService _realtime;
@@ -57,8 +57,23 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
         if (event.type == RealtimeEventType.update) {
           final data = event.data;
           final orderId = event.documentId;
-          final newStatus = OrderStatus.fromString(data['status'] ?? 'placed');
-          updateOrderStatus(orderId, newStatus);
+          // Use tryFromString to avoid reverting status to 'placed'
+          // when Appwrite sends an update with an unrecognised or null status.
+          final statusStr = data['status'] as String?;
+          if (statusStr == null) return;
+          final newStatus = OrderStatus.tryFromString(statusStr);
+          if (newStatus == null) return;
+
+          updateOrderStatus(
+            orderId,
+            newStatus,
+            deliveryPartnerId:
+                data['delivery_partner_id'] as String?,
+            deliveryPartnerName:
+                data['delivery_partner_name'] as String?,
+            deliveryPartnerPhone:
+                data['delivery_partner_phone'] as String?,
+          );
         } else if (event.type == RealtimeEventType.create) {
           // New order placed — refresh list
           fetchOrders();
@@ -75,8 +90,21 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
       final orderId = event.orderId;
       final statusStr = event.status;
       if (orderId != null && statusStr != null) {
-        final newStatus = OrderStatus.fromString(statusStr);
-        updateOrderStatus(orderId, newStatus);
+        // Only process known order statuses — unknown values (e.g. "rider_assigned")
+        // would fall back to OrderStatus.placed and incorrectly revert the order status.
+        final newStatus = OrderStatus.tryFromString(statusStr);
+        if (newStatus != null) {
+          updateOrderStatus(
+            orderId,
+            newStatus,
+            deliveryPartnerId:
+                event.payload['delivery_partner_id'] as String?,
+            deliveryPartnerName:
+                event.payload['delivery_partner_name'] as String?,
+            deliveryPartnerPhone:
+                event.payload['delivery_partner_phone'] as String?,
+          );
+        }
       }
     });
   }
@@ -88,7 +116,7 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     super.dispose();
   }
 
-  /// Fetch orders from API, fallback to mock data
+  /// Fetch orders from API.
   Future<void> fetchOrders() async {
     state = state.copyWith(isLoading: true);
     try {
@@ -104,7 +132,7 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
         state = state.copyWith(isLoading: false, error: response.error);
       }
     } on ApiException catch (e) {
-      // No mock fallback — show the real error to the user
+      // Show the real error to the user
       state = state.copyWith(
         orders: [],
         isLoading: false,
@@ -124,12 +152,24 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     state = state.copyWith(orders: [order, ...state.orders]);
   }
 
-  /// Update order status (from Appwrite Realtime)
-  void updateOrderStatus(String orderId, OrderStatus newStatus) {
+  /// Update order status (from Appwrite Realtime or WebSocket)
+  void updateOrderStatus(
+    String orderId,
+    OrderStatus newStatus, {
+    String? deliveryPartnerId,
+    String? deliveryPartnerName,
+    String? deliveryPartnerPhone,
+  }) {
     final updatedOrders = state.orders.map((order) {
       if (order.id == orderId) {
         return order.copyWith(
           status: newStatus,
+          deliveryPartnerId:
+              deliveryPartnerId ?? order.deliveryPartnerId,
+          deliveryPartnerName:
+              deliveryPartnerName ?? order.deliveryPartnerName,
+          deliveryPartnerPhone:
+              deliveryPartnerPhone ?? order.deliveryPartnerPhone,
           confirmedAt: newStatus == OrderStatus.confirmed
               ? DateTime.now()
               : null,

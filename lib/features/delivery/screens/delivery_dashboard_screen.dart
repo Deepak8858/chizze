@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -550,18 +549,7 @@ class _DeliveryDashboardScreenState
             'Stay online — new orders coming soon',
             style: AppTypography.caption,
           ),
-          const SizedBox(height: AppSpacing.md),
-          // Debug button to simulate request — only in dev builds
-          if (kDebugMode)
-            TextButton.icon(
-            onPressed: () =>
-                ref.read(deliveryProvider.notifier).simulateNewRequest(),
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: const Text(
-              'Simulate Request',
-              style: TextStyle(fontSize: 12),
-            ),
-          ),
+
         ],
       ),
     );

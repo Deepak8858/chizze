@@ -112,12 +112,12 @@ func main() {
 	r := gin.New()
 
 	// Global middleware — order matters
-	r.Use(middleware.Security())          // Request ID + security headers (first)
-	r.Use(middleware.OtelGin("chizze-api")) // OpenTelemetry request tracing
-	r.Use(middleware.Logger())            // Structured logging with request ID
-	r.Use(gin.Recovery())                 // Panic recovery
-	r.Use(middleware.CORS(cfg))           // CORS
-	r.Use(middleware.MaxBodySize(2 << 20)) // 2MB max request body
+	r.Use(middleware.Security())                            // Request ID + security headers (first)
+	r.Use(middleware.OtelGin("chizze-api"))                 // OpenTelemetry request tracing
+	r.Use(middleware.Logger())                              // Structured logging with request ID
+	r.Use(gin.Recovery())                                   // Panic recovery
+	r.Use(middleware.CORS(cfg))                             // CORS
+	r.Use(middleware.MaxBodySize(2 << 20))                  // 2MB max request body
 	r.Use(middleware.Gzip())                                // Response compression
 	r.Use(middleware.RedisRateLimit(redisClient, 200, 500)) // 200 req/s, burst 500 (Redis-backed)
 
@@ -162,11 +162,11 @@ func main() {
 		}
 
 		c.JSON(status, gin.H{
-			"status":         statusText,
-			"service":        "chizze-api",
-			"version":        version,
-			"uptime":         time.Since(startTime).String(),
-			"checks":         checks,
+			"status":          statusText,
+			"service":         "chizze-api",
+			"version":         version,
+			"uptime":          time.Since(startTime).String(),
+			"checks":          checks,
 			"circuit_breaker": awClient.BreakerState().String(),
 		})
 	})
@@ -329,6 +329,7 @@ func main() {
 		delivery.PUT("/location", deliveryHandler.UpdateLocation)
 		delivery.PUT("/orders/:id/accept", deliveryHandler.AcceptOrder)
 		delivery.PUT("/orders/:id/reject", deliveryHandler.RejectOrder)
+		delivery.POST("/orders/:id/report", deliveryHandler.ReportIssue)
 		delivery.PUT("/orders/:id/status", orderHandler.UpdateStatus)
 		delivery.GET("/orders", deliveryHandler.ActiveOrders)
 		delivery.GET("/payouts", deliveryHandler.ListPayouts)
@@ -343,6 +344,12 @@ func main() {
 
 	deliveryMatcher := workers.NewDeliveryMatcher(awService, geoService, redisClient, hub, 15*time.Second)
 	go deliveryMatcher.Start(workerCtx)
+
+	// Wire instant matching: when UpdateStatus sets an order to "ready", the
+	// matcher runs immediately instead of waiting for the next 15-second tick.
+	orderHandler.SetMatcherCallback(func() {
+		deliveryMatcher.Process(context.Background())
+	})
 
 	orderTimeout := workers.NewOrderTimeout(awService, hub, 30*time.Second, 5*time.Minute)
 	go orderTimeout.Start(workerCtx)

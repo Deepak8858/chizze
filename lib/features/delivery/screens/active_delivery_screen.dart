@@ -402,6 +402,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
   ) {
     final nextStep = delivery.nextStep;
     final isLastStep = nextStep == null;
+    final isBusy = ref.watch(deliveryProvider).isStepBusy;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xl),
@@ -414,10 +415,15 @@ class ActiveDeliveryScreen extends ConsumerWidget {
           label: isLastStep
               ? '✅  Mark as Delivered'
               : '${nextStep.emoji}  ${nextStep.label}',
-          onPressed: () {
+          isLoading: isBusy,
+          onPressed: () async {
             if (isLastStep) {
-              ref.read(deliveryProvider.notifier).completeDelivery();
-              _showDeliveryComplete(context);
+              await ref.read(deliveryProvider.notifier).completeDelivery();
+              // Only show success dialog if delivery actually completed
+              if (context.mounted &&
+                  !ref.read(deliveryProvider).hasActiveDelivery) {
+                _showDeliveryComplete(context);
+              }
             } else {
               ref.read(deliveryProvider.notifier).advanceStep();
             }

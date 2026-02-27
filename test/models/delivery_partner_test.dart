@@ -221,9 +221,10 @@ void main() {
       expect(metrics.weeklyCompleted, 34);
     });
 
-    test('mock has non-zero values', () {
-      expect(DeliveryMetrics.mock.todayEarnings, greaterThan(0));
-      expect(DeliveryMetrics.mock.todayDeliveries, greaterThan(0));
+    test('non-zero fixture has non-zero values', () {
+      const metrics = DeliveryMetrics(todayEarnings: 500, todayDeliveries: 8);
+      expect(metrics.todayEarnings, greaterThan(0));
+      expect(metrics.todayDeliveries, greaterThan(0));
     });
 
     test('copyWith overrides specified fields', () {

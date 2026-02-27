@@ -54,12 +54,14 @@ func (w *DeliveryMatcher) Start(ctx context.Context) {
 			log.Println("[worker] DeliveryMatcher stopped")
 			return
 		case <-ticker.C:
-			w.process(ctx)
+			w.Process(ctx)
 		}
 	}
 }
 
-func (w *DeliveryMatcher) process(ctx context.Context) {
+// Process runs the matching logic. Exported so it can be called on-demand
+// (e.g. immediately when an order status changes to "ready").
+func (w *DeliveryMatcher) Process(ctx context.Context) {
 	// 1. Find orders with status "ready" and no delivery_partner_id (null or empty)
 	queriesNull := []string{
 		appwrite.QueryEqual("status", "ready"),
@@ -113,8 +115,10 @@ func (w *DeliveryMatcher) process(ctx context.Context) {
 		customerID, _ := doc["customer_id"].(string)
 
 		// 2. Check Redis lock to prevent re-matching an already-pending order
+		// Use 5-minute TTL so the lock doesn't expire before the rider can accept/reject.
+		// The lock is explicitly cleared on accept (AcceptOrder) or reject (RejectOrder).
 		pendingKey := "pending_delivery:" + orderID
-		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 60*time.Second)
+		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 5*time.Minute)
 		if lockErr != nil || !acquired {
 			// Already pending assignment — skip
 			continue
@@ -208,8 +212,8 @@ func (w *DeliveryMatcher) process(ctx context.Context) {
 			continue
 		}
 
-		// Update Redis lock with rider ID for reference
-		_ = w.redisClient.Set(ctx, pendingKey, riderID, 60*time.Second)
+		// Update Redis lock with rider ID for reference (keep 5-minute TTL)
+		_ = w.redisClient.Set(ctx, pendingKey, riderID, 5*time.Minute)
 
 		log.Printf("[worker] DeliveryMatcher: assigned rider %s to order %s", riderID, orderID)
 

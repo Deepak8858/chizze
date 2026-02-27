@@ -8,6 +8,11 @@ void main() {
       expect(OrderStatus.fromString('confirmed'), OrderStatus.confirmed);
       expect(OrderStatus.fromString('preparing'), OrderStatus.preparing);
       expect(OrderStatus.fromString('ready'), OrderStatus.ready);
+      expect(OrderStatus.fromString('pickedUp'), OrderStatus.pickedUp);
+      expect(
+        OrderStatus.fromString('outForDelivery'),
+        OrderStatus.outForDelivery,
+      );
       expect(OrderStatus.fromString('picked_up'), OrderStatus.pickedUp);
       expect(OrderStatus.fromString('out_for_delivery'), OrderStatus.outForDelivery);
       expect(OrderStatus.fromString('delivered'), OrderStatus.delivered);
@@ -44,10 +49,10 @@ void main() {
       expect(OrderStatus.cancelled.isActive, isFalse);
     });
 
-    test('value matches snake_case string', () {
+    test('value matches API status string', () {
       expect(OrderStatus.placed.value, 'placed');
-      expect(OrderStatus.pickedUp.value, 'picked_up');
-      expect(OrderStatus.outForDelivery.value, 'out_for_delivery');
+      expect(OrderStatus.pickedUp.value, 'pickedUp');
+      expect(OrderStatus.outForDelivery.value, 'outForDelivery');
     });
 
     test('label and emoji are non-empty', () {
@@ -269,18 +274,4 @@ void main() {
     });
   });
 
-  group('Order.mockList', () {
-    test('returns non-empty list', () {
-      expect(Order.mockList.isNotEmpty, isTrue);
-    });
-
-    test('all mock orders have valid fields', () {
-      for (final order in Order.mockList) {
-        expect(order.id.isNotEmpty, isTrue);
-        expect(order.orderNumber.startsWith('CHZ-'), isTrue);
-        expect(order.items.isNotEmpty, isTrue);
-        expect(order.grandTotal, greaterThan(0));
-      }
-    });
-  });
 }

@@ -50,7 +50,7 @@ class AppNotification {
   }
 }
 
-/// Notifications notifier — API-backed with mock fallback + Realtime
+/// Notifications notifier — API-backed with Realtime
 class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   final ApiClient _api;
   final RealtimeService _realtime;

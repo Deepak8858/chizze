@@ -45,6 +45,21 @@ func (b *EventBroadcaster) BroadcastOrderUpdate(customerID, orderID, status, mes
 	})
 }
 
+// BroadcastOrderUpdateFull sends an order status update with additional details
+// (e.g. delivery partner info) so the client can update its state without a
+// round-trip to the server.
+func (b *EventBroadcaster) BroadcastOrderUpdateFull(userID, orderID, status, message string, extra map[string]interface{}) {
+	payload := map[string]interface{}{
+		"order_id": orderID,
+		"status":   status,
+		"message":  message,
+	}
+	for k, v := range extra {
+		payload[k] = v
+	}
+	b.sendToUser(userID, EventOrderUpdate, payload)
+}
+
 // BroadcastNewOrder notifies a restaurant partner about a new incoming order
 func (b *EventBroadcaster) BroadcastNewOrder(restaurantOwnerID, orderID string, orderSummary map[string]interface{}) {
 	b.sendToUser(restaurantOwnerID, EventNewOrder, map[string]interface{}{

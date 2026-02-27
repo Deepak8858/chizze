@@ -97,8 +97,8 @@ func TestOrderConstants(t *testing.T) {
 		"confirmed":        OrderStatusConfirmed,
 		"preparing":        OrderStatusPreparing,
 		"ready":            OrderStatusReady,
-		"picked_up":        OrderStatusPickedUp,
-		"out_for_delivery": OrderStatusOutForDelivery,
+		"pickedUp":        OrderStatusPickedUp,
+		"outForDelivery": OrderStatusOutForDelivery,
 		"delivered":        OrderStatusDelivered,
 		"cancelled":        OrderStatusCancelled,
 	}

@@ -110,28 +110,4 @@ void main() {
     });
   });
 
-  group('Restaurant.mockList', () {
-    test('returns non-empty list', () {
-      expect(Restaurant.mockList.isNotEmpty, isTrue);
-      expect(Restaurant.mockList.length, greaterThanOrEqualTo(3));
-    });
-
-    test('all mock restaurants have valid fields', () {
-      for (final r in Restaurant.mockList) {
-        expect(r.id.isNotEmpty, isTrue);
-        expect(r.name.isNotEmpty, isTrue);
-        expect(r.cuisines.isNotEmpty, isTrue);
-        expect(r.latitude, isNot(0));
-        expect(r.longitude, isNot(0));
-        expect(r.priceForTwo, greaterThan(0));
-      }
-    });
-
-    test('has at least one veg-only restaurant', () {
-      expect(
-        Restaurant.mockList.any((r) => r.isVegOnly),
-        isTrue,
-      );
-    });
-  });
 }

@@ -396,29 +396,66 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
     }
 
     if (po.order.status == OrderStatus.ready) {
+      final hasRider = po.order.deliveryPartnerId != null &&
+          po.order.deliveryPartnerId!.isNotEmpty;
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.success.withValues(alpha: 0.1),
+          color: hasRider
+              ? AppColors.primary.withValues(alpha: 0.1)
+              : AppColors.success.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
           children: [
-            const Icon(
-              Icons.check_circle_rounded,
-              color: AppColors.success,
-              size: 18,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  hasRider
+                      ? Icons.delivery_dining_rounded
+                      : Icons.check_circle_rounded,
+                  color: hasRider ? AppColors.primary : AppColors.success,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  hasRider ? 'Rider Assigned' : 'Waiting for pickup',
+                  style: AppTypography.body2.copyWith(
+                    color: hasRider ? AppColors.primary : AppColors.success,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              'Waiting for pickup',
-              style: AppTypography.body2.copyWith(
-                color: AppColors.success,
-                fontWeight: FontWeight.w600,
+            if (hasRider) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.person_rounded,
+                      size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(
+                    po.order.deliveryPartnerName ?? 'Delivery Partner',
+                    style: AppTypography.caption.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (po.order.deliveryPartnerPhone != null) ...[
+                    const SizedBox(width: AppSpacing.md),
+                    const Icon(Icons.phone_rounded,
+                        size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Text(
+                      po.order.deliveryPartnerPhone!,
+                      style: AppTypography.caption,
+                    ),
+                  ],
+                ],
               ),
-            ),
+            ],
           ],
         ),
       );

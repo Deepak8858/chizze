@@ -54,7 +54,7 @@ class HourlyVolume {
   const HourlyVolume({required this.hour, required this.orders});
 }
 
-/// Analytics notifier — API-backed with mock fallback
+/// Analytics notifier — API-backed
 class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
   final ApiClient _api;
 
@@ -114,7 +114,7 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
       }
     } catch (_) {}
 
-    // No mock fallback — show empty state
+    // API failed — show empty state
     state = const AnalyticsState();
   }
 }

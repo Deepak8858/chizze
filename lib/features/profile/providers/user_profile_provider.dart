@@ -101,7 +101,7 @@ class UserProfile {
   );
 }
 
-/// Profile state notifier — fetches from API with mock fallback
+/// Profile state notifier — API-backed
 class UserProfileNotifier extends StateNotifier<UserProfile> {
   final ApiClient _api;
 

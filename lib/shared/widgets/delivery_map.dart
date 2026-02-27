@@ -65,6 +65,15 @@ class DeliveryMap extends StatefulWidget {
 class _DeliveryMapState extends State<DeliveryMap> {
   MapboxMap? _mapboxMap;
   PointAnnotationManager? _annotationManager;
+  bool _mapError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Safety: re-set Mapbox access token before every map instance to
+    // guard against native SDK losing the token on rebuilds / backgrounding.
+    MapboxOptions.setAccessToken(MapConfig.accessToken);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +84,9 @@ class _DeliveryMapState extends State<DeliveryMap> {
         border: Border.all(color: AppColors.divider.withValues(alpha: 0.3)),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Stack(
+      child: _mapError
+          ? _buildMapFallback()
+          : Stack(
         children: [
           MapWidget(
             key: const ValueKey('delivery_map'),
@@ -85,6 +96,12 @@ class _DeliveryMapState extends State<DeliveryMap> {
             styleUri: MapConfig.darkStyleUrl,
             cameraOptions: _initialCamera(),
             onMapCreated: _onMapCreated,
+                  onMapLoadErrorListener: (MapLoadingErrorEventData error) {
+                    debugPrint(
+                      '[DeliveryMap] Map load error: ${error.type}, ${error.message}',
+                    );
+                    if (mounted) setState(() => _mapError = true);
+                  },
           ),
 
           // ─── Gradient overlay at top ───
@@ -280,12 +297,23 @@ class _DeliveryMapState extends State<DeliveryMap> {
   }
 
   Future<void> _refreshMarkers() async {
-    if (_annotationManager == null) return;
-    await _annotationManager!.deleteAll();
-    await _addMarkers();
+    if (_annotationManager == null || !mounted) return;
+    try {
+      await _annotationManager!.deleteAll();
+      if (!mounted) return;
+      await _addMarkers();
+    } catch (e) {
+      // Mapbox platform channel can fail if the map surface is disposed
+      // while annotations are being updated (FLUTTER-D on Sentry).
+      debugPrint('[DeliveryMap] _refreshMarkers error: $e');
+      if (mounted) {
+        setState(() => _mapError = true);
+      }
+      return;
+    }
 
     // Re-center on rider if tracking
-    if (widget.trackRider) {
+    if (widget.trackRider && mounted) {
       final rider = widget.markers
           .where((m) => m.type == MapMarkerType.rider)
           .firstOrNull;
@@ -301,5 +329,34 @@ class _DeliveryMapState extends State<DeliveryMap> {
         );
       }
     }
+  }
+
+  /// Fallback UI when the native map cannot be loaded (e.g. invalid token).
+  Widget _buildMapFallback() {
+    return Container(
+      color: AppColors.surfaceElevated,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.map_outlined, color: AppColors.textSecondary, size: 48),
+            const SizedBox(height: 8),
+            Text(
+              'Map unavailable',
+              style: AppTypography.body2.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Route info is shown below',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

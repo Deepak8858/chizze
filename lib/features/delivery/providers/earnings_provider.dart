@@ -330,7 +330,7 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
       }
     } catch (_) {}
 
-    // Fallback — show empty state (no mock in production)
+    // Fallback — show empty state
     state = state.copyWith(isLoading: false);
     _isLoadingGuard = false;
   }

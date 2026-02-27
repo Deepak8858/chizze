@@ -59,7 +59,7 @@ class CouponsState {
       : null;
 }
 
-/// Coupons notifier — API-backed with mock fallback
+/// Coupons notifier — API-backed
 class CouponsNotifier extends StateNotifier<CouponsState> {
   final ApiClient _api;
 
@@ -98,7 +98,7 @@ class CouponsNotifier extends StateNotifier<CouponsState> {
         );
       }
     } on ApiException {
-      // Keep mock data
+      // Keep current state on error
     } catch (_) {}
   }
 

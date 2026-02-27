@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
@@ -186,19 +187,23 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 		}
 	}
 
-	// Broadcast live location to customers tracking this rider's deliveries
+	// Broadcast live location to customers tracking this rider's deliveries.
+	// Include both picked_up (rider heading to restaurant / just picked up)
+	// and out_for_delivery (rider heading to customer) so the customer gets
+	// continuous tracking from pickup to delivery.
 	if h.broadcaster != nil {
-		// Find active orders for this rider and broadcast location to each customer
-		activeOrders, err := h.appwrite.ListOrders([]string{
-			appwrite.QueryEqual("delivery_partner_id", userID),
-			appwrite.QueryEqual("status", "out_for_delivery"),
-		})
-		if err == nil && activeOrders != nil {
-			for _, o := range activeOrders.Documents {
-				custID, _ := o["customer_id"].(string)
-				oID, _ := o["$id"].(string)
-				if custID != "" {
-					h.broadcaster.BroadcastDeliveryLocation(custID, oID, req.Latitude, req.Longitude, req.Heading)
+		for _, trackStatus := range []string{models.OrderStatusPickedUp, models.OrderStatusOutForDelivery} {
+			activeOrders, err := h.appwrite.ListOrders([]string{
+				appwrite.QueryEqual("delivery_partner_id", userID),
+				appwrite.QueryEqual("status", trackStatus),
+			})
+			if err == nil && activeOrders != nil {
+				for _, o := range activeOrders.Documents {
+					custID, _ := o["customer_id"].(string)
+					oID, _ := o["$id"].(string)
+					if custID != "" {
+						h.broadcaster.BroadcastDeliveryLocation(custID, oID, req.Latitude, req.Longitude, req.Heading)
+					}
 				}
 			}
 		}
@@ -279,7 +284,6 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 		"delivery_partner_id":    userID,
 		"delivery_partner_name":  partnerName,
 		"delivery_partner_phone": partnerPhone,
-		"accepted_at":            time.Now().Format(time.RFC3339),
 	}
 	_, err = h.appwrite.UpdateOrder(orderID, updateData)
 	if err != nil {
@@ -305,9 +309,39 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 			"is_read":    false,
 			"created_at": time.Now().Format(time.RFC3339),
 		})
-		// Broadcast via WebSocket for live tracking
 		if h.broadcaster != nil {
-			h.broadcaster.BroadcastOrderUpdate(customerID, orderID, "rider_assigned", "A delivery partner is on the way")
+			// Send notification for the toast / push
+			h.broadcaster.BroadcastNotification(customerID, "Delivery Partner Assigned",
+				"A delivery partner is on the way for order "+orderNumber, "delivery_update")
+			// Also send order_update with delivery partner details so the
+			// customer's order list updates instantly without a server round-trip
+			h.broadcaster.BroadcastOrderUpdateFull(customerID, orderID, currentStatus,
+				"Delivery partner assigned", map[string]interface{}{
+					"delivery_partner_id":    userID,
+					"delivery_partner_name":  partnerName,
+					"delivery_partner_phone": partnerPhone,
+				})
+		}
+	}
+
+	// Also notify restaurant owner that a rider accepted the order
+	if h.broadcaster != nil {
+		restaurantID, _ := order["restaurant_id"].(string)
+		if restaurantID != "" {
+			restaurant, restErr := h.appwrite.GetRestaurant(restaurantID)
+			if restErr == nil && restaurant != nil {
+				ownerID, _ := restaurant["owner_id"].(string)
+				if ownerID != "" {
+					h.broadcaster.BroadcastNotification(ownerID, "Rider Assigned",
+						"A delivery partner has been assigned to order "+orderNumber, "delivery_update")
+					h.broadcaster.BroadcastOrderUpdateFull(ownerID, orderID, currentStatus,
+						"Delivery partner assigned to order "+orderNumber, map[string]interface{}{
+							"delivery_partner_id":    userID,
+							"delivery_partner_name":  partnerName,
+							"delivery_partner_phone": partnerPhone,
+						})
+				}
+			}
 		}
 	}
 
@@ -323,6 +357,27 @@ func (h *DeliveryHandler) getDeliveryPartnerProfile(c *gin.Context) (map[string]
 		return nil, "", false
 	}
 	partner := result.Documents[0]
+
+	// Enrich with user profile fields (name/phone/avatar) when absent in
+	// delivery_partners collection. These fields are stored in users.
+	if user, userErr := h.appwrite.GetUser(userID); userErr == nil && user != nil {
+		if _, ok := partner["name"]; !ok || partner["name"] == nil || partner["name"] == "" {
+			if name, _ := user["name"].(string); name != "" {
+				partner["name"] = name
+			}
+		}
+		if _, ok := partner["phone"]; !ok || partner["phone"] == nil || partner["phone"] == "" {
+			if phone, _ := user["phone"].(string); phone != "" {
+				partner["phone"] = phone
+			}
+		}
+		if _, ok := partner["avatar_url"]; !ok || partner["avatar_url"] == nil || partner["avatar_url"] == "" {
+			if avatar, _ := user["avatar_url"].(string); avatar != "" {
+				partner["avatar_url"] = avatar
+			}
+		}
+	}
+
 	partnerID, _ := partner["$id"].(string)
 	return partner, partnerID, true
 }
@@ -496,6 +551,11 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 		case models.OrderStatusPickedUp, models.OrderStatusOutForDelivery:
 			// Currently delivering this order
 			activeDeliveryOrder = order
+		case models.OrderStatusReady:
+			// Order accepted but not yet picked up — still the active delivery
+			if activeDeliveryOrder == nil {
+				activeDeliveryOrder = order
+			}
 		}
 	}
 
@@ -701,15 +761,15 @@ func (h *DeliveryHandler) Earnings(c *gin.Context) {
 			}
 
 			recentTrips = append(recentTrips, gin.H{
-				"order_id":         ordID,
-				"order_number":     orderNumber,
-				"restaurant_id":    restID,
-				"restaurant_name":  restName,
-				"amount":           tripEarning,
-				"tip":              tip,
-				"distance_km":      distance,
-				"duration_min":     durationMin,
-				"completed_at":     deliveredStr,
+				"order_id":        ordID,
+				"order_number":    orderNumber,
+				"restaurant_id":   restID,
+				"restaurant_name": restName,
+				"amount":          tripEarning,
+				"tip":             tip,
+				"distance_km":     distance,
+				"duration_min":    durationMin,
+				"completed_at":    deliveredStr,
 			})
 		}
 	}
@@ -741,13 +801,13 @@ func (h *DeliveryHandler) Earnings(c *gin.Context) {
 	}
 
 	utils.Success(c, gin.H{
-		"period":         period,
-		"weekly_total":   totalEarnings,
-		"monthly_total":  monthlyTotal,
-		"total_tips":     totalTips,
-		"total_trips":    len(result.Documents),
-		"weekly_data":    weeklyData,
-		"recent_trips":   recentTrips,
+		"period":        period,
+		"weekly_total":  totalEarnings,
+		"monthly_total": monthlyTotal,
+		"total_tips":    totalTips,
+		"total_trips":   len(result.Documents),
+		"weekly_data":   weeklyData,
+		"recent_trips":  recentTrips,
 	})
 }
 
@@ -856,14 +916,14 @@ func (h *DeliveryHandler) Performance(c *gin.Context) {
 	}
 
 	utils.Success(c, gin.H{
-		"total_orders":         totalOrders,
-		"delivered_orders":     deliveredOrders,
-		"cancelled_orders":     cancelledOrders,
-		"completion_rate":      completionRate,
-		"cancellation_rate":    cancellationRate,
+		"total_orders":          totalOrders,
+		"delivered_orders":      deliveredOrders,
+		"cancelled_orders":      cancelledOrders,
+		"completion_rate":       completionRate,
+		"cancellation_rate":     cancellationRate,
 		"avg_delivery_time_min": avgDeliveryTimeMin,
-		"daily_trend":          dailyTrend,
-		"peak_day":             peakDay,
+		"daily_trend":           dailyTrend,
+		"peak_day":              peakDay,
 	})
 }
 
@@ -1100,7 +1160,6 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 	if assignedPartner == userID {
 		_, err = h.appwrite.UpdateOrder(orderID, map[string]interface{}{
 			"delivery_partner_id": "",
-			"accepted_at":         "",
 		})
 		if err != nil {
 			utils.InternalError(c, "Failed to reject order")
@@ -1109,4 +1168,109 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 	}
 
 	utils.Success(c, gin.H{"message": "Order rejected", "order_id": orderID})
+}
+
+// ReportIssue allows a delivery partner to report an issue on an active order
+// @Summary Report a delivery issue
+// @Description Reports an issue for an order assigned to the authenticated delivery partner and notifies customer/restaurant
+// @Tags Delivery
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID"
+// @Param request body object{reason=string,details=string} true "Issue reason and details"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/delivery/orders/{id}/report [post]
+func (h *DeliveryHandler) ReportIssue(c *gin.Context) {
+	orderID := c.Param("id")
+	userID := middleware.GetUserID(c)
+
+	var req struct {
+		Reason  string `json:"reason" binding:"required"`
+		Details string `json:"details"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "Reason is required")
+		return
+	}
+
+	reason := strings.TrimSpace(req.Reason)
+	details := strings.TrimSpace(req.Details)
+	if reason == "" {
+		utils.BadRequest(c, "Reason is required")
+		return
+	}
+
+	order, err := h.appwrite.GetOrder(orderID)
+	if err != nil {
+		utils.NotFound(c, "Order not found")
+		return
+	}
+
+	assignedPartner, _ := order["delivery_partner_id"].(string)
+	if assignedPartner != userID {
+		utils.Forbidden(c, "You are not assigned to this order")
+		return
+	}
+
+	status, _ := order["status"].(string)
+	allowed := status == models.OrderStatusReady || status == models.OrderStatusPickedUp || status == models.OrderStatusOutForDelivery
+	if !allowed {
+		utils.BadRequest(c, "Issue reporting is only allowed for active deliveries")
+		return
+	}
+
+	orderNumber, _ := order["order_number"].(string)
+	if orderNumber == "" {
+		orderNumber = orderID
+	}
+
+	body := "Delivery partner reported an issue on order " + orderNumber + ": " + reason
+	if details != "" {
+		body += " (" + details + ")"
+	}
+
+	// Notify customer
+	if customerID, _ := order["customer_id"].(string); customerID != "" {
+		_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
+			"user_id":    customerID,
+			"title":      "Delivery Issue Reported",
+			"body":       body,
+			"type":       "delivery_issue",
+			"data":       map[string]interface{}{"order_id": orderID, "reason": reason, "details": details},
+			"is_read":    false,
+			"created_at": time.Now().Format(time.RFC3339),
+		})
+		if h.broadcaster != nil {
+			h.broadcaster.BroadcastNotification(customerID, "Delivery Issue Reported", body, "delivery_issue")
+		}
+	}
+
+	// Notify restaurant owner
+	if restaurantID, _ := order["restaurant_id"].(string); restaurantID != "" {
+		if restaurant, restErr := h.appwrite.GetRestaurant(restaurantID); restErr == nil && restaurant != nil {
+			ownerID, _ := restaurant["owner_id"].(string)
+			if ownerID != "" {
+				_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
+					"user_id":    ownerID,
+					"title":      "Delivery Issue Reported",
+					"body":       body,
+					"type":       "delivery_issue",
+					"data":       map[string]interface{}{"order_id": orderID, "reason": reason, "details": details},
+					"is_read":    false,
+					"created_at": time.Now().Format(time.RFC3339),
+				})
+				if h.broadcaster != nil {
+					h.broadcaster.BroadcastNotification(ownerID, "Delivery Issue Reported", body, "delivery_issue")
+				}
+			}
+		}
+	}
+
+	utils.Success(c, gin.H{"message": "Issue reported", "order_id": orderID})
 }

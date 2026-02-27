@@ -18,11 +18,19 @@ import (
 
 // OrderHandler handles order endpoints
 type OrderHandler struct {
-	appwrite    *services.AppwriteService
-	orders      *services.OrderService
-	geo         *services.GeoService
-	redis       *redispkg.Client
-	broadcaster *websocket.EventBroadcaster
+	appwrite        *services.AppwriteService
+	orders          *services.OrderService
+	geo             *services.GeoService
+	redis           *redispkg.Client
+	broadcaster     *websocket.EventBroadcaster
+	matcherCallback func() // called when an order becomes "ready" to trigger instant matching
+}
+
+// SetMatcherCallback registers a function to be called when an order becomes
+// "ready", so that the delivery matcher can be triggered immediately instead
+// of waiting for the next ticker interval.
+func (h *OrderHandler) SetMatcherCallback(fn func()) {
+	h.matcherCallback = fn
 }
 
 // NewOrderHandler creates an order handler
@@ -604,7 +612,7 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		}
 	case "delivery_partner":
 		if !deliveryStatuses[req.Status] {
-			utils.Forbidden(c, "Delivery partners can only set picked_up/out_for_delivery/delivered")
+			utils.Forbidden(c, "Delivery partners can only set pickedUp/outForDelivery/delivered")
 			return
 		}
 		deliveryID, _ := order["delivery_partner_id"].(string)
@@ -633,6 +641,10 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		updateData["confirmed_at"] = now
 	case models.OrderStatusReady:
 		updateData["prepared_at"] = now
+		// Trigger delivery matching immediately so nearest rider gets the request
+		if h.matcherCallback != nil {
+			go h.matcherCallback()
+		}
 	case models.OrderStatusPickedUp:
 		updateData["picked_up_at"] = now
 	case models.OrderStatusDelivered:
@@ -702,10 +714,33 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 				"is_read":    false,
 				"created_at": now,
 			})
-			// Broadcast via WebSocket for instant updates
+			// Broadcast via WebSocket for instant updates to customer
 			if h.broadcaster != nil {
 				h.broadcaster.BroadcastOrderUpdate(customerID, orderID, req.Status, notifBody)
 			}
+		}
+	}
+
+	// Also broadcast delivery status changes to restaurant owner via WebSocket
+	// so the restaurant dashboard updates instantly when rider picks up / delivers
+	if h.broadcaster != nil {
+		restaurantID, _ := order["restaurant_id"].(string)
+		if restaurantID != "" {
+			restaurant, restErr := h.appwrite.GetRestaurant(restaurantID)
+			if restErr == nil && restaurant != nil {
+				ownerID, _ := restaurant["owner_id"].(string)
+				if ownerID != "" {
+					h.broadcaster.BroadcastOrderUpdate(ownerID, orderID, req.Status, "Order "+orderNumber+" status: "+req.Status)
+				}
+			}
+		}
+
+		// Broadcast to delivery partner so their UI confirms the status change.
+		// This is especially important if the partner's optimistic update
+		// succeeded but they need server confirmation, or if the restaurant
+		// changed the status (e.g. cancelled).
+		if dpUserID, _ := order["delivery_partner_id"].(string); dpUserID != "" && dpUserID != userID {
+			h.broadcaster.BroadcastOrderUpdate(dpUserID, orderID, req.Status, "Order "+orderNumber+" status: "+req.Status)
 		}
 	}
 
