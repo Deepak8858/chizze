@@ -189,7 +189,8 @@ class OrdersScreen extends ConsumerWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(_formatDate(order.placedAt), style: AppTypography.caption),
+                if (order.placedAt != null)
+                  Text(_formatDate(order.placedAt!), style: AppTypography.caption),
                 Text(
                   '₹${order.grandTotal.toInt()}',
                   style: AppTypography.price,

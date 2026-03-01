@@ -560,7 +560,7 @@ class _DeliveryDashboardScreenState
       ('📦', 'Active', '/delivery/active'),
       ('💰', 'Earnings', '/delivery/earnings'),
       ('👤', 'Profile', '/delivery/profile'),
-      ('🆘', 'Support', '/delivery/dashboard'),
+      ('🆘', 'Support', '/support'),
     ];
 
     return Column(
@@ -575,7 +575,7 @@ class _DeliveryDashboardScreenState
           crossAxisSpacing: AppSpacing.md,
           children: actions.map((a) {
             return GestureDetector(
-              onTap: () => context.go(a.$3),
+              onTap: () => context.push(a.$3),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

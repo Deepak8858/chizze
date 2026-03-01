@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/api_client.dart';
@@ -12,6 +13,7 @@ class AnalyticsState {
   final int totalOrders;
   final double avgOrderValue;
   final bool isLoading;
+  final String? error;
 
   const AnalyticsState({
     this.revenueData = const [],
@@ -21,6 +23,7 @@ class AnalyticsState {
     this.totalOrders = 0,
     this.avgOrderValue = 0,
     this.isLoading = false,
+    this.error,
   });
 }
 
@@ -112,10 +115,12 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
         );
         return;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Analytics] fetchAnalytics error: $e');
+    }
 
-    // API failed — show empty state
-    state = const AnalyticsState();
+    // API failed — show empty state with error
+    state = AnalyticsState(error: 'Failed to load analytics');
   }
 }
 

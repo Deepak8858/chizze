@@ -64,6 +64,7 @@ class ApiConfig {
   static const String partnerOrders = '/partner/orders';
   static const String partnerAnalytics = '/partner/analytics';
   static const String partnerCategories = '/partner/categories';
+  static const String partnerRestaurant = '/partner/restaurant';
   static const String partnerRestaurantStatus = '/partner/restaurant/status';
   static const String partnerPerformance = '/partner/performance';
 

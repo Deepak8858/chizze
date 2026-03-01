@@ -253,7 +253,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
             currentLongitude: loc.longitude,
           ),
         );
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[Delivery] one-shot location error: $e');
         return;
       }
     }
@@ -332,7 +333,9 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         }
         return;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Delivery] _loadData error: $e');
+    }
 
     // API failed — show empty state
     state = state.copyWith(
@@ -433,7 +436,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           partner: state.partner.copyWith(isOnline: !newOnline),
         );
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Delivery] toggleOnline error: $e');
       state = state.copyWith(
         partner: state.partner.copyWith(isOnline: !newOnline),
       );
@@ -461,8 +465,9 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       await _api.put('${ApiConfig.deliveryOrders}/$orderId/accept');
       // Reload dashboard to sync server state (e.g. active_order)
       _loadData();
-    } catch (_) {
+    } catch (e) {
       // Accept already optimistic — don't rollback UI
+      debugPrint('[Delivery] acceptRequest error: $e');
     }
   }
 
@@ -634,12 +639,19 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     String? vehicleType,
     String? vehicleNumber,
     String? bankAccountId,
+    String? bankAccountHolder,
+    String? ifsc,
+    String? upiId,
   }) async {
     try {
       final body = <String, dynamic>{};
       if (vehicleType != null) body['vehicle_type'] = vehicleType;
       if (vehicleNumber != null) body['vehicle_number'] = vehicleNumber;
       if (bankAccountId != null) body['bank_account_id'] = bankAccountId;
+      if (bankAccountHolder != null)
+        body['bank_account_holder'] = bankAccountHolder;
+      if (ifsc != null) body['ifsc'] = ifsc;
+      if (upiId != null) body['upi_id'] = upiId;
 
       if (body.isEmpty) return false;
 
@@ -654,7 +666,9 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         );
         return true;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Delivery] updateProfile error: $e');
+    }
     return false;
   }
 
@@ -665,7 +679,9 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       if (response.success && response.data != null) {
         return response.data as Map<String, dynamic>;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Delivery] fetchPerformance error: $e');
+    }
     return null;
   }
 }

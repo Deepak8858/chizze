@@ -26,6 +26,7 @@ class PartnerState {
   final List<PartnerOrder> orders;
   final bool isLoading;
   final String? restaurantName;
+  final String? restaurantImageUrl;
   final RealtimeConnectionStatus connectionStatus;
   final int unacknowledgedNewOrders;
 
@@ -35,6 +36,7 @@ class PartnerState {
     this.orders = const [],
     this.isLoading = false,
     this.restaurantName,
+    this.restaurantImageUrl,
     this.connectionStatus = RealtimeConnectionStatus.disconnected,
     this.unacknowledgedNewOrders = 0,
   });
@@ -45,6 +47,7 @@ class PartnerState {
     List<PartnerOrder>? orders,
     bool? isLoading,
     String? restaurantName,
+    String? restaurantImageUrl,
     RealtimeConnectionStatus? connectionStatus,
     int? unacknowledgedNewOrders,
   }) {
@@ -54,6 +57,7 @@ class PartnerState {
       orders: orders ?? this.orders,
       isLoading: isLoading ?? this.isLoading,
       restaurantName: restaurantName ?? this.restaurantName,
+      restaurantImageUrl: restaurantImageUrl ?? this.restaurantImageUrl,
       connectionStatus: connectionStatus ?? this.connectionStatus,
       unacknowledgedNewOrders:
           unacknowledgedNewOrders ?? this.unacknowledgedNewOrders,
@@ -158,7 +162,8 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           _startPollingFallback();
         }
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[PartnerNotifier] Realtime subscribe error: $e');
       // Realtime not available — use polling only
       _startPollingFallback();
     }
@@ -249,6 +254,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
       PartnerMetrics metrics = state.metrics;
       bool isOnline = state.isOnline;
       String? restaurantName = state.restaurantName;
+      String? restaurantImageUrl = state.restaurantImageUrl;
 
       if (dashboardResponse.success && dashboardResponse.data != null) {
         final d = dashboardResponse.data;
@@ -261,6 +267,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           );
           isOnline = d['is_online'] ?? true;
           restaurantName = d['restaurant_name'] as String?;
+          restaurantImageUrl = d['restaurant_image_url'] as String?;
         }
       }
 
@@ -302,6 +309,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         orders: orders,
         isOnline: isOnline,
         restaurantName: restaurantName,
+        restaurantImageUrl: restaurantImageUrl,
         isLoading: false,
         unacknowledgedNewOrders: newCount,
       );
@@ -341,7 +349,8 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
       if (map['items'] is String) {
         try {
           map['items'] = jsonDecode(map['items'] as String);
-        } catch (_) {
+        } catch (e) {
+          debugPrint('[Partner] items JSON parse error: $e');
           map['items'] = [];
         }
       }
@@ -370,6 +379,27 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     state = state.copyWith(unacknowledgedNewOrders: 0);
   }
 
+  /// Update restaurant image URL
+  Future<bool> updateRestaurantImage(String imageUrl) async {
+    final oldUrl = state.restaurantImageUrl;
+    state = state.copyWith(restaurantImageUrl: imageUrl);
+    try {
+      final res = await _api.put(
+        ApiConfig.partnerRestaurant,
+        body: {'image_url': imageUrl},
+      );
+      if (!res.success) {
+        state = state.copyWith(restaurantImageUrl: oldUrl);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[PartnerNotifier] updateRestaurantImage error: $e');
+      state = state.copyWith(restaurantImageUrl: oldUrl);
+      return false;
+    }
+  }
+
   /// Toggle restaurant online/offline
   Future<void> toggleOnline() async {
     final newState = !state.isOnline;
@@ -379,7 +409,8 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         ApiConfig.partnerRestaurantStatus,
         body: {'is_online': newState},
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[PartnerNotifier] toggleOnline error: $e');
       // Revert on failure
       state = state.copyWith(isOnline: !newState);
     }
@@ -409,7 +440,8 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           '${ApiConfig.partnerOrders}/$orderId/status',
           body: {'status': 'confirmed'},
         )
-        .catchError((_) {
+        .catchError((e) {
+          debugPrint('[PartnerNotifier] acceptOrder error: $e');
           state = state.copyWith(orders: previousOrders);
           return ApiResponse<dynamic>(success: false);
         });
@@ -429,7 +461,8 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           '${ApiConfig.partnerOrders}/$orderId/status',
           body: {'status': 'cancelled', 'reason': reason},
         )
-        .catchError((_) {
+        .catchError((e) {
+          debugPrint('[PartnerNotifier] rejectOrder error: $e');
           state = state.copyWith(orders: previousOrders);
           return ApiResponse<dynamic>(success: false);
         });
@@ -444,7 +477,8 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           '${ApiConfig.partnerOrders}/$orderId/status',
           body: {'status': 'preparing'},
         )
-        .catchError((_) {
+        .catchError((e) {
+          debugPrint('[PartnerNotifier] markPreparing error: $e');
           state = state.copyWith(orders: previousOrders);
           return ApiResponse<dynamic>(success: false);
         });
@@ -459,7 +493,8 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           '${ApiConfig.partnerOrders}/$orderId/status',
           body: {'status': 'ready'},
         )
-        .catchError((_) {
+        .catchError((e) {
+          debugPrint('[PartnerNotifier] markReady error: $e');
           state = state.copyWith(orders: previousOrders);
           return ApiResponse<dynamic>(success: false);
         });

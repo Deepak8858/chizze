@@ -251,22 +251,21 @@ class PartnerDashboardScreen extends ConsumerWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              RadioGroup<String>(
-                groupValue: selectedReason,
-                onChanged: (String? val) => setDialogState(() => selectedReason = val ?? ''),
-                child: Column(
+              Column(
                   mainAxisSize: MainAxisSize.min,
                   children: reasons.map((reason) => ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     leading: Radio<String>(
                       value: reason,
+                          groupValue: selectedReason,
+                          onChanged: (String? val) =>
+                              setDialogState(() => selectedReason = val ?? ''),
                       activeColor: AppColors.primary,
                     ),
                     title: Text(reason, style: AppTypography.body2.copyWith(color: Colors.white)),
                     onTap: () => setDialogState(() => selectedReason = reason),
                   )).toList(),
-                ),
               ),
             ],
           ),
@@ -296,7 +295,7 @@ class PartnerDashboardScreen extends ConsumerWidget {
       ('📋', 'Orders', '/partner/orders'),
       ('🍽️', 'Menu', '/partner/menu'),
       ('📊', 'Analytics', '/partner/analytics'),
-      ('⚙️', 'Settings', '/partner/menu'),
+      ('⚙️', 'Settings', '/partner/settings'),
     ];
 
     return Column(

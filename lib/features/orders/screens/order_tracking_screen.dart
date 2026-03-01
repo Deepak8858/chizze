@@ -192,11 +192,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.help_outline_rounded),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Support coming soon!')),
-              );
-            },
+            onPressed: () => context.push('/support'),
           ),
         ],
       ),
@@ -539,13 +535,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.chat_rounded, color: AppColors.info),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('In-app chat coming soon! Use the phone button to call your rider.'),
-                ),
-              );
-            },
+            onPressed: () => context.push('/chat/${order.id}'),
           ),
         ],
       ),

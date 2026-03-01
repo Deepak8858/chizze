@@ -97,7 +97,9 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
       }
     } on ApiException {
       // Keep current state
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Address] fetchAddresses error: $e');
+    }
   }
 
   bool get hasFetched => _fetched;

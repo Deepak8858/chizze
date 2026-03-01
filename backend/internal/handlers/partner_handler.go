@@ -96,14 +96,17 @@ func (h *PartnerHandler) Dashboard(c *gin.Context) {
 	isOnline, _ := restaurant["is_online"].(bool)
 	name, _ := restaurant["name"].(string)
 
+	restaurantImageUrl, _ := restaurant["restaurant_image_url"].(string)
+
 	utils.Success(c, gin.H{
-		"restaurant_id":   restID,
-		"restaurant_name": name,
-		"is_online":       isOnline,
-		"today_revenue":   todayRevenue,
-		"today_orders":    todayOrders,
-		"avg_rating":      rating,
-		"pending_orders":  pendingOrders,
+		"restaurant_id":        restID,
+		"restaurant_name":      name,
+		"is_online":            isOnline,
+		"today_revenue":        todayRevenue,
+		"today_orders":         todayOrders,
+		"avg_rating":           rating,
+		"pending_orders":       pendingOrders,
+		"restaurant_image_url": restaurantImageUrl,
 	})
 }
 
@@ -626,6 +629,59 @@ func (h *PartnerHandler) Performance(c *gin.Context) {
 		"cancellation_rate": cancellationRate,
 		"avg_prep_time_min": avgPrepTime,
 	})
+}
+
+// UpdateRestaurant updates restaurant metadata (e.g. image URL)
+// @Summary      Update restaurant
+// @Description  Updates restaurant fields such as restaurant_image_url
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object  true  "Fields to update"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/restaurant [put]
+func (h *PartnerHandler) UpdateRestaurant(c *gin.Context) {
+	_, restID, ok := h.getPartnerRestaurant(c)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		RestaurantImageURL string `json:"restaurant_image_url"`
+		Name               string `json:"name"`
+		Description        string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "Invalid request body")
+		return
+	}
+
+	updateData := map[string]interface{}{}
+	if req.RestaurantImageURL != "" {
+		updateData["restaurant_image_url"] = req.RestaurantImageURL
+	}
+	if req.Name != "" {
+		updateData["name"] = req.Name
+	}
+	if req.Description != "" {
+		updateData["description"] = req.Description
+	}
+
+	if len(updateData) == 0 {
+		utils.BadRequest(c, "No fields to update")
+		return
+	}
+
+	updated, err := h.appwrite.UpdateRestaurant(restID, updateData)
+	if err != nil {
+		utils.InternalError(c, "Failed to update restaurant")
+		return
+	}
+	utils.Success(c, updated)
 }
 
 func boolToStatus(b bool) string {

@@ -491,14 +491,7 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              RadioGroup<String>(
-                groupValue: selectedReason,
-                onChanged: (String? val) {
-                  if (val != null) {
-                    setDialogState(() => selectedReason = val);
-                  }
-                },
-                child: Column(
+              Column(
                   mainAxisSize: MainAxisSize.min,
                   children: reasons.map(
                     (reason) => ListTile(
@@ -506,6 +499,12 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
                       contentPadding: EdgeInsets.zero,
                       leading: Radio<String>(
                         value: reason,
+                          groupValue: selectedReason,
+                          onChanged: (String? val) {
+                            if (val != null) {
+                              setDialogState(() => selectedReason = val);
+                            }
+                          },
                         activeColor: AppColors.primary,
                       ),
                       title: Text(
@@ -515,7 +514,6 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
                       onTap: () => setDialogState(() => selectedReason = reason),
                     ),
                   ).toList(),
-                ),
               ),
             ],
           ),

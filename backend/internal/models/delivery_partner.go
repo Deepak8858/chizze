@@ -73,7 +73,10 @@ type RequestPayoutRequest struct {
 
 // UpdateDeliveryProfileRequest is the DTO for partner profile updates
 type UpdateDeliveryProfileRequest struct {
-	VehicleType   string `json:"vehicle_type"`
-	VehicleNumber string `json:"vehicle_number"`
-	BankAccountID string `json:"bank_account_id"`
+	VehicleType       string `json:"vehicle_type"`
+	VehicleNumber     string `json:"vehicle_number"`
+	BankAccountID     string `json:"bank_account_id"`
+	BankAccountHolder string `json:"bank_account_holder"`
+	IFSC              string `json:"ifsc"`
+	UpiID             string `json:"upi_id"`
 }

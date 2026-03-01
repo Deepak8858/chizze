@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
@@ -47,7 +48,7 @@ class TripEarning {
     return TripEarning(
       orderId: t['order_id']?.toString() ?? '',
       orderNumber: t['order_number']?.toString() ?? '',
-      restaurantName: t['restaurant_id']?.toString() ?? '',
+      restaurantName: t['restaurant_name']?.toString() ?? '',
       amount: (t['amount'] as num?)?.toDouble() ?? 0,
       distanceKm: (t['distance_km'] as num?)?.toDouble() ?? 0,
       durationMin: (t['duration_min'] as num?)?.toInt() ?? 0,
@@ -328,7 +329,9 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
         _isLoadingGuard = false;
         return;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Earnings] fetchEarnings error: $e');
+    }
 
     // Fallback — show empty state
     state = state.copyWith(isLoading: false);
@@ -361,7 +364,9 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
         state = state.copyWith(payouts: payouts, isPayoutsLoading: false);
         return;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Earnings] fetchPayouts error: $e');
+    }
 
     state = state.copyWith(isPayoutsLoading: false);
   }
@@ -391,7 +396,8 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
         errorMessage: response.error ?? 'Payout request failed',
       );
       return false;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Earnings] requestPayout error: $e');
       state = state.copyWith(
         isRequestingPayout: false,
         errorMessage: 'Network error — try again',

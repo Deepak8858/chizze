@@ -121,9 +121,14 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           IconButton(
             icon: const Icon(Icons.phone_rounded),
             onPressed: () {
-              launchUrl(Uri(scheme: 'tel', path: '+918008008000'));
+              final phone = headingToRestaurant
+                  ? request.restaurantPhone
+                  : request.customerPhone;
+              if (phone.isNotEmpty) {
+                launchUrl(Uri(scheme: 'tel', path: phone));
+              }
             },
-            tooltip: 'Call Support',
+            tooltip: headingToRestaurant ? 'Call Restaurant' : 'Call Customer',
           ),
         ],
       ),
@@ -344,12 +349,17 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    // Call restaurant or customer support line
-                    final uri = Uri(scheme: 'tel', path: '+918008008000');
-                    launchUrl(uri);
+                    final phone = isRestaurantStep
+                        ? request.restaurantPhone
+                        : request.customerPhone;
+                    if (phone.isNotEmpty) {
+                      launchUrl(Uri(scheme: 'tel', path: phone));
+                    }
                   },
                   icon: const Icon(Icons.phone_rounded, size: 16),
-                  label: Text(isRestaurantStep ? 'Call' : 'Call'),
+                  label: Text(
+                    isRestaurantStep ? 'Call Restaurant' : 'Call Customer',
+                  ),
                 ),
               ),
             ],
@@ -489,7 +499,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                 _showDeliveryComplete(context);
               }
             } else {
-              ref.read(deliveryProvider.notifier).advanceStep();
+              await ref.read(deliveryProvider.notifier).advanceStep();
             }
           },
         ),

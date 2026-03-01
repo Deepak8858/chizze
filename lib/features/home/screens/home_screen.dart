@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_card.dart';
-import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/shimmer_loader.dart';
 import '../providers/restaurant_provider.dart';
 import '../models/restaurant.dart';
@@ -319,10 +318,63 @@ class HomeScreen extends ConsumerWidget {
     final coupons = ref.watch(couponsProvider).available.where((c) => c.isUsable).take(5).toList();
 
     if (coupons.isEmpty) {
-      return const EmptyStateWidget(
-        icon: Icons.local_offer_outlined,
-        title: 'No offers right now',
-        subtitle: 'Check back soon for exciting deals!',
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xl,
+              vertical: AppSpacing.md,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.15),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.local_offer_outlined,
+                    color: AppColors.primary,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'No offers right now',
+                        style: AppTypography.body1.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Check back soon for exciting deals!',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 

@@ -190,7 +190,8 @@ void main() {
 
     test('parses datetime fields', () {
       final order = Order.fromMap(sampleMap);
-      expect(order.placedAt.year, 2024);
+      expect(order.placedAt, isNotNull);
+      expect(order.placedAt!.year, 2024);
       expect(order.confirmedAt, isNotNull);
       expect(order.preparedAt, isNull);
       expect(order.deliveredAt, isNull);

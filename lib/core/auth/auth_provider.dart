@@ -135,14 +135,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _persistRole(String role) async {
     try {
       await _secureStorage.write(key: _kRoleStorageKey, value: role);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Auth] persistRole error: $e');
+    }
   }
 
   /// Load persisted role
   Future<String?> _loadPersistedRole() async {
     try {
       return await _secureStorage.read(key: _kRoleStorageKey);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Auth] loadPersistedRole error: $e');
       return null;
     }
   }
@@ -408,17 +411,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // For customers, auto-create a saved address from onboarding data
       if (state.userRole == 'customer' && address != null && address.isNotEmpty) {
         try {
-          await _apiClient.post(
-            '/users/me/addresses',
-            body: {
-              'label': 'Home',
-              'full_address': address,
-              'landmark': '',
-              'latitude': latitude ?? 0,
-              'longitude': longitude ?? 0,
-              'is_default': true,
-            },
-          );
+          final hasValidCoords =
+              latitude != null &&
+              longitude != null &&
+              latitude >= -90 &&
+              latitude <= 90 &&
+              longitude >= -180 &&
+              longitude <= 180 &&
+              (latitude != 0 || longitude != 0);
+
+          final body = <String, dynamic>{
+            'label': 'Home',
+            'full_address': address,
+            'landmark': '',
+            'is_default': true,
+          };
+          if (hasValidCoords) {
+            body['latitude'] = latitude;
+            body['longitude'] = longitude;
+          }
+
+          await _apiClient.post('/users/me/addresses', body: body);
           debugPrint('[Auth] Auto-created saved address from onboarding');
         } catch (e) {
           debugPrint('[Auth] Auto-create saved address failed (non-critical): $e');

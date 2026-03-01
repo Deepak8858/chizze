@@ -101,7 +101,9 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
         );
         return;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[MenuMgmt] loadData error: $e');
+    }
 
     // API failed — show empty state
     state = state.copyWith(
@@ -139,11 +141,27 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
           return c.id == tempCategory.id ? created : c;
         }).toList();
         state = state.copyWith(categories: updated);
+      } else {
+        // API returned non-success — rollback temp category
+        state = state.copyWith(
+          categories: state.categories
+              .where((c) => c.id != tempCategory.id)
+              .toList(),
+        );
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[MenuMgmt] addCategory error: $e');
+      // Rollback temp category on network / parsing failure
+      state = state.copyWith(
+        categories: state.categories
+            .where((c) => c.id != tempCategory.id)
+            .toList(),
+      );
+    }
   }
 
   Future<void> updateCategory(String categoryId, String newName) async {
+    final oldCategories = state.categories;
     final updated = state.categories.map((c) {
       if (c.id == categoryId) {
         return MenuCategory(
@@ -158,16 +176,23 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     }).toList();
     state = state.copyWith(categories: updated);
 
-    _api
-        .put('${ApiConfig.partnerCategories}/$categoryId', body: {'name': newName})
-        .then((r) {
-      if (!r.success) debugPrint('[Menu] renameCategory failed: ${r.error}');
-    }).catchError((e) {
+    try {
+      final r = await _api.put(
+        '${ApiConfig.partnerCategories}/$categoryId',
+        body: {'name': newName},
+      );
+      if (!r.success) {
+        debugPrint('[Menu] renameCategory failed: ${r.error}');
+        state = state.copyWith(categories: oldCategories);
+      }
+    } catch (e) {
       debugPrint('[Menu] renameCategory error: $e');
-    });
+      state = state.copyWith(categories: oldCategories);
+    }
   }
 
   Future<void> toggleCategoryActive(String categoryId) async {
+    final oldCategories = state.categories;
     MenuCategory? toggled;
     final updated = state.categories.map((c) {
       if (c.id == categoryId) {
@@ -185,29 +210,39 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     state = state.copyWith(categories: updated);
 
     if (toggled != null) {
-      _api
-          .put(
-            '${ApiConfig.partnerCategories}/$categoryId',
-            body: {'is_active': toggled!.isActive},
-          )
-          .then((r) {
-        if (!r.success) debugPrint('[Menu] toggleCategory failed: ${r.error}');
-      }).catchError((e) {
+      try {
+        final r = await _api.put(
+          '${ApiConfig.partnerCategories}/$categoryId',
+          body: {'is_active': toggled!.isActive},
+        );
+        if (!r.success) {
+          debugPrint('[Menu] toggleCategory failed: ${r.error}');
+          state = state.copyWith(categories: oldCategories);
+        }
+      } catch (e) {
         debugPrint('[Menu] toggleCategory error: $e');
-      });
+        state = state.copyWith(categories: oldCategories);
+      }
     }
   }
 
   Future<void> deleteCategory(String categoryId) async {
+    final oldCategories = state.categories;
+    final oldItems = state.items;
     state = state.copyWith(
       categories: state.categories.where((c) => c.id != categoryId).toList(),
       items: state.items.where((i) => i.categoryId != categoryId).toList(),
     );
-    _api.delete('${ApiConfig.partnerCategories}/$categoryId').then((r) {
-      if (!r.success) debugPrint('[Menu] deleteCategory failed: ${r.error}');
-    }).catchError((e) {
+    try {
+      final r = await _api.delete('${ApiConfig.partnerCategories}/$categoryId');
+      if (!r.success) {
+        debugPrint('[Menu] deleteCategory failed: ${r.error}');
+        state = state.copyWith(categories: oldCategories, items: oldItems);
+      }
+    } catch (e) {
       debugPrint('[Menu] deleteCategory error: $e');
-    });
+      state = state.copyWith(categories: oldCategories, items: oldItems);
+    }
   }
 
   // ─── Item Operations ───
@@ -275,6 +310,8 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     String? categoryId,
     File? imageFile,
   }) async {
+    final oldItems = state.items;
+
     // Upload new image if provided
     String? newImageUrl;
     if (imageFile != null) {
@@ -312,15 +349,24 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     if (newImageUrl != null) body['image_url'] = newImageUrl;
 
     if (body.isNotEmpty) {
-      _api.put('${ApiConfig.partnerMenu}/$itemId', body: body).then((r) {
-        if (!r.success) debugPrint('[Menu] updateItem failed: ${r.error}');
-      }).catchError((e) {
+      try {
+        final r = await _api.put(
+          '${ApiConfig.partnerMenu}/$itemId',
+          body: body,
+        );
+        if (!r.success) {
+          debugPrint('[Menu] updateItem failed: ${r.error}');
+          state = state.copyWith(items: oldItems);
+        }
+      } catch (e) {
         debugPrint('[Menu] updateItem error: $e');
-      });
+        state = state.copyWith(items: oldItems);
+      }
     }
   }
 
-  void toggleItemAvailability(String itemId) {
+  Future<void> toggleItemAvailability(String itemId) async {
+    final oldItems = state.items;
     MenuItem? toggled;
     final updated = state.items.map((item) {
       if (item.id == itemId) {
@@ -350,28 +396,37 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     state = state.copyWith(items: updated);
 
     if (toggled != null) {
-      _api
-          .put(
-            '${ApiConfig.partnerMenu}/$itemId',
-            body: {'is_available': toggled!.isAvailable},
-          )
-          .then((r) {
-        if (!r.success) debugPrint('[Menu] toggleAvailability failed: ${r.error}');
-      }).catchError((e) {
+      try {
+        final r = await _api.put(
+          '${ApiConfig.partnerMenu}/$itemId',
+          body: {'is_available': toggled!.isAvailable},
+        );
+        if (!r.success) {
+          debugPrint('[Menu] toggleAvailability failed: ${r.error}');
+          state = state.copyWith(items: oldItems);
+        }
+      } catch (e) {
         debugPrint('[Menu] toggleAvailability error: $e');
-      });
+        state = state.copyWith(items: oldItems);
+      }
     }
   }
 
-  void deleteItem(String itemId) {
+  Future<void> deleteItem(String itemId) async {
+    final oldItems = state.items;
     state = state.copyWith(
       items: state.items.where((i) => i.id != itemId).toList(),
     );
-    _api.delete('${ApiConfig.partnerMenu}/$itemId').then((r) {
-      if (!r.success) debugPrint('[Menu] deleteItem failed: ${r.error}');
-    }).catchError((e) {
+    try {
+      final r = await _api.delete('${ApiConfig.partnerMenu}/$itemId');
+      if (!r.success) {
+        debugPrint('[Menu] deleteItem failed: ${r.error}');
+        state = state.copyWith(items: oldItems);
+      }
+    } catch (e) {
       debugPrint('[Menu] deleteItem error: $e');
-    });
+      state = state.copyWith(items: oldItems);
+    }
   }
 }
 

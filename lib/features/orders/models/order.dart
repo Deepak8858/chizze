@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 /// Order data model — maps to Appwrite `orders` collection
 class Order {
   final String id;
@@ -35,7 +37,7 @@ class Order {
   final String specialInstructions;
   final String deliveryInstructions;
   final int estimatedDeliveryMin;
-  final DateTime placedAt;
+  final DateTime? placedAt;
   final DateTime? confirmedAt;
   final DateTime? preparedAt;
   final DateTime? pickedUpAt;
@@ -78,7 +80,7 @@ class Order {
     this.specialInstructions = '',
     this.deliveryInstructions = '',
     this.estimatedDeliveryMin = 30,
-    required this.placedAt,
+    this.placedAt,
     this.confirmedAt,
     this.preparedAt,
     this.pickedUpAt,
@@ -123,7 +125,7 @@ class Order {
       specialInstructions: map['special_instructions'] ?? '',
       deliveryInstructions: map['delivery_instructions'] ?? '',
       estimatedDeliveryMin: map['estimated_delivery_min'] ?? 30,
-      placedAt: DateTime.tryParse(map['placed_at'] ?? '') ?? DateTime.now(),
+      placedAt: _parsePlacedAt(map['placed_at']),
       confirmedAt: map['confirmed_at'] != null
           ? DateTime.tryParse(map['confirmed_at'].toString())
           : null,
@@ -142,6 +144,19 @@ class Order {
       cancellationReason: map['cancellation_reason'],
       cancelledBy: map['cancelled_by'],
     );
+  }
+
+  /// Parse placed_at with explicit logging when missing/invalid.
+  static DateTime? _parsePlacedAt(dynamic raw) {
+    if (raw == null || (raw is String && raw.isEmpty)) {
+      debugPrint('[Order] placed_at is missing or empty in API response');
+      return null;
+    }
+    final parsed = DateTime.tryParse(raw.toString());
+    if (parsed == null) {
+      debugPrint('[Order] placed_at failed to parse: "$raw"');
+    }
+    return parsed;
   }
 
   /// Parse items field which may be a JSON string (from Appwrite) or a List
@@ -200,7 +215,7 @@ class Order {
       'special_instructions': specialInstructions,
       'delivery_instructions': deliveryInstructions,
       'estimated_delivery_min': estimatedDeliveryMin,
-      'placed_at': placedAt.toIso8601String(),
+      if (placedAt != null) 'placed_at': placedAt!.toIso8601String(),
     };
   }
 
@@ -251,7 +266,7 @@ class Order {
       specialInstructions: specialInstructions,
       deliveryInstructions: deliveryInstructions,
       estimatedDeliveryMin: estimatedDeliveryMin,
-      placedAt: placedAt,
+      placedAt: placedAt ?? this.placedAt,
       confirmedAt: confirmedAt ?? this.confirmedAt,
       preparedAt: preparedAt ?? this.preparedAt,
       pickedUpAt: pickedUpAt ?? this.pickedUpAt,

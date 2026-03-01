@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../../features/orders/models/order.dart';
 
 /// Delivery partner profile model
@@ -116,9 +118,11 @@ class DeliveryRequest {
   final String restaurantName;
   final String restaurantCuisine;
   final String restaurantAddress;
+  final String restaurantPhone;
   final double restaurantLatitude;
   final double restaurantLongitude;
   final String customerName;
+  final String customerPhone;
   final String customerAddress;
   final double customerLatitude;
   final double customerLongitude;
@@ -135,9 +139,11 @@ class DeliveryRequest {
     required this.restaurantName,
     this.restaurantCuisine = '',
     this.restaurantAddress = '',
+    this.restaurantPhone = '',
     this.restaurantLatitude = 0,
     this.restaurantLongitude = 0,
     this.customerName = 'Customer',
+    this.customerPhone = '',
     this.customerAddress = '',
     this.customerLatitude = 0,
     this.customerLongitude = 0,
@@ -154,8 +160,21 @@ class DeliveryRequest {
     return diff > 0 ? diff : 0;
   }
 
-  double get countdownFraction =>
-      secondsRemaining > 0 ? secondsRemaining / 60.0 : 0;
+  /// Countdown fraction based on actual expiry window.
+  /// Falls back to 60s if placedAt is missing or produces an invalid window.
+  double get countdownFraction {
+    if (secondsRemaining <= 0) return 0;
+    final placed = order.placedAt;
+    if (placed == null) {
+      debugPrint('[DeliveryRequest] countdownFraction: order.placedAt is null '
+          '(orderId=${order.id}), using 60s fallback denominator');
+      return (secondsRemaining / 60).clamp(0.0, 1.0);
+    }
+    // Compute total window from order placement to expiry
+    final totalWindow = expiresAt.difference(placed).inSeconds;
+    final denominator = totalWindow > 0 ? totalWindow : 60;
+    return (secondsRemaining / denominator).clamp(0.0, 1.0);
+  }
 
   bool get hasExpired => secondsRemaining <= 0;
 
@@ -168,11 +187,13 @@ class DeliveryRequest {
       restaurantName: json['restaurant_name'] as String? ?? '',
       restaurantCuisine: json['restaurant_cuisine'] as String? ?? '',
       restaurantAddress: json['restaurant_address'] as String? ?? '',
+      restaurantPhone: json['restaurant_phone'] as String? ?? '',
       restaurantLatitude:
           (json['restaurant_latitude'] as num?)?.toDouble() ?? 0,
       restaurantLongitude:
           (json['restaurant_longitude'] as num?)?.toDouble() ?? 0,
       customerName: json['customer_name'] as String? ?? 'Customer',
+      customerPhone: json['customer_phone'] as String? ?? '',
       customerAddress: json['customer_address'] as String? ?? '',
       customerLatitude:
           (json['customer_latitude'] as num?)?.toDouble() ?? 0,

@@ -20,6 +20,7 @@ import '../../features/partner/screens/partner_dashboard_screen.dart';
 import '../../features/partner/screens/partner_orders_screen.dart';
 import '../../features/partner/screens/menu_management_screen.dart';
 import '../../features/partner/screens/analytics_screen.dart';
+import '../../features/partner/screens/partner_settings_screen.dart';
 import '../../features/delivery/screens/delivery_dashboard_screen.dart';
 import '../../features/delivery/screens/active_delivery_screen.dart';
 import '../../features/delivery/screens/earnings_screen.dart';
@@ -32,6 +33,11 @@ import '../../features/favorites/screens/favorites_screen.dart';
 import '../../features/referral/screens/referral_screen.dart';
 import '../../features/gold/screens/gold_screen.dart';
 import '../../features/orders/screens/scheduled_orders_screen.dart';
+import '../../features/delivery/screens/bank_details_screen.dart';
+import '../../features/delivery/screens/documents_screen.dart';
+import '../../features/delivery/screens/availability_screen.dart';
+import '../../shared/screens/support_screen.dart';
+import '../../features/chat/screens/chat_screen.dart';
 
 /// Notifier that bridges Riverpod auth state → GoRouter refreshListenable.
 /// Only notifies when auth STATUS changes (not isLoading), so that in-progress
@@ -278,6 +284,37 @@ final routerProvider = Provider<GoRouter>((ref) {
             ReviewScreen(orderId: state.pathParameters['id'] ?? ''),
       ),
 
+      // ─── Support / Help ───
+      GoRoute(
+        path: '/support',
+        builder: (context, state) => const SupportScreen(),
+      ),
+
+      // ─── In-app Chat ───
+      GoRoute(
+        path: '/chat/:orderId',
+        builder: (context, state) =>
+            ChatScreen(orderId: state.pathParameters['orderId'] ?? ''),
+      ),
+
+      // ─── Delivery: Bank Details ───
+      GoRoute(
+        path: '/delivery/bank-details',
+        builder: (context, state) => const BankDetailsScreen(),
+      ),
+
+      // ─── Delivery: Documents ───
+      GoRoute(
+        path: '/delivery/documents',
+        builder: (context, state) => const DocumentsScreen(),
+      ),
+
+      // ─── Delivery: Availability ───
+      GoRoute(
+        path: '/delivery/availability',
+        builder: (context, state) => const AvailabilityScreen(),
+      ),
+
       // ══════════════════════════════════════════
       // ─── Customer Shell (bottom nav) ───
       // ══════════════════════════════════════════
@@ -339,6 +376,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                 const NoTransitionPage(child: AnalyticsScreen()),
           ),
         ],
+      ),
+
+      // ─── Partner: Settings (outside shell — no bottom nav) ───
+      GoRoute(
+        path: '/partner/settings',
+        builder: (context, state) => const PartnerSettingsScreen(),
       ),
 
       // ══════════════════════════════════════════

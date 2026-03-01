@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
@@ -53,60 +54,83 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
   void _subscribeToRealtimeUpdates() {
     try {
       final channel = RealtimeChannels.allOrdersChannel();
-      _realtimeSub = _realtime.subscribe(channel).listen((event) {
-        if (event.type == RealtimeEventType.update) {
-          final data = event.data;
-          final orderId = event.documentId;
-          // Use tryFromString to avoid reverting status to 'placed'
-          // when Appwrite sends an update with an unrecognised or null status.
-          final statusStr = data['status'] as String?;
-          if (statusStr == null) return;
-          final newStatus = OrderStatus.tryFromString(statusStr);
-          if (newStatus == null) return;
+      _realtimeSub = _realtime
+          .subscribe(channel)
+          .listen(
+            (event) {
+              if (event.type == RealtimeEventType.update) {
+                final data = event.data;
+                final orderId = event.documentId;
+                // Use tryFromString to avoid reverting status to 'placed'
+                // when Appwrite sends an update with an unrecognised or null status.
+                final statusStr = data['status'] as String?;
+                if (statusStr == null) return;
+                final newStatus = OrderStatus.tryFromString(statusStr);
+                if (newStatus == null) return;
 
-          updateOrderStatus(
-            orderId,
-            newStatus,
-            deliveryPartnerId:
-                data['delivery_partner_id'] as String?,
-            deliveryPartnerName:
-                data['delivery_partner_name'] as String?,
-            deliveryPartnerPhone:
-                data['delivery_partner_phone'] as String?,
+                updateOrderStatus(
+                  orderId,
+                  newStatus,
+                  deliveryPartnerId: data['delivery_partner_id'] as String?,
+                  deliveryPartnerName: data['delivery_partner_name'] as String?,
+                  deliveryPartnerPhone:
+                      data['delivery_partner_phone'] as String?,
+                );
+              } else if (event.type == RealtimeEventType.create) {
+                // New order placed — refresh list
+                fetchOrders();
+              }
+            },
+            onError: (error, stack) {
+              debugPrint('[Orders] realtime stream error: $error');
+              _realtimeSub?.cancel();
+              _realtimeSub = null;
+            },
+            onDone: () {
+              _realtimeSub?.cancel();
+              _realtimeSub = null;
+            },
           );
-        } else if (event.type == RealtimeEventType.create) {
-          // New order placed — refresh list
-          fetchOrders();
-        }
-      });
-    } catch (_) {
+    } catch (e) {
       // Realtime not available — rely on polling/manual refresh
+      debugPrint('[Orders] realtime subscription error: $e');
     }
   }
 
   /// Listen for WebSocket order_update events from Go backend
   void _subscribeToWsUpdates() {
-    _wsSub = _ws.orderUpdates.listen((event) {
-      final orderId = event.orderId;
-      final statusStr = event.status;
-      if (orderId != null && statusStr != null) {
-        // Only process known order statuses — unknown values (e.g. "rider_assigned")
-        // would fall back to OrderStatus.placed and incorrectly revert the order status.
-        final newStatus = OrderStatus.tryFromString(statusStr);
-        if (newStatus != null) {
-          updateOrderStatus(
-            orderId,
-            newStatus,
-            deliveryPartnerId:
-                event.payload['delivery_partner_id'] as String?,
-            deliveryPartnerName:
-                event.payload['delivery_partner_name'] as String?,
-            deliveryPartnerPhone:
-                event.payload['delivery_partner_phone'] as String?,
-          );
+    _wsSub = _ws.orderUpdates.listen(
+      (event) {
+        final orderId = event.orderId;
+        final statusStr = event.status;
+        if (orderId != null && statusStr != null) {
+          // Only process known order statuses — unknown values (e.g. "rider_assigned")
+          // would fall back to OrderStatus.placed and incorrectly revert the order status.
+          final newStatus = OrderStatus.tryFromString(statusStr);
+          if (newStatus != null) {
+            updateOrderStatus(
+              orderId,
+              newStatus,
+              deliveryPartnerId:
+                  event.payload['delivery_partner_id'] as String?,
+              deliveryPartnerName:
+                  event.payload['delivery_partner_name'] as String?,
+              deliveryPartnerPhone:
+                  event.payload['delivery_partner_phone'] as String?,
+            );
+          }
         }
-      }
-    });
+      },
+      onError: (error, stack) {
+        debugPrint('[Orders] WebSocket stream error: $error');
+        _wsSub?.cancel();
+        _wsSub = null;
+      },
+      onDone: () {
+        _wsSub?.cancel();
+        _wsSub = null;
+      },
+    );
   }
 
   @override
@@ -213,8 +237,8 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
         state = state.copyWith(orders: updatedOrders);
         return order;
       }
-    } catch (_) {
-      // Silently fail — caller can handle null
+    } catch (e) {
+      debugPrint('[Orders] fetchOrderById error: $e');
     }
     return null;
   }

@@ -149,7 +149,9 @@ class GoldNotifier extends StateNotifier<GoldState> {
       }
     } on ApiException {
       // Not subscribed
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Gold] fetchStatus error: $e');
+    }
   }
 
   /// Subscribe to a Gold plan
@@ -174,7 +176,8 @@ class GoldNotifier extends StateNotifier<GoldState> {
       }
     } on ApiException catch (e) {
       state = state.copyWith(isLoading: false, error: e.message);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Gold] subscribe error: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Something went wrong. Try again.',
@@ -193,11 +196,20 @@ class GoldNotifier extends StateNotifier<GoldState> {
           clearSubscription: true,
           successMessage: 'Membership cancelled',
         );
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          error: response.error ?? 'Cancellation failed',
+        );
       }
     } on ApiException catch (e) {
       state = state.copyWith(isLoading: false, error: e.message);
-    } catch (_) {
-      state = state.copyWith(isLoading: false);
+    } catch (e) {
+      debugPrint('[Gold] cancel error: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Something went wrong. Try again.',
+      );
     }
   }
 

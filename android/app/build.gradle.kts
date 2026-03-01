@@ -41,11 +41,18 @@ android {
 
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
+            val requiredKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+            for (key in requiredKeys) {
+                val value = keystoreProperties.getProperty(key)
+                if (value.isNullOrBlank()) {
+                    throw GradleException("key.properties is missing or has empty value for '$key'")
+                }
+            }
             create("release") {
-                storeFile = file(keystoreProperties["storeFile"].toString())
-                storePassword = keystoreProperties["storePassword"].toString()
-                keyAlias = keystoreProperties["keyAlias"].toString()
-                keyPassword = keystoreProperties["keyPassword"].toString()
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
             }
         }
     }
@@ -66,15 +73,15 @@ android {
         }
     }
 
-    // Split APKs by ABI for smaller downloads
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86_64")
-            isUniversalApk = true
-        }
-    }
+    // ABI splits disabled — AAB handles per-device optimisation via Play Store
+    // splits {
+    //     abi {
+    //         isEnable = true
+    //         reset()
+    //         include("armeabi-v7a", "arm64-v8a", "x86_64")
+    //         isUniversalApk = true
+    //     }
+    // }
 }
 
 flutter {
@@ -82,5 +89,5 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

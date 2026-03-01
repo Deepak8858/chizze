@@ -65,24 +65,43 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   void _subscribeToRealtime() {
     try {
       final channel = RealtimeChannels.notificationsChannel();
-      _realtimeSub = _realtime.subscribe(channel).listen((event) {
-        if (event.type == RealtimeEventType.create) {
-          final m = event.data;
-          final notification = AppNotification(
-            id: m['\$id'] ?? '',
-            title: m['title'] ?? '',
-            body: m['body'] ?? '',
-            type: _parseType(m['type']),
-            isRead: false,
-            createdAt:
-                DateTime.tryParse(m['created_at'] ?? '') ?? DateTime.now(),
-            actionRoute: m['data'] != null ? _extractRoute(m['data']) : null,
+      _realtimeSub = _realtime
+          .subscribe(channel)
+          .listen(
+            (event) {
+              if (event.type == RealtimeEventType.create) {
+                final m = event.data;
+                final notification = AppNotification(
+                  id: m['\$id'] ?? '',
+                  title: m['title'] ?? '',
+                  body: m['body'] ?? '',
+                  type: _parseType(m['type']),
+                  isRead: false,
+                  createdAt:
+                      DateTime.tryParse(m['created_at'] ?? '') ??
+                      DateTime.now(),
+                  actionRoute: m['data'] != null
+                      ? _extractRoute(m['data'])
+                      : null,
+                );
+                // Add to top of list
+                state = [notification, ...state];
+              }
+            },
+            onError: (error, stack) {
+              debugPrint('[Notifications] realtime stream error: $error');
+              _realtimeSub?.cancel();
+              _realtimeSub = null;
+            },
+            onDone: () {
+              debugPrint('[Notifications] realtime stream closed');
+              _realtimeSub?.cancel();
+              _realtimeSub = null;
+            },
           );
-          // Add to top of list
-          state = [notification, ...state];
-        }
-      });
-    } catch (_) {} // Realtime not available
+    } catch (e) {
+      debugPrint('[Notifications] realtime subscription error: $e');
+    }
   }
 
   @override
@@ -113,7 +132,9 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
       }
     } on ApiException {
       // Keep current state
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Notifications] fetchNotifications error: $e');
+    }
   }
 
   NotificationType _parseType(String? type) {

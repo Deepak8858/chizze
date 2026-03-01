@@ -73,7 +73,9 @@ class FavoritesNotifier extends StateNotifier<FavoritesState> {
             try {
               restaurants.add(Restaurant.fromMap(
                   m['restaurant'] as Map<String, dynamic>));
-            } catch (_) {}
+            } catch (e) {
+              debugPrint('[Favorites] parse restaurant error: $e');
+            }
           }
         }
         state = FavoritesState(
@@ -100,7 +102,8 @@ class FavoritesNotifier extends StateNotifier<FavoritesState> {
       await _api.post(ApiConfig.favorites, body: {
         'restaurant_id': restaurantId,
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Favorites] addFavorite error: $e');
       // Revert on failure
       final revertIds = {...state.favoriteIds}..remove(restaurantId);
       state = state.copyWith(favoriteIds: revertIds);
@@ -117,7 +120,8 @@ class FavoritesNotifier extends StateNotifier<FavoritesState> {
 
     try {
       await _api.delete('${ApiConfig.favorites}/$restaurantId');
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Favorites] removeFavorite error: $e');
       // Revert on failure
       state = state.copyWith(
         favoriteIds: {...state.favoriteIds, restaurantId},

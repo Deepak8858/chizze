@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/theme/theme.dart';
@@ -37,7 +38,12 @@ class DeliveryProfileScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.xxl),
 
             // ─── Vehicle Info ───
-            _buildVehicleCard(partner.vehicleType, partner.vehicleNumber),
+            _buildVehicleCard(
+              context,
+              ref,
+              partner.vehicleType,
+              partner.vehicleNumber,
+            ),
             const SizedBox(height: AppSpacing.xl),
 
             // ─── Menu Items ───
@@ -45,25 +51,25 @@ class DeliveryProfileScreen extends ConsumerWidget {
               Icons.account_balance_wallet_rounded,
               'Bank Details',
               subtitle: 'Manage payout accounts',
-              onTap: () => _showComingSoon(context, 'Bank Details'),
+              onTap: () => context.push('/delivery/bank-details'),
             ),
             _buildMenuItem(
               Icons.description_rounded,
               'Documents',
               subtitle: 'ID, License & Vehicle docs',
-              onTap: () => _showComingSoon(context, 'Documents'),
+              onTap: () => context.push('/delivery/documents'),
             ),
             _buildMenuItem(
               Icons.schedule_rounded,
               'Availability',
               subtitle: 'Set your working hours',
-              onTap: () => _showComingSoon(context, 'Availability'),
+              onTap: () => context.push('/delivery/availability'),
             ),
             _buildMenuItem(
               Icons.headset_mic_rounded,
               'Support',
               subtitle: 'Help & FAQs',
-              onTap: () => launchUrl(Uri(scheme: 'tel', path: '+918008008000')),
+              onTap: () => context.push('/support'),
             ),
             _buildMenuItem(
               Icons.info_outline_rounded,
@@ -231,7 +237,12 @@ class DeliveryProfileScreen extends ConsumerWidget {
     ).animate(delay: 200.ms).fadeIn();
   }
 
-  Widget _buildVehicleCard(String type, String number) {
+  Widget _buildVehicleCard(
+    BuildContext context,
+    WidgetRef ref,
+    String type,
+    String number,
+  ) {
     final emoji = type == 'bike'
         ? '🏍️'
         : type == 'scooter'
@@ -270,21 +281,150 @@ class DeliveryProfileScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const Icon(
-            Icons.edit_rounded,
-            size: 18,
-            color: AppColors.textTertiary,
+          InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => _showVehicleEditDialog(context, ref, type, number),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(
+                Icons.edit_rounded,
+                size: 18,
+                color: AppColors.textTertiary,
+              ),
+            ),
           ),
         ],
       ),
     ).animate(delay: 300.ms).fadeIn();
   }
 
-  void _showComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature — coming soon!'),
-        duration: const Duration(seconds: 2),
+  void _showVehicleEditDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String currentType,
+    String currentNumber,
+  ) {
+    String selectedType = currentType;
+    final numberCtrl = TextEditingController(text: currentNumber);
+    final types = ['bike', 'scooter', 'bicycle', 'car'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            AppSpacing.lg,
+            AppSpacing.xl,
+            MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.textTertiary.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'Edit Vehicle',
+                style: AppTypography.h3.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Text(
+                'Vehicle Type',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                children: types.map((t) {
+                  final isSelected = t == selectedType;
+                  final emoji = t == 'bike'
+                      ? '🏍️'
+                      : t == 'scooter'
+                      ? '🛵'
+                      : t == 'bicycle'
+                      ? '🚲'
+                      : '🚗';
+                  return ChoiceChip(
+                    label: Text(
+                      '$emoji ${t[0].toUpperCase()}${t.substring(1)}',
+                    ),
+                    selected: isSelected,
+                    selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                    backgroundColor: AppColors.surfaceElevated,
+                    labelStyle: AppTypography.body2.copyWith(
+                      color: isSelected ? AppColors.primary : AppColors.text,
+                    ),
+                    onSelected: (_) {
+                      setModalState(() => selectedType = t);
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              TextField(
+                controller: numberCtrl,
+                style: AppTypography.body1,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  labelText: 'Vehicle Number',
+                  hintText: 'e.g. KA01AB1234',
+                  filled: true,
+                  fillColor: AppColors.surfaceElevated,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () async {
+                    final newNumber = numberCtrl.text.trim();
+                    if (newNumber.isEmpty) return;
+                    Navigator.of(ctx).pop();
+                    final success = await ref
+                        .read(deliveryProvider.notifier)
+                        .updateProfile(
+                          vehicleType: selectedType,
+                          vehicleNumber: newNumber,
+                        );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            success
+                                ? 'Vehicle updated'
+                                : 'Failed to update vehicle',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Save Changes'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

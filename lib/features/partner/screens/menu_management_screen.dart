@@ -553,7 +553,7 @@ class MenuManagementScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               DropdownButtonFormField<String>(
-                initialValue: selectedCategoryId,
+                  value: selectedCategoryId,
                 dropdownColor: AppColors.surfaceElevated,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: categories

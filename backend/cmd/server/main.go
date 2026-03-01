@@ -292,7 +292,8 @@ func main() {
 		partner.GET("/analytics", partnerHandler.Analytics)
 		partner.GET("/performance", partnerHandler.Performance)
 
-		// Restaurant status
+		// Restaurant
+		partner.PUT("/restaurant", partnerHandler.UpdateRestaurant)
 		partner.PUT("/restaurant/status", partnerHandler.ToggleOnline)
 
 		// Orders

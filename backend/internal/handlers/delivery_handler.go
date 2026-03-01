@@ -985,6 +985,15 @@ func (h *DeliveryHandler) UpdateProfile(c *gin.Context) {
 	if req.BankAccountID != "" {
 		updateData["bank_account_id"] = req.BankAccountID
 	}
+	if req.BankAccountHolder != "" {
+		updateData["bank_account_holder"] = req.BankAccountHolder
+	}
+	if req.IFSC != "" {
+		updateData["ifsc"] = req.IFSC
+	}
+	if req.UpiID != "" {
+		updateData["upi_id"] = req.UpiID
+	}
 
 	if len(updateData) == 0 {
 		utils.BadRequest(c, "No fields to update")

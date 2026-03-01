@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/realtime_service.dart';
 import '../../../core/services/websocket_service.dart';
@@ -23,13 +24,34 @@ class RiderLocation {
 
   factory RiderLocation.fromRealtimeData(Map<String, dynamic> data) {
     return RiderLocation(
-      riderId: data['rider_id'] ?? data['\$id'] ?? '',
-      latitude: (data['latitude'] ?? 0.0).toDouble(),
-      longitude: (data['longitude'] ?? 0.0).toDouble(),
-      heading: (data['heading'] ?? 0).toDouble(),
-      speed: (data['speed'] ?? 0).toDouble(),
-      updatedAt: DateTime.tryParse(data['\$updatedAt'] ?? '') ?? DateTime.now(),
+      riderId: (data['rider_id'] ?? data['\$id'] ?? '').toString(),
+      latitude: _safeDouble(data['latitude']),
+      longitude: _safeDouble(data['longitude']),
+      heading: _safeDouble(data['heading']),
+      speed: _safeDouble(data['speed']),
+      updatedAt: _safeDateTime(data['\$updatedAt']),
     );
+  }
+
+  /// Safely coerce a dynamic value to double.
+  static double _safeDouble(dynamic value, [double fallback = 0.0]) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  /// Safely parse a DateTime from string or numeric timestamp.
+  /// Numeric values are expected in milliseconds since epoch; values that
+  /// appear to be seconds (< 1e12) are auto-promoted to milliseconds.
+  static DateTime _safeDateTime(dynamic value) {
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    if (value is num) {
+      final ms = value < 1e12 ? (value * 1000).toInt() : value.toInt();
+      return DateTime.fromMillisecondsSinceEpoch(ms);
+    }
+    return DateTime.now();
   }
 
 }
@@ -60,23 +82,49 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
                 state = RiderLocation.fromRealtimeData(event.data);
               }
             },
-            onError: (_) {},
+            onError: (error, stack) {
+              debugPrint(
+                '[RiderLocation] realtime stream error for rider $riderId on $channel: $error',
+              );
+              _realtimeSubscription?.cancel();
+              _realtimeSubscription = null;
+            },
+            onDone: () {
+              _realtimeSubscription?.cancel();
+              _realtimeSubscription = null;
+            },
           );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[RiderLocation] realtime subscription error: $e');
+    }
 
     // Go WebSocket — delivery_location events (higher frequency from rider app)
-    _wsSubscription = _ws.deliveryLocations.listen((event) {
-      if (event.latitude != null && event.longitude != null) {
-        state = RiderLocation(
-          riderId: riderId,
-          latitude: event.latitude!,
-          longitude: event.longitude!,
-          heading: event.bearing ?? 0,
-          speed: event.speed ?? 0,
-          updatedAt: event.timestamp,
+    _wsSubscription = _ws.deliveryLocations.listen(
+      (event) {
+        if (event.latitude != null && event.longitude != null) {
+          state = RiderLocation(
+            riderId: riderId,
+            latitude: event.latitude!,
+            longitude: event.longitude!,
+            heading: event.bearing ?? 0,
+            speed: event.speed ?? 0,
+            updatedAt: event.timestamp,
+          );
+        }
+      },
+      onError: (error, stack) {
+        debugPrint(
+          '[RiderLocation] WebSocket stream error for rider $riderId: $error',
         );
-      }
-    });
+        _wsSubscription?.cancel();
+        _wsSubscription = null;
+        state = null;
+      },
+      onDone: () {
+        _wsSubscription?.cancel();
+        _wsSubscription = null;
+      },
+    );
   }
 
   /// Stop tracking

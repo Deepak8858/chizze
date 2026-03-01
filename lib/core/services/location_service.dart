@@ -29,7 +29,6 @@ class LocationData {
 
 /// Location service — wraps geolocator for GPS access
 class LocationService {
-  StreamSubscription<Position>? _positionSubscription;
 
   /// Check and request location permissions
   Future<bool> checkPermissions() async {
@@ -73,7 +72,8 @@ class LocationService {
         speed: position.speed,
         timestamp: position.timestamp,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Location] getCurrentPosition error: $e');
       return LocationData(
         latitude: MapConfig.defaultLatitude,
         longitude: MapConfig.defaultLongitude,
@@ -116,7 +116,7 @@ class LocationService {
   }
 
   void dispose() {
-    _positionSubscription?.cancel();
+    // No-op: callers manage their own stream subscriptions from getPositionStream()
   }
 }
 
