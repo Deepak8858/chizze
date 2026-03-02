@@ -96,6 +96,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         'items': items,
         'payment_method': paymentMethod,
         'tip': tip,
+        'delivery_type': cartState.deliveryType,
         'special_instructions': cartState.specialInstructions,
         'delivery_instructions': cartState.deliveryInstructions,
       };

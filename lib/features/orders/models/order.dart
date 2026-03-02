@@ -22,6 +22,7 @@ class Order {
   final double? restaurantLongitude;
   final List<OrderItem> items;
   final double itemTotal;
+  final String deliveryType;
   final double deliveryFee;
   final double platformFee;
   final double gst;
@@ -65,6 +66,7 @@ class Order {
     this.restaurantLongitude,
     required this.items,
     required this.itemTotal,
+    this.deliveryType = 'standard',
     required this.deliveryFee,
     required this.platformFee,
     required this.gst,
@@ -110,6 +112,7 @@ class Order {
       restaurantLongitude: (map['restaurant_longitude'] as num?)?.toDouble(),
       items: _parseItems(map['items']),
       itemTotal: (map['item_total'] ?? 0).toDouble(),
+      deliveryType: map['delivery_type'] ?? 'standard',
       deliveryFee: (map['delivery_fee'] ?? 0).toDouble(),
       platformFee: (map['platform_fee'] ?? 0).toDouble(),
       gst: (map['gst'] ?? 0).toDouble(),
@@ -200,6 +203,7 @@ class Order {
       'restaurant_longitude': restaurantLongitude,
       'items': items.map((i) => i.toMap()).toList(),
       'item_total': itemTotal,
+      'delivery_type': deliveryType,
       'delivery_fee': deliveryFee,
       'platform_fee': platformFee,
       'gst': gst,
@@ -251,6 +255,7 @@ class Order {
       restaurantLongitude: restaurantLongitude,
       items: items,
       itemTotal: itemTotal,
+      deliveryType: deliveryType,
       deliveryFee: deliveryFee,
       platformFee: platformFee,
       gst: gst,

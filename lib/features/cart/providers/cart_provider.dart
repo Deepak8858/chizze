@@ -59,6 +59,7 @@ class CartState {
   final String? restaurantName;
   final String? couponCode;
   final double couponDiscount;
+  final bool isEcoDelivery;
   final String deliveryInstructions;
   final String specialInstructions;
 
@@ -68,6 +69,7 @@ class CartState {
     this.restaurantName,
     this.couponCode,
     this.couponDiscount = 0,
+    this.isEcoDelivery = false,
     this.deliveryInstructions = '',
     this.specialInstructions = '',
   });
@@ -79,6 +81,7 @@ class CartState {
     String? couponCode,
     bool clearCouponCode = false,
     double? couponDiscount,
+    bool? isEcoDelivery,
     String? deliveryInstructions,
     String? specialInstructions,
   }) {
@@ -88,6 +91,7 @@ class CartState {
       restaurantName: restaurantName ?? this.restaurantName,
       couponCode: clearCouponCode ? null : (couponCode ?? this.couponCode),
       couponDiscount: couponDiscount ?? this.couponDiscount,
+      isEcoDelivery: isEcoDelivery ?? this.isEcoDelivery,
       deliveryInstructions: deliveryInstructions ?? this.deliveryInstructions,
       specialInstructions: specialInstructions ?? this.specialInstructions,
     );
@@ -98,10 +102,11 @@ class CartState {
   int get totalItems => items.fold(0, (sum, item) => sum + item.quantity);
 
   double get itemTotal => items.fold(0, (sum, item) => sum + item.totalPrice);
-  double get deliveryFee => itemTotal > 500 ? 0 : 40; // Free above ₹500
+  double get deliveryFee => isEcoDelivery ? 0 : (itemTotal >= 299 ? 0 : 40);
   double get platformFee => 5;
   double get gst => (itemTotal * 0.05); // 5% GST
   double get discount => couponDiscount;
+  String get deliveryType => isEcoDelivery ? 'eco' : 'standard';
   double get grandTotal =>
       itemTotal + deliveryFee + platformFee + gst - discount;
 }
@@ -190,6 +195,11 @@ class CartNotifier extends StateNotifier<CartState> {
   /// Set special instructions
   void setSpecialInstructions(String instructions) {
     state = state.copyWith(specialInstructions: instructions);
+  }
+
+  /// Toggle eco delivery mode
+  void setEcoDelivery(bool value) {
+    state = state.copyWith(isEcoDelivery: value);
   }
 
   /// Clear cart

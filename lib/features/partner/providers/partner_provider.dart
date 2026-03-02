@@ -108,6 +108,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
   bool _isLoadingGuard = false;
   bool _pendingReload = false; // queue a reload if one is skipped due to guard
   int _reconnectAttempts = 0;
+  bool _disposed = false;
 
   PartnerNotifier(this._api, this._realtime, this._ws, this._notificationService)
       : super(const PartnerState()) {
@@ -158,7 +159,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
 
       // Also start polling as initial fallback — will be stopped once realtime connects
       Future.delayed(const Duration(seconds: 5), () {
-        if (!_realtimeConnected) {
+        if (!_disposed && !_realtimeConnected) {
           _startPollingFallback();
         }
       });
@@ -222,6 +223,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
 
   @override
   void dispose() {
+    _disposed = true;
     _realtimeSub?.cancel();
     _wsSub?.cancel();
     _pollingTimer?.cancel();
@@ -386,7 +388,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     try {
       final res = await _api.put(
         ApiConfig.partnerRestaurant,
-        body: {'image_url': imageUrl},
+        body: {'restaurant_image_url': imageUrl},
       );
       if (!res.success) {
         state = state.copyWith(restaurantImageUrl: oldUrl);

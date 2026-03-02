@@ -71,6 +71,11 @@ class CartScreen extends ConsumerWidget {
 
                   const SizedBox(height: AppSpacing.xl),
 
+                  // ─── Eco Delivery ───
+                  _buildEcoDeliveryToggle(ref, cartState),
+
+                  const SizedBox(height: AppSpacing.xl),
+
                   // ─── Bill Summary ───
                   _buildBillSummary(cartState),
                 ],
@@ -441,6 +446,85 @@ class CartScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildEcoDeliveryToggle(WidgetRef ref, CartState cartState) {
+    final isEco = cartState.isEcoDelivery;
+    return GestureDetector(
+      onTap: () => ref.read(cartProvider.notifier).setEcoDelivery(!isEco),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: isEco
+              ? const Color(0xFF1B5E20).withValues(alpha: 0.15)
+              : AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          border: Border.all(
+            color: isEco ? const Color(0xFF4CAF50) : AppColors.divider,
+            width: isEco ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: isEco
+                    ? const Color(0xFF4CAF50).withValues(alpha: 0.2)
+                    : AppColors.surface,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+              ),
+              child: Icon(
+                Icons.eco_rounded,
+                color: isEco ? const Color(0xFF4CAF50) : AppColors.textTertiary,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Eco Delivery',
+                    style: AppTypography.body2.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: isEco
+                          ? const Color(0xFF4CAF50)
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isEco
+                        ? 'Free delivery · Grouped with nearby orders'
+                        : 'Get free delivery on this order',
+                    style: AppTypography.overline.copyWith(
+                      color: isEco
+                          ? const Color(0xFF4CAF50).withValues(alpha: 0.8)
+                          : AppColors.textTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                isEco
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                key: ValueKey(isEco),
+                color: isEco ? const Color(0xFF4CAF50) : AppColors.textTertiary,
+                size: 24,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildBillSummary(CartState cartState) {
     return GlassCard(
       child: Column(
@@ -453,7 +537,9 @@ class CartScreen extends ConsumerWidget {
             value: '₹${cartState.itemTotal.toInt()}',
           ),
           _BillRow(
-            label: 'Delivery Fee',
+            label: cartState.isEcoDelivery
+                ? 'Delivery Fee (Eco)'
+                : 'Delivery Fee',
             value: cartState.deliveryFee == 0
                 ? 'FREE'
                 : '₹${cartState.deliveryFee.toInt()}',

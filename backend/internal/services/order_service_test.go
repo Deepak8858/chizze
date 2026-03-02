@@ -44,7 +44,7 @@ func TestOrderService_CalculateFees_FreeDelivery(t *testing.T) {
 	svc := &OrderService{}
 
 	// Above ₹299 → free delivery
-	deliveryFee, platformFee, gst := svc.CalculateFees(300, 10)
+	deliveryFee, platformFee, gst := svc.CalculateFees(300, 10, "standard")
 	if deliveryFee != 0 {
 		t.Errorf("Delivery fee should be 0 for ₹300 order, got %.2f", deliveryFee)
 	}
@@ -57,7 +57,7 @@ func TestOrderService_CalculateFees_FreeDelivery(t *testing.T) {
 	}
 
 	// Exactly ₹299 → free delivery
-	deliveryFee, _, _ = svc.CalculateFees(299, 5)
+	deliveryFee, _, _ = svc.CalculateFees(299, 5, "standard")
 	if deliveryFee != 0 {
 		t.Errorf("Delivery fee should be 0 at ₹299, got %.2f", deliveryFee)
 	}
@@ -81,7 +81,7 @@ func TestOrderService_CalculateFees_PaidDelivery(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			deliveryFee, _, _ := svc.CalculateFees(tc.itemTotal, tc.distanceKm)
+			deliveryFee, _, _ := svc.CalculateFees(tc.itemTotal, tc.distanceKm, "standard")
 			if deliveryFee != tc.wantDelivery {
 				t.Errorf("deliveryFee = %.2f, want %.2f", deliveryFee, tc.wantDelivery)
 			}
@@ -106,7 +106,7 @@ func TestOrderService_CalculateFees_GST(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, gst := svc.CalculateFees(tc.itemTotal, 5)
+			_, _, gst := svc.CalculateFees(tc.itemTotal, 5, "standard")
 			if gst != tc.wantGST {
 				t.Errorf("GST = %.2f, want %.2f", gst, tc.wantGST)
 			}
@@ -118,7 +118,7 @@ func TestOrderService_CalculateFees_PlatformFeeAlwaysFive(t *testing.T) {
 	svc := &OrderService{}
 	amounts := []float64{0, 100, 299, 300, 500, 1000}
 	for _, amt := range amounts {
-		_, platformFee, _ := svc.CalculateFees(amt, 5)
+		_, platformFee, _ := svc.CalculateFees(amt, 5, "standard")
 		if platformFee != 5 {
 			t.Errorf("Platform fee should always be ₹5 for amount %.2f, got %.2f", amt, platformFee)
 		}
@@ -142,5 +142,37 @@ func TestOrderService_ValidateTransition(t *testing.T) {
 	err := svc.ValidateTransition("placed", "delivered")
 	if err != nil && !strings.Contains(err.Error(), "placed") {
 		t.Errorf("Error message should contain 'placed': %v", err)
+	}
+}
+
+func TestOrderService_CalculateFees_EcoDelivery(t *testing.T) {
+	svc := &OrderService{}
+
+	// Eco delivery → always free, regardless of item total or distance
+	tests := []struct {
+		name       string
+		itemTotal  float64
+		distanceKm float64
+	}{
+		{"low total short distance", 50, 2},
+		{"low total long distance", 100, 15},
+		{"above threshold", 500, 10},
+		{"at threshold", 299, 5},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			deliveryFee, platformFee, gst := svc.CalculateFees(tc.itemTotal, tc.distanceKm, "eco")
+			if deliveryFee != 0 {
+				t.Errorf("Eco delivery fee should be 0, got %.2f", deliveryFee)
+			}
+			if platformFee != 5 {
+				t.Errorf("Platform fee should still be ₹5, got %.2f", platformFee)
+			}
+			expectedGST := math.Round(tc.itemTotal*0.05*100) / 100
+			if gst != expectedGST {
+				t.Errorf("GST = %.2f, want %.2f", gst, expectedGST)
+			}
+		})
 	}
 }

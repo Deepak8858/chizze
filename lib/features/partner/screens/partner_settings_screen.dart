@@ -26,31 +26,40 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
 
     setState(() => _isUploading = true);
 
-    final uploadService = ref.read(imageUploadServiceProvider);
-    final imageUrl = await uploadService.uploadRestaurantImage(file);
+    try {
+      final uploadService = ref.read(imageUploadServiceProvider);
+      final imageUrl = await uploadService.uploadRestaurantImage(file);
 
-    if (imageUrl != null && mounted) {
-      final success = await ref
-          .read(partnerProvider.notifier)
-          .updateRestaurantImage(imageUrl);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              success
-                  ? 'Restaurant photo updated'
-                  : 'Failed to update photo',
+      if (imageUrl != null && mounted) {
+        final success = await ref
+            .read(partnerProvider.notifier)
+            .updateRestaurantImage(imageUrl);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                success
+                    ? 'Restaurant photo updated'
+                    : 'Failed to update photo',
+              ),
             ),
-          ),
+          );
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to upload image')),
         );
       }
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to upload image')),
-      );
+    } catch (e) {
+      debugPrint('[PartnerSettings] _pickAndUploadImage error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
-
-    if (mounted) setState(() => _isUploading = false);
   }
 
   @override
@@ -84,13 +93,21 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
               Icons.description_rounded,
               'Terms & Conditions',
               subtitle: 'View legal information',
-              onTap: () {},
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Coming soon')),
+                );
+              },
             ),
             _buildSettingsItem(
               Icons.privacy_tip_rounded,
               'Privacy Policy',
               subtitle: 'How we handle your data',
-              onTap: () {},
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Coming soon')),
+                );
+              },
             ),
 
             const SizedBox(height: AppSpacing.xxl),

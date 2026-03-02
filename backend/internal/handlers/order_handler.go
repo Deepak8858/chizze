@@ -178,10 +178,16 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		return
 	}
 
-	// --- 5. Calculate fees ---
-	deliveryFee, platformFee, gst := h.orders.CalculateFees(itemTotal, distanceKm)
+	// --- 5. Normalize delivery type ---
+	deliveryType := req.DeliveryType
+	if deliveryType != "eco" {
+		deliveryType = "standard"
+	}
 
-	// --- 6. Apply coupon ---
+	// --- 6. Calculate fees ---
+	deliveryFee, platformFee, gst := h.orders.CalculateFees(itemTotal, distanceKm, deliveryType)
+
+	// --- 7. Apply coupon ---
 	discount := 0.0
 	if req.CouponCode != "" {
 		coupon, err := h.appwrite.GetCoupon(req.CouponCode)
@@ -244,14 +250,14 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	}
 	grandTotal := itemTotal + deliveryFee + platformFee + gst - discount + tip
 
-	// --- 7. Serialize items as JSON string ---
+	// --- 8. Serialize items as JSON string ---
 	itemsJSON, _ := json.Marshal(verifiedItems)
 
-	// --- 8. Address snapshot — store address data in order for historical reference ---
+	// --- 9. Address snapshot — store address data in order for historical reference ---
 	deliveryAddress, _ := address["full_address"].(string)
 	deliveryLandmark, _ := address["landmark"].(string)
 
-	// --- 9. Estimate delivery time ---
+	// --- 10. Estimate delivery time ---
 	prepTime := 15.0 // default
 	if pt, ok := restaurant["avg_prep_time"].(float64); ok && pt > 0 {
 		prepTime = pt
@@ -277,6 +283,7 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		"delivery_longitude":     addrLng,
 		"items":                  string(itemsJSON),
 		"item_total":             itemTotal,
+		"delivery_type":          deliveryType,
 		"delivery_fee":           deliveryFee,
 		"platform_fee":           platformFee,
 		"gst":                    gst,

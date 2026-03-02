@@ -28,10 +28,14 @@ func (s *OrderService) GenerateOrderNumber() string {
 	return fmt.Sprintf("CHZ-%d-%s", time.Now().UnixMilli()%1000000, suffix)
 }
 
-// CalculateFees computes delivery fee, platform fee, and GST
-func (s *OrderService) CalculateFees(itemTotal float64, distanceKm float64) (deliveryFee, platformFee, gst float64) {
-	// Delivery fee: free above ₹299, else distance-based
-	if itemTotal >= 299 {
+// CalculateFees computes delivery fee, platform fee, and GST.
+// deliveryType "eco" waives the delivery fee for the customer.
+func (s *OrderService) CalculateFees(itemTotal float64, distanceKm float64, deliveryType string) (deliveryFee, platformFee, gst float64) {
+	// Eco delivery: free delivery fee for the customer
+	if deliveryType == "eco" {
+		deliveryFee = 0
+	} else if itemTotal >= 299 {
+		// Standard delivery: free above ₹299, else distance-based
 		deliveryFee = 0
 	} else {
 		deliveryFee = math.Ceil(distanceKm * 8) // ₹8/km

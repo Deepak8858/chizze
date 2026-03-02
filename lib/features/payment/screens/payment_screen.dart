@@ -269,7 +269,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           const Divider(color: AppColors.divider, height: AppSpacing.xl),
           _PriceRow('Item Total', '₹${cartState.itemTotal.toInt()}'),
           _PriceRow(
-            'Delivery Fee',
+            cartState.isEcoDelivery ? 'Delivery Fee (Eco)' : 'Delivery Fee',
             cartState.deliveryFee == 0
                 ? 'FREE'
                 : '₹${cartState.deliveryFee.toInt()}',

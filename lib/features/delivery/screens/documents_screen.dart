@@ -16,6 +16,9 @@ class DocumentsScreen extends ConsumerWidget {
     final partner = ref.watch(deliveryProvider).partner;
     // Infer verification from available fields
     final hasVehicle = partner.vehicleNumber.isNotEmpty;
+    final hasPhoto = partner.avatarUrl.isNotEmpty;
+    // All verifiable documents must be present — will expand when backend tracks all docs
+    final isVerified = hasVehicle && hasPhoto;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -26,7 +29,7 @@ class DocumentsScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ─── Verification Status Banner ───
-            _StatusBanner(isVerified: hasVehicle),
+            _StatusBanner(isVerified: isVerified),
             const SizedBox(height: AppSpacing.xxl),
 
             // ─── Document List ───

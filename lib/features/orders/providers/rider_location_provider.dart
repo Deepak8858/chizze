@@ -88,10 +88,12 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
               );
               _realtimeSubscription?.cancel();
               _realtimeSubscription = null;
+              state = null;
             },
             onDone: () {
               _realtimeSubscription?.cancel();
               _realtimeSubscription = null;
+              state = null;
             },
           );
     } catch (e) {
@@ -99,32 +101,39 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
     }
 
     // Go WebSocket — delivery_location events (higher frequency from rider app)
-    _wsSubscription = _ws.deliveryLocations.listen(
-      (event) {
-        if (event.latitude != null && event.longitude != null) {
-          state = RiderLocation(
-            riderId: riderId,
-            latitude: event.latitude!,
-            longitude: event.longitude!,
-            heading: event.bearing ?? 0,
-            speed: event.speed ?? 0,
-            updatedAt: event.timestamp,
+    try {
+      _wsSubscription = _ws.deliveryLocations.listen(
+        (event) {
+          if (event.latitude != null && event.longitude != null) {
+            state = RiderLocation(
+              riderId: riderId,
+              latitude: event.latitude!,
+              longitude: event.longitude!,
+              heading: event.bearing ?? 0,
+              speed: event.speed ?? 0,
+              updatedAt: event.timestamp,
+            );
+          }
+        },
+        onError: (error, stack) {
+          debugPrint(
+            '[RiderLocation] WebSocket stream error for rider $riderId: $error',
           );
-        }
-      },
-      onError: (error, stack) {
-        debugPrint(
-          '[RiderLocation] WebSocket stream error for rider $riderId: $error',
-        );
-        _wsSubscription?.cancel();
-        _wsSubscription = null;
-        state = null;
-      },
-      onDone: () {
-        _wsSubscription?.cancel();
-        _wsSubscription = null;
-      },
-    );
+          _wsSubscription?.cancel();
+          _wsSubscription = null;
+          state = null;
+        },
+        onDone: () {
+          _wsSubscription?.cancel();
+          _wsSubscription = null;
+        },
+      );
+    } catch (e) {
+      debugPrint('[RiderLocation] WebSocket subscription error for rider $riderId: $e');
+      _wsSubscription?.cancel();
+      _wsSubscription = null;
+      state = null;
+    }
   }
 
   /// Stop tracking

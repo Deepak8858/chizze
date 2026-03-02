@@ -138,26 +138,25 @@ class _AvailabilityScreenState extends ConsumerState<AvailabilityScreen> {
               style: AppTypography.h3.copyWith(fontSize: 16),
             ),
             const SizedBox(height: AppSpacing.md),
-            Row(
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
               children: [
                 _PresetChip(
                   label: 'Full Time',
                   selected: _selectedPreset == 'full_time',
                   onTap: () => _applyPreset('full_time'),
                 ),
-                const SizedBox(width: AppSpacing.sm),
                 _PresetChip(
                   label: 'Part Time',
                   selected: _selectedPreset == 'part_time',
                   onTap: () => _applyPreset('part_time'),
                 ),
-                const SizedBox(width: AppSpacing.sm),
                 _PresetChip(
                   label: 'Weekends',
                   selected: _selectedPreset == 'weekends',
                   onTap: () => _applyPreset('weekends'),
                 ),
-                const SizedBox(width: AppSpacing.sm),
                 _PresetChip(
                   label: 'Custom',
                   selected: _selectedPreset == 'custom',
@@ -232,7 +231,23 @@ class _AvailabilityScreenState extends ConsumerState<AvailabilityScreen> {
                         context: context,
                         initialTime: _startTime,
                       );
-                      if (t != null) setState(() => _startTime = t);
+                      if (t != null) {
+                        final tMin = t.hour * 60 + t.minute;
+                        final endMin = _endTime.hour * 60 + _endTime.minute;
+                        if (tMin >= endMin) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Start time must be before end time',
+                                ),
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        setState(() => _startTime = t);
+                      }
                     },
                   ),
                 ),
@@ -246,7 +261,24 @@ class _AvailabilityScreenState extends ConsumerState<AvailabilityScreen> {
                         context: context,
                         initialTime: _endTime,
                       );
-                      if (t != null) setState(() => _endTime = t);
+                      if (t != null) {
+                        final tMin = t.hour * 60 + t.minute;
+                        final startMin =
+                            _startTime.hour * 60 + _startTime.minute;
+                        if (tMin <= startMin) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'End time must be after start time',
+                                ),
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        setState(() => _endTime = t);
+                      }
                     },
                   ),
                 ),
@@ -318,15 +350,21 @@ class _AvailabilityScreenState extends ConsumerState<AvailabilityScreen> {
       _selectedPreset = preset;
       switch (preset) {
         case 'full_time':
-          for (int i = 0; i < 7; i++) _activeDays[i] = true;
+          for (int i = 0; i < 7; i++) {
+            _activeDays[i] = true;
+          }
           _startTime = const TimeOfDay(hour: 9, minute: 0);
           _endTime = const TimeOfDay(hour: 22, minute: 0);
         case 'part_time':
-          for (int i = 0; i < 7; i++) _activeDays[i] = true;
+          for (int i = 0; i < 7; i++) {
+            _activeDays[i] = true;
+          }
           _startTime = const TimeOfDay(hour: 11, minute: 0);
           _endTime = const TimeOfDay(hour: 15, minute: 0);
         case 'weekends':
-          for (int i = 0; i < 5; i++) _activeDays[i] = false;
+          for (int i = 0; i < 5; i++) {
+            _activeDays[i] = false;
+          }
           _activeDays[5] = true; // Sat
           _activeDays[6] = true; // Sun
           _startTime = const TimeOfDay(hour: 10, minute: 0);

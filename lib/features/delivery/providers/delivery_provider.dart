@@ -648,8 +648,9 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       if (vehicleType != null) body['vehicle_type'] = vehicleType;
       if (vehicleNumber != null) body['vehicle_number'] = vehicleNumber;
       if (bankAccountId != null) body['bank_account_id'] = bankAccountId;
-      if (bankAccountHolder != null)
+      if (bankAccountHolder != null) {
         body['bank_account_holder'] = bankAccountHolder;
+      }
       if (ifsc != null) body['ifsc'] = ifsc;
       if (upiId != null) body['upi_id'] = upiId;
 

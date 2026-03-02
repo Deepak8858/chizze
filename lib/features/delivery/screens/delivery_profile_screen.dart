@@ -369,7 +369,7 @@ class DeliveryProfileScreen extends ConsumerWidget {
                     selectedColor: AppColors.primary.withValues(alpha: 0.2),
                     backgroundColor: AppColors.surfaceElevated,
                     labelStyle: AppTypography.body2.copyWith(
-                      color: isSelected ? AppColors.primary : AppColors.text,
+                      color: isSelected ? AppColors.primary : AppColors.textPrimary,
                     ),
                     onSelected: (_) {
                       setModalState(() => selectedType = t);

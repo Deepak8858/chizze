@@ -35,6 +35,7 @@ type Order struct {
 	DeliveryAddressID    string     `json:"delivery_address_id"`
 	Items                string     `json:"items"` // JSON array string
 	ItemTotal            float64    `json:"item_total"`
+	DeliveryType         string     `json:"delivery_type"`
 	DeliveryFee          float64    `json:"delivery_fee"`
 	PlatformFee          float64    `json:"platform_fee"`
 	GST                  float64    `json:"gst"`
@@ -80,6 +81,7 @@ type PlaceOrderRequest struct {
 	Tip                  float64     `json:"tip"`
 	SpecialInstructions  string      `json:"special_instructions"`
 	DeliveryInstructions string      `json:"delivery_instructions"`
+	DeliveryType         string      `json:"delivery_type"`
 }
 
 // CancelOrderRequest for PUT /orders/:id/cancel

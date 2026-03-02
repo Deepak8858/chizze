@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../core/theme/theme.dart';
-import '../../../shared/widgets/glass_card.dart';
+import '../../core/theme/theme.dart';
+import '../widgets/glass_card.dart';
 
 /// Support / Help screen — shared between customer and delivery partner.
 class SupportScreen extends StatelessWidget {

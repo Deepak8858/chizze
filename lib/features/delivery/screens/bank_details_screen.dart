@@ -398,7 +398,9 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            status[0].toUpperCase() + status.substring(1),
+            status.isNotEmpty
+                ? status[0].toUpperCase() + status.substring(1)
+                : 'Unknown',
             style: AppTypography.overline.copyWith(
               color: statusColor,
               fontSize: 10,
@@ -444,10 +446,13 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[BankDetailsScreen] Failed to save: $e\n$stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save: $e')),
+          const SnackBar(
+            content: Text('Failed to save changes. Please try again.'),
+          ),
         );
       }
     }
