@@ -158,6 +158,7 @@ appwrite databases create-string-attribute --database-id $DB --collection-id ord
 appwrite databases create-string-attribute --database-id $DB --collection-id orders --key delivery_address_id --size 36 --required true
 appwrite databases create-string-attribute --database-id $DB --collection-id orders --key items --size 10000 --required true
 appwrite databases create-float-attribute --database-id $DB --collection-id orders --key item_total --required true
+appwrite databases create-enum-attribute --database-id $DB --collection-id orders --key delivery_type --elements standard eco --required false --default standard
 appwrite databases create-float-attribute --database-id $DB --collection-id orders --key delivery_fee --required false
 appwrite databases create-float-attribute --database-id $DB --collection-id orders --key platform_fee --required false
 appwrite databases create-float-attribute --database-id $DB --collection-id orders --key gst --required false

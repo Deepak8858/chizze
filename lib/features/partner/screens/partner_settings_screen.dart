@@ -54,7 +54,8 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
       debugPrint('[PartnerSettings] _pickAndUploadImage error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error uploading image: $e')),
+          const SnackBar(
+              content: Text('Error uploading image. Please try again.')),
         );
       }
     } finally {

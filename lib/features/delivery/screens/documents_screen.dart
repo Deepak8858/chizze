@@ -14,11 +14,28 @@ class DocumentsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final partner = ref.watch(deliveryProvider).partner;
-    // Infer verification from available fields
-    final hasVehicle = partner.vehicleNumber.isNotEmpty;
-    final hasPhoto = partner.avatarUrl.isNotEmpty;
-    // All verifiable documents must be present — will expand when backend tracks all docs
-    final isVerified = hasVehicle && hasPhoto;
+
+    // Compute per-document statuses (single source of truth)
+    final govIdStatus = _DocStatus.pending;
+    final licenseStatus = _DocStatus.pending;
+    final vehicleRcStatus = partner.vehicleNumber.isNotEmpty
+        ? _DocStatus.review
+        : _DocStatus.pending;
+    final insuranceStatus = _DocStatus.pending;
+    final photoStatus = partner.avatarUrl.isNotEmpty
+        ? _DocStatus.review
+        : _DocStatus.pending;
+
+    final allStatuses = [
+      govIdStatus,
+      licenseStatus,
+      vehicleRcStatus,
+      insuranceStatus,
+      photoStatus,
+    ];
+    final allVerified = allStatuses.every((s) => s == _DocStatus.verified);
+    final allSubmitted =
+        allStatuses.every((s) => s != _DocStatus.pending);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -29,7 +46,10 @@ class DocumentsScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ─── Verification Status Banner ───
-            _StatusBanner(isVerified: isVerified),
+            _StatusBanner(
+              allVerified: allVerified,
+              allSubmitted: allSubmitted,
+            ),
             const SizedBox(height: AppSpacing.xxl),
 
             // ─── Document List ───
@@ -42,39 +62,37 @@ class DocumentsScreen extends ConsumerWidget {
               icon: Icons.badge_rounded,
               title: 'Government ID',
               subtitle: 'Aadhaar Card or PAN Card',
-              status: _DocStatus.pending,
+              status: govIdStatus,
               index: 0,
             ),
             _DocumentCard(
               icon: Icons.directions_car_rounded,
               title: 'Driving License',
               subtitle: 'Upload your driving license',
-              status: _DocStatus.pending,
+              status: licenseStatus,
               index: 1,
             ),
             _DocumentCard(
               icon: Icons.two_wheeler_rounded,
               title: 'Vehicle Registration (RC)',
-              subtitle: hasVehicle
+              subtitle: partner.vehicleNumber.isNotEmpty
                   ? 'Vehicle: ${partner.vehicleNumber}'
                   : 'Upload your vehicle RC',
-              status: hasVehicle ? _DocStatus.review : _DocStatus.pending,
+              status: vehicleRcStatus,
               index: 2,
             ),
             _DocumentCard(
               icon: Icons.health_and_safety_rounded,
               title: 'Vehicle Insurance',
               subtitle: 'Valid insurance certificate',
-              status: _DocStatus.pending,
+              status: insuranceStatus,
               index: 3,
             ),
             _DocumentCard(
               icon: Icons.photo_camera_front_rounded,
               title: 'Profile Photo',
               subtitle: 'Clear photo for verification',
-              status: partner.avatarUrl.isNotEmpty
-                  ? _DocStatus.review
-                  : _DocStatus.pending,
+              status: photoStatus,
               index: 4,
             ),
 
@@ -113,20 +131,45 @@ class DocumentsScreen extends ConsumerWidget {
 // ─── Sub-widgets ───────────────────────────────────────────────
 
 class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.isVerified});
-  final bool isVerified;
+  const _StatusBanner({
+    required this.allVerified,
+    required this.allSubmitted,
+  });
+  final bool allVerified;
+  final bool allSubmitted;
 
   @override
   Widget build(BuildContext context) {
+    final String title;
+    final String subtitle;
+    final IconData icon;
+    final LinearGradient gradient;
+
+    if (allVerified) {
+      title = 'Verified';
+      subtitle = 'All your documents are approved';
+      icon = Icons.verified_rounded;
+      gradient = const LinearGradient(
+          colors: [Color(0xFF4CAF50), Color(0xFF66BB6A)]);
+    } else if (allSubmitted) {
+      title = 'Documents Submitted';
+      subtitle = 'Your documents are under review';
+      icon = Icons.hourglass_top_rounded;
+      gradient = const LinearGradient(
+          colors: [Color(0xFF42A5F5), Color(0xFF64B5F6)]);
+    } else {
+      title = 'Documents Pending';
+      subtitle = 'Upload & verify documents to start delivering';
+      icon = Icons.pending_rounded;
+      gradient = const LinearGradient(
+          colors: [Color(0xFFFFA726), Color(0xFFFFB74D)]);
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
-        gradient: isVerified
-            ? const LinearGradient(
-                colors: [Color(0xFF4CAF50), Color(0xFF66BB6A)])
-            : const LinearGradient(
-                colors: [Color(0xFFFFA726), Color(0xFFFFB74D)]),
+        gradient: gradient,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
       ),
       child: Row(
@@ -138,11 +181,7 @@ class _StatusBanner extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              isVerified ? Icons.verified_rounded : Icons.pending_rounded,
-              color: Colors.white,
-              size: 28,
-            ),
+            child: Icon(icon, color: Colors.white, size: 28),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -150,15 +189,13 @@ class _StatusBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isVerified ? 'Verified' : 'Verification Pending',
+                  title,
                   style: AppTypography.h3
                       .copyWith(color: Colors.white, fontSize: 18),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  isVerified
-                      ? 'All your documents are approved'
-                      : 'Upload & verify documents to start delivering',
+                  subtitle,
                   style: AppTypography.caption
                       .copyWith(color: Colors.white.withValues(alpha: 0.9)),
                 ),

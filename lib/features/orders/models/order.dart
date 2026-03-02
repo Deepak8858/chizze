@@ -271,7 +271,7 @@ class Order {
       specialInstructions: specialInstructions,
       deliveryInstructions: deliveryInstructions,
       estimatedDeliveryMin: estimatedDeliveryMin,
-      placedAt: placedAt ?? this.placedAt,
+      placedAt: placedAt ?? placedAt,
       confirmedAt: confirmedAt ?? this.confirmedAt,
       preparedAt: preparedAt ?? this.preparedAt,
       pickedUpAt: pickedUpAt ?? this.pickedUpAt,

@@ -96,7 +96,7 @@ func (h *PartnerHandler) Dashboard(c *gin.Context) {
 	isOnline, _ := restaurant["is_online"].(bool)
 	name, _ := restaurant["name"].(string)
 
-	restaurantImageUrl, _ := restaurant["restaurant_image_url"].(string)
+	coverImageUrl, _ := restaurant["cover_image_url"].(string)
 
 	utils.Success(c, gin.H{
 		"restaurant_id":        restID,
@@ -106,7 +106,7 @@ func (h *PartnerHandler) Dashboard(c *gin.Context) {
 		"today_orders":         todayOrders,
 		"avg_rating":           rating,
 		"pending_orders":       pendingOrders,
-		"restaurant_image_url": restaurantImageUrl,
+		"restaurant_image_url": coverImageUrl,
 	})
 }
 
@@ -662,7 +662,7 @@ func (h *PartnerHandler) UpdateRestaurant(c *gin.Context) {
 
 	updateData := map[string]interface{}{}
 	if req.RestaurantImageURL != "" {
-		updateData["restaurant_image_url"] = req.RestaurantImageURL
+		updateData["cover_image_url"] = req.RestaurantImageURL
 	}
 	if req.Name != "" {
 		updateData["name"] = req.Name
