@@ -76,17 +76,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
     _controller.clear();
 
-    // Send over WebSocket
-    final ws = ref.read(webSocketServiceProvider);
-    ws.send({
-      'type': 'chat_message',
-      'payload': {
-        'order_id': widget.orderId,
-        'message': text,
-      },
-    });
+    // Send over WebSocket with error handling
+    try {
+      final ws = ref.read(webSocketServiceProvider);
+      ws.send({
+        'type': 'chat_message',
+        'payload': {'order_id': widget.orderId, 'message': text},
+      });
+    } catch (_) {
+      // Mark last message as failed
+      setState(() {
+        final last = _messages.removeLast();
+        _messages.add(
+          _ChatMsg(
+            text: last.text,
+            isMe: true,
+            senderLabel: last.senderLabel,
+            timestamp: last.timestamp,
+            isFailed: true,
+          ),
+        );
+      });
+    }
 
     _scrollToBottom();
+  }
+
+  /// Re-send a previously-failed message.
+  void _retrySend(int index) {
+    final failed = _messages[index];
+    setState(() {
+      _messages[index] = _ChatMsg(
+        text: failed.text,
+        isMe: true,
+        senderLabel: failed.senderLabel,
+        timestamp: DateTime.now(),
+      );
+    });
+
+    try {
+      final ws = ref.read(webSocketServiceProvider);
+      ws.send({
+        'type': 'chat_message',
+        'payload': {'order_id': widget.orderId, 'message': failed.text},
+      });
+    } catch (_) {
+      setState(() {
+        _messages[index] = _ChatMsg(
+          text: failed.text,
+          isMe: true,
+          senderLabel: failed.senderLabel,
+          timestamp: _messages[index].timestamp,
+          isFailed: true,
+        );
+      });
+    }
   }
 
   void _scrollToBottom() {
@@ -184,7 +228,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     itemCount: _messages.length,
                     itemBuilder: (_, i) {
                       final msg = _messages[i];
-                      return _MessageBubble(msg: msg, index: i);
+                      return _MessageBubble(
+                        msg: msg,
+                        index: i,
+                        onRetry: msg.isFailed ? () => _retrySend(i) : null,
+                      );
                     },
                   ),
           ),
@@ -296,6 +344,7 @@ class _ChatMsg {
   final String text;
   final bool isMe;
   final bool isSystem;
+  final bool isFailed;
   final String senderLabel;
   final DateTime timestamp;
 
@@ -303,15 +352,17 @@ class _ChatMsg {
     required this.text,
     required this.isMe,
     this.isSystem = false,
+    this.isFailed = false,
     required this.senderLabel,
     required this.timestamp,
   });
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.msg, required this.index});
+  const _MessageBubble({required this.msg, required this.index, this.onRetry});
   final _ChatMsg msg;
   final int index;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -349,7 +400,9 @@ class _MessageBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: msg.isMe
+          color: msg.isFailed
+              ? Colors.red.shade900.withValues(alpha: 0.25)
+              : msg.isMe
               ? AppColors.primary
               : AppColors.surfaceElevated,
           borderRadius: BorderRadius.only(
@@ -382,14 +435,30 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 3),
-            Text(
-              timeStr,
-              style: TextStyle(
-                fontSize: 10,
-                color: msg.isMe
-                    ? Colors.white.withValues(alpha: 0.7)
-                    : AppColors.textTertiary,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  timeStr,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: msg.isMe
+                        ? Colors.white.withValues(alpha: 0.7)
+                        : AppColors.textTertiary,
+                  ),
+                ),
+                if (msg.isFailed) ...[
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: onRetry,
+                    child: const Icon(
+                      Icons.error_outline,
+                      size: 14,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
         ),

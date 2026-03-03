@@ -1,21 +1,29 @@
 """Add missing delivery_type attribute to Appwrite orders collection."""
 import sys
+import os
 import paramiko
 import json
 
-HOST = "165.232.177.81"
-USER = "root"
-PASSWORD = "dreaM$8858J"
+def _env(key: str) -> str:
+    val = os.environ.get(key)
+    if not val:
+        sys.exit(f"ERROR: environment variable {key} is not set")
+    return val
 
-APPWRITE_ENDPOINT = "https://sgp.cloud.appwrite.io/v1"
-APPWRITE_PROJECT = "6993347c0006ead7404d"
-APPWRITE_KEY = "standard_bce5608cafe757835075f175595b32d446ad35dec4a7c81db5a78867ac41b52b07fc87145107dd68151c7b9e8083ae48d2dc241d1b649cebfdfc804928d410648dc475c77be9b3e35f94fda1b772b2d834a7e929b30eb83576af8bca77ed031bc5d50ae64e9c57ca613c5927dc0ada52488679d67de8b7205000ed5b79ae687d"
-DATABASE_ID = "chizze_db"
-COLLECTION_ID = "orders"
+HOST = _env("DEPLOY_HOST")
+USER = _env("DEPLOY_USER")
+PASSWORD = _env("DEPLOY_PASSWORD")
+
+APPWRITE_ENDPOINT = _env("APPWRITE_ENDPOINT")
+APPWRITE_PROJECT = _env("APPWRITE_PROJECT")
+APPWRITE_KEY = _env("APPWRITE_KEY")
+DATABASE_ID = os.environ.get("APPWRITE_DATABASE_ID", "chizze_db")
+COLLECTION_ID = os.environ.get("APPWRITE_COLLECTION_ID", "orders")
 
 def run_ssh(cmd: str) -> str:
     ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.load_system_host_keys()
+    ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
     ssh.connect(HOST, username=USER, password=PASSWORD, timeout=15)
     stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
     out = stdout.read().decode()

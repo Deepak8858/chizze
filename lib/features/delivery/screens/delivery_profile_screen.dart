@@ -304,10 +304,6 @@ class DeliveryProfileScreen extends ConsumerWidget {
     String currentType,
     String currentNumber,
   ) {
-    String selectedType = currentType;
-    final numberCtrl = TextEditingController(text: currentNumber);
-    final types = ['bike', 'scooter', 'bicycle', 'car'];
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -315,121 +311,21 @@ class DeliveryProfileScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.xl,
-            AppSpacing.lg,
-            AppSpacing.xl,
-            MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.textTertiary.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Edit Vehicle',
-                style: AppTypography.h3.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Text(
-                'Vehicle Type',
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.sm,
-                children: types.map((t) {
-                  final isSelected = t == selectedType;
-                  final emoji = t == 'bike'
-                      ? '🏍️'
-                      : t == 'scooter'
-                      ? '🛵'
-                      : t == 'bicycle'
-                      ? '🚲'
-                      : '🚗';
-                  return ChoiceChip(
-                    label: Text(
-                      '$emoji ${t[0].toUpperCase()}${t.substring(1)}',
-                    ),
-                    selected: isSelected,
-                    selectedColor: AppColors.primary.withValues(alpha: 0.2),
-                    backgroundColor: AppColors.surfaceElevated,
-                    labelStyle: AppTypography.body2.copyWith(
-                      color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                    ),
-                    onSelected: (_) {
-                      setModalState(() => selectedType = t);
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              TextField(
-                controller: numberCtrl,
-                style: AppTypography.body1,
-                textCapitalization: TextCapitalization.characters,
-                decoration: InputDecoration(
-                  labelText: 'Vehicle Number',
-                  hintText: 'e.g. KA01AB1234',
-                  filled: true,
-                  fillColor: AppColors.surfaceElevated,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () async {
-                    final newNumber = numberCtrl.text.trim();
-                    if (newNumber.isEmpty) return;
-                    Navigator.of(ctx).pop();
-                    final success = await ref
-                        .read(deliveryProvider.notifier)
-                        .updateProfile(
-                          vehicleType: selectedType,
-                          vehicleNumber: newNumber,
-                        );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            success
-                                ? 'Vehicle updated'
-                                : 'Failed to update vehicle',
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('Save Changes'),
-                ),
-              ),
-            ],
-          ),
-        ),
+      builder: (_) => _VehicleEditSheet(
+        currentType: currentType,
+        currentNumber: currentNumber,
+        ref: ref,
+        parentContext: context,
       ),
     );
   }
 
-  Widget _buildMenuItem(IconData icon, String label, {String? subtitle, VoidCallback? onTap}) {
+  Widget _buildMenuItem(
+    IconData icon,
+    String label, {
+    String? subtitle,
+    VoidCallback? onTap,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
       decoration: BoxDecoration(
@@ -440,7 +336,10 @@ class DeliveryProfileScreen extends ConsumerWidget {
         leading: Icon(icon, size: 22, color: AppColors.textSecondary),
         title: Text(label, style: AppTypography.body2),
         subtitle: subtitle != null
-            ? Text(subtitle, style: AppTypography.caption.copyWith(fontSize: 11))
+            ? Text(
+                subtitle,
+                style: AppTypography.caption.copyWith(fontSize: 11),
+              )
             : null,
         trailing: const Icon(
           Icons.arrow_forward_ios_rounded,
@@ -449,6 +348,155 @@ class DeliveryProfileScreen extends ConsumerWidget {
         ),
         onTap: onTap,
         dense: true,
+      ),
+    );
+  }
+}
+
+/// Extracted StatefulWidget so the [TextEditingController] is properly disposed
+/// when the bottom sheet closes.
+class _VehicleEditSheet extends StatefulWidget {
+  const _VehicleEditSheet({
+    required this.currentType,
+    required this.currentNumber,
+    required this.ref,
+    required this.parentContext,
+  });
+
+  final String currentType;
+  final String currentNumber;
+  final WidgetRef ref;
+  final BuildContext parentContext;
+
+  @override
+  State<_VehicleEditSheet> createState() => _VehicleEditSheetState();
+}
+
+class _VehicleEditSheetState extends State<_VehicleEditSheet> {
+  late final TextEditingController _numberCtrl;
+  late String _selectedType;
+  static const _types = ['bike', 'scooter', 'bicycle', 'car'];
+
+  @override
+  void initState() {
+    super.initState();
+    _numberCtrl = TextEditingController(text: widget.currentNumber);
+    _selectedType = widget.currentType;
+  }
+
+  @override
+  void dispose() {
+    _numberCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.xl,
+        MediaQuery.of(context).viewInsets.bottom + AppSpacing.xl,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.textTertiary.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Edit Vehicle',
+            style: AppTypography.h3.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          Text(
+            'Vehicle Type',
+            style: AppTypography.caption.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
+            children: _types.map((t) {
+              final isSelected = t == _selectedType;
+              final emoji = t == 'bike'
+                  ? '🏍️'
+                  : t == 'scooter'
+                      ? '🛵'
+                      : t == 'bicycle'
+                  ? '🚲'
+                  : '🚗';
+              return ChoiceChip(
+                label: Text('$emoji ${t[0].toUpperCase()}${t.substring(1)}'),
+                selected: isSelected,
+                selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                backgroundColor: AppColors.surfaceElevated,
+                labelStyle: AppTypography.body2.copyWith(
+                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                ),
+                onSelected: (_) {
+                  setState(() => _selectedType = t);
+                },
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          TextField(
+            controller: _numberCtrl,
+            style: AppTypography.body1,
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              labelText: 'Vehicle Number',
+              hintText: 'e.g. KA01AB1234',
+              filled: true,
+              fillColor: AppColors.surfaceElevated,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () async {
+                final newNumber = _numberCtrl.text.trim();
+                if (newNumber.isEmpty) return;
+                Navigator.of(context).pop();
+                final success = await widget.ref
+                    .read(deliveryProvider.notifier)
+                    .updateProfile(
+                      vehicleType: _selectedType,
+                      vehicleNumber: newNumber,
+                    );
+                if (widget.parentContext.mounted) {
+                  ScaffoldMessenger.of(widget.parentContext).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        success
+                            ? 'Vehicle updated'
+                            : 'Failed to update vehicle',
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Save Changes'),
+            ),
+          ),
+        ],
       ),
     );
   }

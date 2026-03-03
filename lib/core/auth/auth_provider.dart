@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/appwrite_service.dart';
 import '../services/api_client.dart';
+import '../models/api_response.dart';
 
 /// Secure storage keys for persisted auth data
 const _kRoleStorageKey = 'chizze_user_role';
@@ -189,8 +190,44 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
       }
     } catch (e) {
-      debugPrint('[Auth] No active session: $e');
-      // Clear any stale persisted token
+      debugPrint('[Auth] checkSession error: $e');
+
+      // Determine if this is a network/connectivity error vs a genuine
+      // "no session" response from Appwrite.
+      final errStr = e.toString();
+      final isNetworkError =
+          e is TimeoutException ||
+          errStr.contains('SocketException') ||
+          errStr.contains('Failed host lookup') ||
+          errStr.contains('Connection refused') ||
+          errStr.contains('Network is unreachable') ||
+          errStr.contains('HandshakeException') ||
+          errStr.contains('Connection closed') ||
+          errStr.contains('Connection reset') ||
+          errStr.contains('timed out');
+
+      if (isNetworkError) {
+        // Network is down — try to restore from local storage so the user
+        // stays logged in and can browse cached content.
+        final persisted = await _apiClient.loadPersistedToken();
+        final persistedRole = await _loadPersistedRole();
+        final onboarded = await _secureStorage.read(key: _kOnboardedKey);
+
+        if (persisted != null && persistedRole != null) {
+          debugPrint(
+            '[Auth] Offline mode: restoring session from local storage (role=$persistedRole)',
+          );
+          state = state.copyWith(
+            status: AuthStatus.authenticated,
+            isLoading: false,
+            userRole: persistedRole,
+            isNewUser: onboarded != 'true',
+          );
+          return;
+        }
+      }
+
+      // Genuinely no session or no persisted data — clear and go to login
       await _apiClient.clearPersistedToken();
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
@@ -220,6 +257,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isLoading: false,
         error: e.message ?? 'Login failed',
       );
+    } on ApiException catch (e) {
+      debugPrint('[Auth] Login failed (exchange): $e');
+      try {
+        await _account.deleteSession(sessionId: 'current');
+      } catch (_) {}
+      state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
       debugPrint('[Auth] Login failed (exchange): $e');
       // Clean up the Appwrite session since we can't complete login
@@ -299,14 +342,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         error: e.message ?? 'Invalid OTP',
-      );    } catch (e) {
+      );
+    } on ApiException catch (e) {
+      debugPrint('[Auth] verifyPhoneOTP exchange failed: $e');
+      try {
+        await _account.deleteSession(sessionId: 'current');
+      } catch (_) {}
+      state = state.copyWith(isLoading: false, error: e.message);
+    } catch (e) {
       debugPrint('[Auth] verifyPhoneOTP exchange failed: $e');
       // Clean up the Appwrite session since we can't complete login
       try { await _account.deleteSession(sessionId: 'current'); } catch (_) {}
       state = state.copyWith(
         isLoading: false,
         error: 'Server unavailable. Please try again.',
-      );    }
+      );
+    }
   }
 
   /// OAuth login (Google, Apple)
@@ -327,6 +378,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isLoading: false,
         error: e.message ?? 'OAuth login failed',
       );
+    } on ApiException catch (e) {
+      debugPrint('[Auth] OAuth login exchange failed: $e');
+      try {
+        await _account.deleteSession(sessionId: 'current');
+      } catch (_) {}
+      state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
       debugPrint('[Auth] OAuth login exchange failed: $e');
       try { await _account.deleteSession(sessionId: 'current'); } catch (_) {}

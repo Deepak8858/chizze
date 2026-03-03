@@ -1,17 +1,31 @@
 """Check delivery_type attribute directly."""
-import paramiko, json
+import os, sys, paramiko, json
+
+def _env(key: str) -> str:
+    val = os.environ.get(key)
+    if not val:
+        sys.exit(f"ERROR: environment variable {key} is not set")
+    return val
+
+HOST = _env("DEPLOY_HOST")
+USER = _env("DEPLOY_USER")
+PASSWORD = _env("DEPLOY_PASSWORD")
+AW_KEY = _env("APPWRITE_KEY")
+AW_PROJECT = _env("APPWRITE_PROJECT")
+AW_ENDPOINT = os.environ.get("APPWRITE_ENDPOINT", "https://sgp.cloud.appwrite.io/v1")
+DATABASE_ID = os.environ.get("APPWRITE_DATABASE_ID", "chizze_db")
 
 ssh = paramiko.SSHClient()
-ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-ssh.connect("165.232.177.81", username="root", password="dreaM$8858J", timeout=15)
+ssh.load_system_host_keys()
+ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
+ssh.connect(HOST, username=USER, password=PASSWORD, timeout=15)
 
-AW_KEY = "standard_bce5608cafe757835075f175595b32d446ad35dec4a7c81db5a78867ac41b52b07fc87145107dd68151c7b9e8083ae48d2dc241d1b649cebfdfc804928d410648dc475c77be9b3e35f94fda1b772b2d834a7e929b30eb83576af8bca77ed031bc5d50ae64e9c57ca613c5927dc0ada52488679d67de8b7205000ed5b79ae687d"
-BASE = "https://sgp.cloud.appwrite.io/v1/databases/chizze_db/collections/orders/attributes"
+BASE = f"{AW_ENDPOINT}/databases/{DATABASE_ID}/collections/orders/attributes"
 
 # Try direct attribute endpoint
 cmd = (
     f"curl -s '{BASE}/delivery_type' "
-    f"-H 'X-Appwrite-Project: 6993347c0006ead7404d' "
+    f"-H 'X-Appwrite-Project: {AW_PROJECT}' "
     f"-H 'X-Appwrite-Key: {AW_KEY}'"
 )
 _, stdout, _ = ssh.exec_command(cmd, timeout=60)
@@ -22,7 +36,7 @@ print("Direct fetch:", json.dumps(data, indent=2))
 cmd2 = (
     f'curl -s -G "{BASE}" '
     f'--data-urlencode "queries[]={{\\"method\\":\\"limit\\",\\"values\\":[100]}}" '
-    f"-H 'X-Appwrite-Project: 6993347c0006ead7404d' "
+    f"-H 'X-Appwrite-Project: {AW_PROJECT}' "
     f"-H 'X-Appwrite-Key: {AW_KEY}'"
 )
 _, stdout2, _ = ssh.exec_command(cmd2, timeout=60)

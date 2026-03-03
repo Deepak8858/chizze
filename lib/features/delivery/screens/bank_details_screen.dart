@@ -26,9 +26,21 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill from existing data if available
-    // (bank details are not stored in the DeliveryPartner model)
-    // User enters fresh each time or from local persistence
+    // Pre-fill from partner model after the first frame (ref is not usable
+    // inside initState for ConsumerStatefulWidget).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final partner = ref.read(deliveryProvider).partner;
+      if (partner.bankAccountHolder != null &&
+          partner.bankAccountHolder!.isNotEmpty) {
+        _accountHolderCtrl.text = partner.bankAccountHolder!;
+      }
+      if (partner.ifsc != null && partner.ifsc!.isNotEmpty) {
+        _ifscCtrl.text = partner.ifsc!;
+      }
+      if (partner.upiId != null && partner.upiId!.isNotEmpty) {
+        _upiCtrl.text = partner.upiId!;
+      }
+    });
   }
 
   @override

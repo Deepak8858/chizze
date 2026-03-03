@@ -8,6 +8,7 @@ import '../../../core/services/location_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../profile/providers/address_provider.dart';
 import '../../profile/providers/user_profile_provider.dart';
 
 /// Onboarding screen — shown to new users after OTP verification.
@@ -171,8 +172,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         vehicleNumber: _vehicleNumberController.text.trim(),
       );
 
-      // Force profile re-fetch so the just-saved name/data appears
+      // Force profile and addresses re-fetch so the just-saved data appears
       ref.invalidate(userProfileProvider);
+      ref.invalidate(addressProvider);
 
       // GoRouter's refreshListenable will auto-redirect to the correct dashboard
       // when isNewUser changes to false (set by completeOnboarding).

@@ -62,6 +62,9 @@ class CartState {
   final bool isEcoDelivery;
   final String deliveryInstructions;
   final String specialInstructions;
+  /// Backend-calculated delivery fee; `null` means we're still using the local
+  /// estimate (the flat ₹40 / free threshold).
+  final double? deliveryFeeOverride;
 
   const CartState({
     this.items = const [],
@@ -72,6 +75,7 @@ class CartState {
     this.isEcoDelivery = false,
     this.deliveryInstructions = '',
     this.specialInstructions = '',
+    this.deliveryFeeOverride,
   });
 
   CartState copyWith({
@@ -84,6 +88,8 @@ class CartState {
     bool? isEcoDelivery,
     String? deliveryInstructions,
     String? specialInstructions,
+    double? deliveryFeeOverride,
+    bool clearDeliveryFeeOverride = false,
   }) {
     return CartState(
       items: items ?? this.items,
@@ -94,6 +100,9 @@ class CartState {
       isEcoDelivery: isEcoDelivery ?? this.isEcoDelivery,
       deliveryInstructions: deliveryInstructions ?? this.deliveryInstructions,
       specialInstructions: specialInstructions ?? this.specialInstructions,
+      deliveryFeeOverride: clearDeliveryFeeOverride
+          ? null
+          : (deliveryFeeOverride ?? this.deliveryFeeOverride),
     );
   }
 
@@ -102,7 +111,16 @@ class CartState {
   int get totalItems => items.fold(0, (sum, item) => sum + item.quantity);
 
   double get itemTotal => items.fold(0, (sum, item) => sum + item.totalPrice);
-  double get deliveryFee => isEcoDelivery ? 0 : (itemTotal >= 299 ? 0 : 40);
+
+  /// Whether the delivery fee is a local estimate (backend fee not yet fetched).
+  bool get isDeliveryFeeEstimate => deliveryFeeOverride == null;
+
+  double get deliveryFee {
+    if (isEcoDelivery) return 0;
+    if (deliveryFeeOverride != null) return deliveryFeeOverride!;
+    // Local estimate until backend fee is fetched
+    return itemTotal >= 299 ? 0 : 40;
+  }
   double get platformFee => 5;
   double get gst => (itemTotal * 0.05); // 5% GST
   double get discount => couponDiscount;
@@ -200,6 +218,11 @@ class CartNotifier extends StateNotifier<CartState> {
   /// Toggle eco delivery mode
   void setEcoDelivery(bool value) {
     state = state.copyWith(isEcoDelivery: value);
+  }
+
+  /// Set backend-calculated delivery fee (overrides local estimate).
+  void setDeliveryFee(double fee) {
+    state = state.copyWith(deliveryFeeOverride: fee);
   }
 
   /// Clear cart

@@ -44,6 +44,20 @@ func (h *AuthHandler) issueJWT(userID, role string, duration time.Duration) (str
 	return token.SignedString([]byte(h.cfg.JWTSecret))
 }
 
+// roleDisplayName maps internal role strings to user-friendly display names.
+func roleDisplayName(role string) string {
+	switch role {
+	case "restaurant_owner":
+		return "Restaurant Partner"
+	case "delivery_partner":
+		return "Delivery Partner"
+	case "customer":
+		return "Customer"
+	default:
+		return role
+	}
+}
+
 // Exchange validates an Appwrite client JWT and issues a Chizze API JWT
 // @Summary Exchange Appwrite JWT for Chizze API token
 // @Description Validates an Appwrite client JWT and issues a Chizze API JWT. Creates user document if not exists.
@@ -103,15 +117,18 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 
 		if existingDoc != nil {
 			// Found existing doc with same phone but different Appwrite user ID.
-			// Migrate: delete old doc and create new one with current Appwrite user ID.
 			oldID, _ := existingDoc["$id"].(string)
 			if r, ok := existingDoc["role"].(string); ok && r != "" {
 				role = r
 			}
-			// Use role from request if provided (user may be re-selecting role)
-			if req.Role != "" {
-				role = req.Role
+			// Cross-role guard: if existing doc has a role and client wants a
+			// different role, reject instead of migrating with a new role.
+			if req.Role != "" && req.Role != role {
+				utils.Error(c, 409, "This phone number is already registered as "+roleDisplayName(role)+". Please use a different number.")
+				return
 			}
+
+			// Migrate: delete old doc and create new one with current Appwrite user ID.
 
 			// Copy fields from old doc
 			migratedData := map[string]interface{}{
@@ -175,6 +192,12 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 		// Existing user — read role
 		if r, ok := user["role"].(string); ok && r != "" {
 			role = r
+		}
+		// Cross-role guard: prevent the same account from switching roles.
+		// If the client sent a role and it doesn't match what's stored, reject.
+		if req.Role != "" && req.Role != role {
+			utils.Error(c, 409, "This phone number is already registered as "+roleDisplayName(role)+". Please use a different number.")
+			return
 		}
 	}
 

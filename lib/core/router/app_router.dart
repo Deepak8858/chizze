@@ -107,6 +107,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           state.uri.path == '/coupons' ||
           state.uri.path == '/gold' ||
           state.uri.path == '/referral' ||
+          state.uri.path == '/support' ||
+          state.uri.path.startsWith('/chat') ||
           state.uri.path.startsWith('/order') ||
           state.uri.path.startsWith('/review') ||
           state.uri.path.startsWith('/restaurant') ||

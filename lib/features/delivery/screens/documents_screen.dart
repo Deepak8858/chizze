@@ -46,10 +46,7 @@ class DocumentsScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ─── Verification Status Banner ───
-            _StatusBanner(
-              allVerified: allVerified,
-              allSubmitted: allSubmitted,
-            ),
+            _StatusBanner(allVerified: allVerified, allSubmitted: allSubmitted),
             const SizedBox(height: AppSpacing.xxl),
 
             // ─── Document List ───
@@ -131,10 +128,7 @@ class DocumentsScreen extends ConsumerWidget {
 // ─── Sub-widgets ───────────────────────────────────────────────
 
 class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({
-    required this.allVerified,
-    required this.allSubmitted,
-  });
+  const _StatusBanner({required this.allVerified, required this.allSubmitted});
   final bool allVerified;
   final bool allSubmitted;
 
@@ -150,19 +144,22 @@ class _StatusBanner extends StatelessWidget {
       subtitle = 'All your documents are approved';
       icon = Icons.verified_rounded;
       gradient = const LinearGradient(
-          colors: [Color(0xFF4CAF50), Color(0xFF66BB6A)]);
+        colors: [Color(0xFF4CAF50), Color(0xFF66BB6A)],
+      );
     } else if (allSubmitted) {
       title = 'Documents Submitted';
       subtitle = 'Your documents are under review';
       icon = Icons.hourglass_top_rounded;
       gradient = const LinearGradient(
-          colors: [Color(0xFF42A5F5), Color(0xFF64B5F6)]);
+        colors: [Color(0xFF42A5F5), Color(0xFF64B5F6)],
+      );
     } else {
       title = 'Documents Pending';
       subtitle = 'Upload & verify documents to start delivering';
       icon = Icons.pending_rounded;
       gradient = const LinearGradient(
-          colors: [Color(0xFFFFA726), Color(0xFFFFB74D)]);
+        colors: [Color(0xFFFFA726), Color(0xFFFFB74D)],
+      );
     }
 
     return Container(

@@ -20,6 +20,9 @@ class DeliveryPartner {
   final double currentLongitude;
   final double hoursOnlineToday;
   final double tipsToday;
+  final String? bankAccountHolder;
+  final String? ifsc;
+  final String? upiId;
 
   const DeliveryPartner({
     required this.id,
@@ -38,6 +41,9 @@ class DeliveryPartner {
     this.currentLongitude = 0,
     this.hoursOnlineToday = 0,
     this.tipsToday = 0,
+    this.bankAccountHolder,
+    this.ifsc,
+    this.upiId,
   });
 
   DeliveryPartner copyWith({
@@ -52,6 +58,9 @@ class DeliveryPartner {
     double? rating,
     int? totalDeliveries,
     double? totalEarnings,
+    String? bankAccountHolder,
+    String? ifsc,
+    String? upiId,
   }) {
     return DeliveryPartner(
       id: id,
@@ -70,6 +79,9 @@ class DeliveryPartner {
       currentLongitude: currentLongitude ?? this.currentLongitude,
       hoursOnlineToday: hoursOnlineToday ?? this.hoursOnlineToday,
       tipsToday: tipsToday ?? this.tipsToday,
+      bankAccountHolder: bankAccountHolder ?? this.bankAccountHolder,
+      ifsc: ifsc ?? this.ifsc,
+      upiId: upiId ?? this.upiId,
     );
   }
 
@@ -92,6 +104,9 @@ class DeliveryPartner {
       currentLongitude: (json['current_longitude'] as num?)?.toDouble() ?? 0,
       hoursOnlineToday: (json['hours_online_today'] as num?)?.toDouble() ?? 0,
       tipsToday: (json['tips_today'] as num?)?.toDouble() ?? 0,
+      bankAccountHolder: json['bank_account_holder'] as String?,
+      ifsc: json['ifsc'] as String?,
+      upiId: json['upi_id'] as String?,
     );
   }
 
@@ -108,6 +123,9 @@ class DeliveryPartner {
     totalEarnings: 0,
     currentLatitude: 0,
     currentLongitude: 0,
+    bankAccountHolder: null,
+    ifsc: null,
+    upiId: null,
   );
 }
 
