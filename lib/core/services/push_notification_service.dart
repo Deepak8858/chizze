@@ -16,7 +16,7 @@ const _kDeviceTokenKey = 'chizze_device_push_token';
 /// Must be a top-level function (not a method or closure).
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint('[Push] Background message: ${message.messageId}');
+  if (kDebugMode) debugPrint('[Push] Background message: ${message.messageId}');
 }
 
 /// Push-notification service backed by Firebase Cloud Messaging.
@@ -44,7 +44,7 @@ class PushNotificationService {
     await _initLocalNotifications();
     await _initFirebaseMessaging();
     await _ensureDeviceToken();
-    debugPrint('[Push] Service initialised. Token: $_deviceToken');
+    if (kDebugMode) debugPrint('[Push] Service initialised. Token: $_deviceToken');
   }
 
   /// Set up Firebase Messaging listeners
@@ -59,7 +59,7 @@ class PushNotificationService {
         sound: true,
         provisional: false,
       );
-      debugPrint('[Push] Permission status: ${settings.authorizationStatus}');
+      if (kDebugMode) debugPrint('[Push] Permission status: ${settings.authorizationStatus}');
 
       // Register background handler
       FirebaseMessaging.onBackgroundMessage(
@@ -67,7 +67,7 @@ class PushNotificationService {
 
       // Foreground messages → show local notification
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('[Push] Foreground message: ${message.messageId}');
+        if (kDebugMode) debugPrint('[Push] Foreground message: ${message.messageId}');
         final notification = message.notification;
         if (notification != null) {
           showLocalNotification(
@@ -80,14 +80,14 @@ class PushNotificationService {
 
       // Handle notification taps (app was in background)
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        debugPrint('[Push] Notification opened: ${message.data}');
+        if (kDebugMode) debugPrint('[Push] Notification opened: ${message.data}');
         _handleNotificationRoute(message.data['route']);
       });
 
       // Check if app was launched from a notification
       final initial = await messaging.getInitialMessage();
       if (initial != null) {
-        debugPrint('[Push] App launched from notification: ${initial.data}');
+        if (kDebugMode) debugPrint('[Push] App launched from notification: ${initial.data}');
         // Delay to let the router initialise
         Future.delayed(const Duration(milliseconds: 500), () {
           _handleNotificationRoute(initial.data['route']);
@@ -96,7 +96,7 @@ class PushNotificationService {
 
       _firebaseAvailable = true;
     } catch (e) {
-      debugPrint('[Push] Firebase Messaging not available: $e');
+      if (kDebugMode) debugPrint('[Push] Firebase Messaging not available: $e');
       _firebaseAvailable = false;
     }
   }
@@ -118,7 +118,7 @@ class PushNotificationService {
     await _localNotifications.initialize(
       settings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        debugPrint('[Push] Local notification tapped: ${response.payload}');
+        if (kDebugMode) debugPrint('[Push] Local notification tapped: ${response.payload}');
         _handleNotificationRoute(response.payload);
       },
     );
@@ -130,10 +130,10 @@ class PushNotificationService {
     if (route == null || route.isEmpty) return;
     final context = rootNavigatorKey.currentContext;
     if (context == null) {
-      debugPrint('[Push] No navigator context — cannot route to $route');
+      if (kDebugMode) debugPrint('[Push] No navigator context — cannot route to $route');
       return;
     }
-    debugPrint('[Push] Navigating to: $route');
+    if (kDebugMode) debugPrint('[Push] Navigating to: $route');
     GoRouter.of(context).go(route);
   }
 
@@ -146,16 +146,16 @@ class PushNotificationService {
     if (_firebaseAvailable) {
       try {
         _deviceToken = await FirebaseMessaging.instance.getToken();
-        debugPrint('[Push] FCM token acquired');
+        if (kDebugMode) debugPrint('[Push] FCM token acquired');
 
         // Listen for token refreshes
         FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
           _deviceToken = newToken;
           registerToken();
-          debugPrint('[Push] FCM token refreshed');
+          if (kDebugMode) debugPrint('[Push] FCM token refreshed');
         });
       } catch (e) {
-        debugPrint('[Push] Failed to get FCM token: $e');
+        if (kDebugMode) debugPrint('[Push] Failed to get FCM token: $e');
       }
     }
 
@@ -182,10 +182,10 @@ class PushNotificationService {
         ApiConfig.fcmToken,
         body: {'token': _deviceToken},
       );
-      debugPrint('[Push] Token registered with backend');
+      if (kDebugMode) debugPrint('[Push] Token registered with backend');
     } catch (e) {
       // Non-fatal — will retry on next app start
-      debugPrint('[Push] Failed to register token: $e');
+      if (kDebugMode) debugPrint('[Push] Failed to register token: $e');
     }
   }
 

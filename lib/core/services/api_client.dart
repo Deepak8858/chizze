@@ -19,9 +19,12 @@ class ApiClient {
   late final Dio _dio;
   String? _currentToken;
   Future<String?> Function()? _refreshCallback;
+  void Function()? _onAuthFailure;
   bool _isRefreshing = false;
+  Completer<String?>? _refreshCompleter;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 
   ApiClient() {
@@ -30,6 +33,7 @@ class ApiClient {
         baseUrl: ApiConfig.baseUrl,
         connectTimeout: Duration(seconds: ApiConfig.timeoutSeconds),
         receiveTimeout: Duration(seconds: ApiConfig.timeoutSeconds),
+        sendTimeout: Duration(seconds: ApiConfig.timeoutSeconds),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -49,12 +53,29 @@ class ApiClient {
           final isPublicAuth = path.contains('/auth/');
           if (error.response?.statusCode == 401 &&
               _refreshCallback != null &&
-              !_isRefreshing &&
               !isPublicAuth) {
+            // If already refreshing, wait for the in-flight refresh to complete
+            if (_isRefreshing) {
+              try {
+                final newToken = await _refreshCompleter?.future;
+                if (newToken != null) {
+                  final opts = error.requestOptions;
+                  opts.headers['Authorization'] = 'Bearer $newToken';
+                  final response = await _dio.fetch(opts);
+                  return handler.resolve(response);
+                }
+              } catch (_) {}
+              return handler.next(error);
+            }
+
             _isRefreshing = true;
-            debugPrint('[ApiClient] 401 received, attempting token refresh...');
+            _refreshCompleter = Completer<String?>();
+            if (kDebugMode) {
+              debugPrint('[ApiClient] 401 received, attempting token refresh...');
+            }
             try {
               final newToken = await _refreshCallback!();
+              _refreshCompleter?.complete(newToken);
               if (newToken != null) {
                 setAuthToken(newToken);
                 // Retry the original request with the new token
@@ -62,11 +83,20 @@ class ApiClient {
                 opts.headers['Authorization'] = 'Bearer $newToken';
                 final response = await _dio.fetch(opts);
                 return handler.resolve(response);
+              } else {
+                // Refresh returned null — force logout
+                _onAuthFailure?.call();
               }
             } catch (e) {
-              debugPrint('[ApiClient] Token refresh failed: $e');
+              if (kDebugMode) {
+                debugPrint('[ApiClient] Token refresh failed: $e');
+              }
+              _refreshCompleter?.completeError(e);
+              // Token refresh failed — force logout to clear stale state
+              _onAuthFailure?.call();
             } finally {
               _isRefreshing = false;
+              _refreshCompleter = null;
             }
           }
           handler.next(error);
@@ -92,7 +122,7 @@ class ApiClient {
     try {
       await _secureStorage.write(key: _kJwtStorageKey, value: token);
     } catch (e) {
-      debugPrint('[ApiClient] Failed to persist token: $e');
+      if (kDebugMode) debugPrint('[ApiClient] Failed to persist token: $e');
     }
   }
 
@@ -103,11 +133,11 @@ class ApiClient {
       final token = await _secureStorage.read(key: _kJwtStorageKey);
       if (token != null && token.isNotEmpty) {
         setAuthToken(token);
-        debugPrint('[ApiClient] Restored persisted JWT token');
+        if (kDebugMode) debugPrint('[ApiClient] Restored persisted JWT token');
         return token;
       }
     } catch (e) {
-      debugPrint('[ApiClient] Failed to load persisted token: $e');
+      if (kDebugMode) debugPrint('[ApiClient] Failed to load persisted token: $e');
     }
     return null;
   }
@@ -117,7 +147,7 @@ class ApiClient {
     try {
       await _secureStorage.delete(key: _kJwtStorageKey);
     } catch (e) {
-      debugPrint('[ApiClient] Failed to clear persisted token: $e');
+      if (kDebugMode) debugPrint('[ApiClient] Failed to clear persisted token: $e');
     }
   }
 
@@ -127,6 +157,11 @@ class ApiClient {
   /// Set the refresh callback — called when a 401 is received
   void setRefreshCallback(Future<String?> Function() callback) {
     _refreshCallback = callback;
+  }
+
+  /// Set callback for unrecoverable auth failure — forces logout
+  void setAuthFailureCallback(void Function() callback) {
+    _onAuthFailure = callback;
   }
 
   // ─── Core HTTP Methods ───

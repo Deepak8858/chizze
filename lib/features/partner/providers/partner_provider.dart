@@ -164,7 +164,9 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         }
       });
     } catch (e) {
-      debugPrint('[PartnerNotifier] Realtime subscribe error: $e');
+      if (kDebugMode) {
+        debugPrint('[PartnerNotifier] Realtime subscribe error: $e');
+      }
       // Realtime not available — use polling only
       _startPollingFallback();
     }
@@ -181,14 +183,14 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         _loadData(notifyNewOrders: false);
       });
     } catch (e) {
-      debugPrint('[PartnerNotifier] WS subscribe error: $e');
+      if (kDebugMode) debugPrint('[PartnerNotifier] WS subscribe error: $e');
     }
   }
 
   /// Polling fallback: fetch orders every 15 seconds when Realtime is down
   void _startPollingFallback() {
     if (_pollingTimer?.isActive == true) return; // Already polling
-    debugPrint('[PartnerNotifier] Starting polling fallback (15s interval)');
+    if (kDebugMode) debugPrint('[PartnerNotifier] Starting polling fallback (15s interval)');
     state = state.copyWith(
       connectionStatus: RealtimeConnectionStatus.polling,
     );
@@ -199,7 +201,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
 
   void _stopPolling() {
     if (_pollingTimer?.isActive == true) {
-      debugPrint('[PartnerNotifier] Stopping polling — realtime connected');
+      if (kDebugMode) debugPrint('[PartnerNotifier] Stopping polling — realtime connected');
       _pollingTimer?.cancel();
       _pollingTimer = null;
     }
@@ -209,11 +211,15 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
   void _scheduleRealtimeReconnect() {
     _reconnectTimer?.cancel();
     if (_reconnectAttempts >= 5) {
-      debugPrint('[PartnerNotifier] Max reconnect attempts reached, staying on polling');
+      if (kDebugMode) {
+        debugPrint(
+          '[PartnerNotifier] Max reconnect attempts reached, staying on polling',
+        );
+      }
       return;
     }
     final delay = Duration(seconds: 10 * (1 << _reconnectAttempts)); // 10s, 20s, 40s, 80s, 160s
-    debugPrint('[PartnerNotifier] Scheduling realtime reconnect in ${delay.inSeconds}s (attempt ${_reconnectAttempts + 1})');
+    if (kDebugMode) debugPrint('[PartnerNotifier] Scheduling realtime reconnect in ${delay.inSeconds}s (attempt ${_reconnectAttempts + 1})');
     _reconnectTimer = Timer(delay, () {
       _reconnectAttempts++;
       _realtimeSub?.cancel();
@@ -316,7 +322,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         unacknowledgedNewOrders: newCount,
       );
     } catch (e) {
-      debugPrint('[PartnerNotifier] _loadData error: $e');
+      if (kDebugMode) debugPrint('[PartnerNotifier] _loadData error: $e');
       // On error, preserve existing data but stop loading
       state = state.copyWith(isLoading: false);
     } finally {
@@ -352,7 +358,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         try {
           map['items'] = jsonDecode(map['items'] as String);
         } catch (e) {
-          debugPrint('[Partner] items JSON parse error: $e');
+          if (kDebugMode) debugPrint('[Partner] items JSON parse error: $e');
           map['items'] = [];
         }
       }
@@ -396,7 +402,9 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
       }
       return true;
     } catch (e) {
-      debugPrint('[PartnerNotifier] updateRestaurantImage error: $e');
+      if (kDebugMode) {
+        debugPrint('[PartnerNotifier] updateRestaurantImage error: $e');
+      }
       state = state.copyWith(restaurantImageUrl: oldUrl);
       return false;
     }
@@ -412,7 +420,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         body: {'is_online': newState},
       );
     } catch (e) {
-      debugPrint('[PartnerNotifier] toggleOnline error: $e');
+      if (kDebugMode) debugPrint('[PartnerNotifier] toggleOnline error: $e');
       // Revert on failure
       state = state.copyWith(isOnline: !newState);
     }
@@ -443,7 +451,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           body: {'status': 'confirmed'},
         )
         .catchError((e) {
-          debugPrint('[PartnerNotifier] acceptOrder error: $e');
+          if (kDebugMode) debugPrint('[PartnerNotifier] acceptOrder error: $e');
           state = state.copyWith(orders: previousOrders);
           return ApiResponse<dynamic>(success: false);
         });
@@ -464,7 +472,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           body: {'status': 'cancelled', 'reason': reason},
         )
         .catchError((e) {
-          debugPrint('[PartnerNotifier] rejectOrder error: $e');
+          if (kDebugMode) debugPrint('[PartnerNotifier] rejectOrder error: $e');
           state = state.copyWith(orders: previousOrders);
           return ApiResponse<dynamic>(success: false);
         });
@@ -480,7 +488,9 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           body: {'status': 'preparing'},
         )
         .catchError((e) {
-          debugPrint('[PartnerNotifier] markPreparing error: $e');
+          if (kDebugMode) {
+            debugPrint('[PartnerNotifier] markPreparing error: $e');
+          }
           state = state.copyWith(orders: previousOrders);
           return ApiResponse<dynamic>(success: false);
         });
@@ -496,7 +506,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
           body: {'status': 'ready'},
         )
         .catchError((e) {
-          debugPrint('[PartnerNotifier] markReady error: $e');
+          if (kDebugMode) debugPrint('[PartnerNotifier] markReady error: $e');
           state = state.copyWith(orders: previousOrders);
           return ApiResponse<dynamic>(success: false);
         });

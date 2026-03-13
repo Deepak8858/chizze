@@ -330,7 +330,7 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
         return;
       }
     } catch (e) {
-      debugPrint('[Earnings] fetchEarnings error: $e');
+      if (kDebugMode) debugPrint('[Earnings] fetchEarnings error: $e');
     }
 
     // Fallback — show empty state
@@ -365,7 +365,7 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
         return;
       }
     } catch (e) {
-      debugPrint('[Earnings] fetchPayouts error: $e');
+      if (kDebugMode) debugPrint('[Earnings] fetchPayouts error: $e');
     }
 
     state = state.copyWith(isPayoutsLoading: false);
@@ -397,7 +397,7 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
       );
       return false;
     } catch (e) {
-      debugPrint('[Earnings] requestPayout error: $e');
+      if (kDebugMode) debugPrint('[Earnings] requestPayout error: $e');
       state = state.copyWith(
         isRequestingPayout: false,
         errorMessage: 'Network error — try again',

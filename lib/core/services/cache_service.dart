@@ -60,7 +60,7 @@ class CacheService {
   Future<void> init() async {
     await Hive.initFlutter();
     _box = await Hive.openBox<Map>(_boxName);
-    debugPrint('[Cache] Initialized with ${_box.length} cached entries');
+    if (kDebugMode) debugPrint('[Cache] Initialized with ${_box.length} cached entries');
   }
 
   /// Get TTL for an endpoint
@@ -125,7 +125,7 @@ class CacheService {
   /// Clear all cached data
   Future<void> clearAll() async {
     await _box.clear();
-    debugPrint('[Cache] All entries cleared');
+    if (kDebugMode) debugPrint('[Cache] All entries cleared');
   }
 
   /// Clear expired entries
@@ -143,7 +143,7 @@ class CacheService {
       }
     }
     await _box.deleteAll(keysToDelete);
-    if (pruned > 0) debugPrint('[Cache] Pruned $pruned expired entries');
+    if (pruned > 0) if (kDebugMode) debugPrint('[Cache] Pruned $pruned expired entries');
     return pruned;
   }
 }
@@ -152,6 +152,7 @@ class CacheService {
 /// and caches successful GET responses for offline fallback
 class CacheInterceptor extends Interceptor {
   final CacheService _cache;
+  final Connectivity _connectivity = Connectivity();
 
   CacheInterceptor(this._cache);
 
@@ -179,14 +180,14 @@ class CacheInterceptor extends Interceptor {
     }
 
     // Check connectivity
-    final connectivity = await Connectivity().checkConnectivity();
+    final connectivity = await _connectivity.checkConnectivity();
     final isOffline = connectivity.contains(ConnectivityResult.none);
 
     if (isOffline) {
       // Serve stale cache when offline
       final cached = _cache.getStale(options.path, options.queryParameters);
       if (cached != null) {
-        debugPrint('[Cache] Serving offline cache: ${options.path}');
+        if (kDebugMode) debugPrint('[Cache] Serving offline cache: ${options.path}');
         handler.resolve(
           Response(
             requestOptions: options,
@@ -237,7 +238,7 @@ class CacheInterceptor extends Interceptor {
         err.requestOptions.queryParameters,
       );
       if (cached != null) {
-        debugPrint('[Cache] Serving stale cache on error: ${err.requestOptions.path}');
+        if (kDebugMode) debugPrint('[Cache] Serving stale cache on error: ${err.requestOptions.path}');
         handler.resolve(
           Response(
             requestOptions: err.requestOptions,

@@ -184,8 +184,10 @@ class DeliveryRequest {
     if (secondsRemaining <= 0) return 0;
     final placed = order.placedAt;
     if (placed == null) {
-      debugPrint('[DeliveryRequest] countdownFraction: order.placedAt is null '
+      if (kDebugMode) {
+        debugPrint('[DeliveryRequest] countdownFraction: order.placedAt is null '
           '(orderId=${order.id}), using 60s fallback denominator');
+      }
       return (secondsRemaining / 60).clamp(0.0, 1.0);
     }
     // Compute total window from order placement to expiry

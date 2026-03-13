@@ -83,9 +83,11 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
               }
             },
             onError: (error, stack) {
-              debugPrint(
+              if (kDebugMode) {
+                debugPrint(
                 '[RiderLocation] realtime stream error for rider $riderId on $channel: $error',
               );
+              }
               _realtimeSubscription?.cancel();
               _realtimeSubscription = null;
               state = null;
@@ -97,7 +99,7 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
             },
           );
     } catch (e) {
-      debugPrint('[RiderLocation] realtime subscription error: $e');
+      if (kDebugMode) debugPrint('[RiderLocation] realtime subscription error: $e');
     }
 
     // Go WebSocket — delivery_location events (higher frequency from rider app)
@@ -116,9 +118,11 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
           }
         },
         onError: (error, stack) {
-          debugPrint(
+          if (kDebugMode) {
+            debugPrint(
             '[RiderLocation] WebSocket stream error for rider $riderId: $error',
           );
+          }
           _wsSubscription?.cancel();
           _wsSubscription = null;
           state = null;
@@ -129,7 +133,7 @@ class RiderLocationNotifier extends StateNotifier<RiderLocation?> {
         },
       );
     } catch (e) {
-      debugPrint('[RiderLocation] WebSocket subscription error for rider $riderId: $e');
+      if (kDebugMode) debugPrint('[RiderLocation] WebSocket subscription error for rider $riderId: $e');
       _wsSubscription?.cancel();
       _wsSubscription = null;
       state = null;

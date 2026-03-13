@@ -122,10 +122,16 @@ class CouponsNotifier extends StateNotifier<CouponsState> {
         );
       }
     } on ApiException catch (e) {
-      debugPrint('[CouponsProvider] API error fetching coupons: ${e.message}');
+      if (kDebugMode) {
+        debugPrint(
+          '[CouponsProvider] API error fetching coupons: ${e.message}',
+        );
+      }
       state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
-      debugPrint('[CouponsProvider] Unexpected error fetching coupons: $e');
+      if (kDebugMode) {
+        debugPrint('[CouponsProvider] Unexpected error fetching coupons: $e');
+      }
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
@@ -155,12 +161,16 @@ class CouponsNotifier extends StateNotifier<CouponsState> {
         error: response.error ?? 'Coupon validation failed',
       );
     } on ApiException catch (e) {
-      debugPrint(
+      if (kDebugMode) {
+        debugPrint(
         '[CouponsProvider] Validation error for code $code: ${e.message}',
       );
+      }
       state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
-      debugPrint('[CouponsProvider] Unexpected validation error: $e');
+      if (kDebugMode) {
+        debugPrint('[CouponsProvider] Unexpected validation error: $e');
+      }
       state = state.copyWith(isLoading: false, error: e.toString());
     }
     return false;

@@ -67,9 +67,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 
   AuthNotifier(this._account, this._apiClient) : super(const AuthState()) {
+    // Set up forced-logout callback: when token refresh fails unrecoverably
+    _apiClient.setAuthFailureCallback(() {
+      if (state.isAuthenticated) {
+        logout();
+      }
+    });
+
     // Set up auto-refresh: when 401 is received, re-exchange the Appwrite JWT
     _apiClient.setRefreshCallback(() async {
       try {
@@ -80,12 +88,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
         final token = response.data?['token'] as String?;
         if (token != null) {
-          debugPrint('[Auth] Token refreshed via interceptor');
+          if (kDebugMode) debugPrint('[Auth] Token refreshed via interceptor');
           await _apiClient.persistToken(token);
           return token;
         }
       } catch (e) {
-        debugPrint('[Auth] Refresh via interceptor failed: $e');
+        if (kDebugMode) debugPrint('[Auth] Refresh via interceptor failed: $e');
       }
       return null;
     });
@@ -97,7 +105,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Throws on failure — callers decide whether to treat it as fatal.
   Future<void> _exchangeToken() async {
     final jwt = await _account.createJWT();
-    debugPrint('[Auth] Got Appwrite JWT, exchanging with backend...');
+    if (kDebugMode) {
+      debugPrint('[Auth] Got Appwrite JWT, exchanging with backend...');
+    }
     // Clear any stale backend token before exchange (exchange is a public endpoint)
     _apiClient.clearAuthToken();
     final body = <String, dynamic>{'jwt': jwt.jwt};
@@ -126,7 +136,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userRole: role,
         isNewUser: isNew,
       );
-      debugPrint('[Auth] Backend JWT set & persisted, role=$role, isNew=$isNew');
+      if (kDebugMode) {
+        debugPrint(
+          '[Auth] Backend JWT set & persisted, role=$role, isNew=$isNew',
+        );
+      }
     } else {
       throw Exception('Backend returned no token');
     }
@@ -137,7 +151,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _secureStorage.write(key: _kRoleStorageKey, value: role);
     } catch (e) {
-      debugPrint('[Auth] persistRole error: $e');
+      if (kDebugMode) debugPrint('[Auth] persistRole error: $e');
     }
   }
 
@@ -146,24 +160,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       return await _secureStorage.read(key: _kRoleStorageKey);
     } catch (e) {
-      debugPrint('[Auth] loadPersistedRole error: $e');
+      if (kDebugMode) debugPrint('[Auth] loadPersistedRole error: $e');
       return null;
     }
   }
 
   /// Check if user has an active session
   Future<void> checkSession() async {
-    debugPrint('[Auth] checkSession() started');
+    if (kDebugMode) debugPrint('[Auth] checkSession() started');
     state = state.copyWith(isLoading: true);
     try {
       final user = await _account.get().timeout(
         const Duration(seconds: 10),
         onTimeout: () {
-          debugPrint('[Auth] Appwrite account.get() timed out after 10s');
+          if (kDebugMode) {
+            debugPrint('[Auth] Appwrite account.get() timed out after 10s');
+          }
           throw TimeoutException('Session check timed out');
         },
       );
-      debugPrint('[Auth] Session found for user: ${user.name} (${user.$id})');
+      if (kDebugMode) {
+        debugPrint('[Auth] Session found for user: ${user.name} (${user.$id})');
+      }
 
       // Try to restore persisted backend JWT & role (faster than exchange)
       final persisted = await _apiClient.loadPersistedToken();
@@ -172,7 +190,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       if (persisted != null && persistedRole != null) {
         // Fast path: have persisted token & role — set everything atomically
-        debugPrint('[Auth] Using persisted JWT, role=$persistedRole, onboarded=$onboarded');
+        if (kDebugMode) {
+          debugPrint(
+            '[Auth] Using persisted JWT, role=$persistedRole, onboarded=$onboarded',
+          );
+        }
         state = state.copyWith(
           status: AuthStatus.authenticated,
           user: user,
@@ -190,7 +212,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
       }
     } catch (e) {
-      debugPrint('[Auth] checkSession error: $e');
+      if (kDebugMode) debugPrint('[Auth] checkSession error: $e');
 
       // Determine if this is a network/connectivity error vs a genuine
       // "no session" response from Appwrite.
@@ -214,9 +236,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final onboarded = await _secureStorage.read(key: _kOnboardedKey);
 
         if (persisted != null && persistedRole != null) {
-          debugPrint(
+          if (kDebugMode) {
+            debugPrint(
             '[Auth] Offline mode: restoring session from local storage (role=$persistedRole)',
           );
+          }
           state = state.copyWith(
             status: AuthStatus.authenticated,
             isLoading: false,
@@ -258,13 +282,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: e.message ?? 'Login failed',
       );
     } on ApiException catch (e) {
-      debugPrint('[Auth] Login failed (exchange): $e');
+      if (kDebugMode) debugPrint('[Auth] Login failed (exchange): $e');
       try {
         await _account.deleteSession(sessionId: 'current');
       } catch (_) {}
       state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
-      debugPrint('[Auth] Login failed (exchange): $e');
+      if (kDebugMode) debugPrint('[Auth] Login failed (exchange): $e');
       // Clean up the Appwrite session since we can't complete login
       try { await _account.deleteSession(sessionId: 'current'); } catch (_) {}
       state = state.copyWith(
@@ -302,16 +326,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<String?> sendPhoneOTP(String phone) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      debugPrint('[Auth] sendPhoneOTP: sending OTP to $phone');
+      if (kDebugMode) debugPrint('[Auth] sendPhoneOTP: sending OTP to $phone');
       final token = await _account.createPhoneToken(
         userId: ID.unique(),
         phone: phone,
       );
-      debugPrint('[Auth] sendPhoneOTP: success, userId=${token.userId}');
+      if (kDebugMode) {
+        debugPrint('[Auth] sendPhoneOTP: success, userId=${token.userId}');
+      }
       state = state.copyWith(isLoading: false);
       return token.userId;
     } on AppwriteException catch (e) {
-      debugPrint('[Auth] sendPhoneOTP: failed — ${e.message} (${e.code})');
+      if (kDebugMode) {
+        debugPrint('[Auth] sendPhoneOTP: failed — ${e.message} (${e.code})');
+      }
       state = state.copyWith(
         isLoading: false,
         error: e.message ?? 'Failed to send OTP',
@@ -324,7 +352,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> verifyPhoneOTP(String userId, String otp) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      debugPrint('[Auth] verifyPhoneOTP: verifying userId=$userId');
+      if (kDebugMode) {
+        debugPrint('[Auth] verifyPhoneOTP: verifying userId=$userId');
+      }
       await _account.createSession(userId: userId, secret: otp);
       final user = await _account.get();
       if (kDebugMode) {
@@ -338,19 +368,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isLoading: false,
       );
     } on AppwriteException catch (e) {
-      debugPrint('[Auth] verifyPhoneOTP: failed — ${e.message} (${e.code})');
+      if (kDebugMode) {
+        debugPrint('[Auth] verifyPhoneOTP: failed — ${e.message} (${e.code})');
+      }
       state = state.copyWith(
         isLoading: false,
         error: e.message ?? 'Invalid OTP',
       );
     } on ApiException catch (e) {
-      debugPrint('[Auth] verifyPhoneOTP exchange failed: $e');
+      if (kDebugMode) debugPrint('[Auth] verifyPhoneOTP exchange failed: $e');
       try {
         await _account.deleteSession(sessionId: 'current');
       } catch (_) {}
       state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
-      debugPrint('[Auth] verifyPhoneOTP exchange failed: $e');
+      if (kDebugMode) debugPrint('[Auth] verifyPhoneOTP exchange failed: $e');
       // Clean up the Appwrite session since we can't complete login
       try { await _account.deleteSession(sessionId: 'current'); } catch (_) {}
       state = state.copyWith(
@@ -379,13 +411,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: e.message ?? 'OAuth login failed',
       );
     } on ApiException catch (e) {
-      debugPrint('[Auth] OAuth login exchange failed: $e');
+      if (kDebugMode) debugPrint('[Auth] OAuth login exchange failed: $e');
       try {
         await _account.deleteSession(sessionId: 'current');
       } catch (_) {}
       state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
-      debugPrint('[Auth] OAuth login exchange failed: $e');
+      if (kDebugMode) debugPrint('[Auth] OAuth login exchange failed: $e');
       try { await _account.deleteSession(sessionId: 'current'); } catch (_) {}
       state = state.copyWith(
         isLoading: false,
@@ -398,7 +430,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void setSelectedRole(String role) {
     if (state.selectedRole == role) return; // no-op if already set
     state = state.copyWith(selectedRole: role);
-    debugPrint('[Auth] Selected role set to: $role');
+    if (kDebugMode) debugPrint('[Auth] Selected role set to: $role');
   }
 
   /// Complete onboarding — save profile + role-specific data to backend, mark as onboarded
@@ -463,7 +495,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         '/auth/onboard',
         body: body,
       );
-      debugPrint('[Auth] Onboarding profile saved via /auth/onboard');
+      if (kDebugMode) {
+        debugPrint('[Auth] Onboarding profile saved via /auth/onboard');
+      }
 
       // For customers, auto-create a saved address from onboarding data
       if (state.userRole == 'customer' && address != null && address.isNotEmpty) {
@@ -489,41 +523,53 @@ class AuthNotifier extends StateNotifier<AuthState> {
           }
 
           await _apiClient.post('/users/me/addresses', body: body);
-          debugPrint('[Auth] Auto-created saved address from onboarding');
+          if (kDebugMode) {
+            debugPrint('[Auth] Auto-created saved address from onboarding');
+          }
         } catch (e) {
-          debugPrint('[Auth] Auto-create saved address failed (non-critical): $e');
+          if (kDebugMode) {
+            debugPrint(
+              '[Auth] Auto-create saved address failed (non-critical): $e',
+            );
+          }
         }
       }
 
       // Mark as onboarded locally ONLY after successful API call
       await _secureStorage.write(key: _kOnboardedKey, value: 'true');
       state = state.copyWith(isNewUser: false);
-      debugPrint('[Auth] Onboarding complete');
+      if (kDebugMode) debugPrint('[Auth] Onboarding complete');
     } catch (e) {
-      debugPrint('[Auth] Onboarding save failed: $e');
+      if (kDebugMode) debugPrint('[Auth] Onboarding save failed: $e');
       rethrow; // Let caller show error — do NOT mark as onboarded
     }
   }
 
   /// Logout
   Future<void> logout() async {
-    debugPrint('[Auth] logout() called');
+    if (kDebugMode) debugPrint('[Auth] logout() called');
     state = state.copyWith(isLoading: true);
 
     // Blacklist JWT on Go backend (best-effort)
     try {
       await _apiClient.delete('/auth/logout');
-      debugPrint('[Auth] Backend logout successful (JWT blacklisted)');
+      if (kDebugMode) {
+        debugPrint('[Auth] Backend logout successful (JWT blacklisted)');
+      }
     } catch (e) {
-      debugPrint('[Auth] Backend logout failed (non-critical): $e');
+      if (kDebugMode) {
+        debugPrint('[Auth] Backend logout failed (non-critical): $e');
+      }
     }
 
     // Delete Appwrite session
     try {
       await _account.deleteSession(sessionId: 'current');
-      debugPrint('[Auth] Appwrite session deleted');
+      if (kDebugMode) debugPrint('[Auth] Appwrite session deleted');
     } catch (e) {
-      debugPrint('[Auth] Session delete error (may be expired): $e');
+      if (kDebugMode) {
+        debugPrint('[Auth] Session delete error (may be expired): $e');
+      }
     }
     _apiClient.clearAuthToken();
     await _apiClient.clearPersistedToken();
@@ -533,7 +579,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _secureStorage.delete(key: _kOnboardedKey);
     } catch (_) {}
     state = const AuthState(status: AuthStatus.unauthenticated);
-    debugPrint('[Auth] State set to unauthenticated');
+    if (kDebugMode) debugPrint('[Auth] State set to unauthenticated');
   }
 
   /// Clear error

@@ -1,7 +1,7 @@
 name: chizze
 description: "Chizze — Premium food delivery app"
 publish_to: "none"
-version: 1.1.0+2
+version: 1.1.2+4
 
 environment:
   sdk: ^3.10.8
@@ -33,7 +33,7 @@ dependencies:
   web_socket_channel: ^3.0.3
 
   # Backend
-  appwrite: 21.1.0
+  appwrite: ^21.1.0
 
   # Local Storage
   shared_preferences: ^2.3.4
@@ -54,7 +54,7 @@ dependencies:
   mapbox_maps_flutter: ^2.18.0
 
   # Utilities
-  intl: any
+  intl: ^0.19.0
   url_launcher: ^6.3.1
   share_plus: ^10.1.4
   connectivity_plus: ^6.1.3

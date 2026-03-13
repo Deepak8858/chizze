@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../core/models/api_response.dart';
@@ -227,7 +227,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         },
       );
     } catch (e) {
-      debugPrint('[Payment] Backend verification failed: $e');
+      if (kDebugMode) debugPrint('[Payment] Backend verification failed: $e');
       // Non-fatal — webhook will catch it server-side
     }
 

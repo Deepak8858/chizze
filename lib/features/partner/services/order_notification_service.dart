@@ -33,7 +33,7 @@ class OrderNotificationService {
       await _notifications.initialize(settings);
       _initialized = true;
     } catch (e) {
-      debugPrint('[OrderNotificationService] init error: $e');
+      if (kDebugMode) debugPrint('[OrderNotificationService] init error: $e');
     }
   }
 
@@ -79,7 +79,9 @@ class OrderNotificationService {
           details,
         );
       } catch (e) {
-        debugPrint('[OrderNotificationService] notification error: $e');
+        if (kDebugMode) {
+          debugPrint('[OrderNotificationService] notification error: $e');
+        }
       }
     }
   }

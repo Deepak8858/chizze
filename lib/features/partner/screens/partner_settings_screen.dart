@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -51,7 +52,9 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
         );
       }
     } catch (e) {
-      debugPrint('[PartnerSettings] _pickAndUploadImage error: $e');
+      if (kDebugMode) {
+        debugPrint('[PartnerSettings] _pickAndUploadImage error: $e');
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

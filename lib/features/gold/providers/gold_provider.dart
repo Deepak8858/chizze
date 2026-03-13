@@ -121,7 +121,7 @@ class GoldNotifier extends StateNotifier<GoldState> {
     } on ApiException {
       // Keep current state
     } catch (e) {
-      debugPrint('[Gold] fetchPlans error: $e');
+      if (kDebugMode) debugPrint('[Gold] fetchPlans error: $e');
     }
   }
 
@@ -150,7 +150,7 @@ class GoldNotifier extends StateNotifier<GoldState> {
     } on ApiException {
       // Not subscribed
     } catch (e) {
-      debugPrint('[Gold] fetchStatus error: $e');
+      if (kDebugMode) debugPrint('[Gold] fetchStatus error: $e');
     }
   }
 
@@ -177,7 +177,7 @@ class GoldNotifier extends StateNotifier<GoldState> {
     } on ApiException catch (e) {
       state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
-      debugPrint('[Gold] subscribe error: $e');
+      if (kDebugMode) debugPrint('[Gold] subscribe error: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Something went wrong. Try again.',
@@ -205,7 +205,7 @@ class GoldNotifier extends StateNotifier<GoldState> {
     } on ApiException catch (e) {
       state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
-      debugPrint('[Gold] cancel error: $e');
+      if (kDebugMode) debugPrint('[Gold] cancel error: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Something went wrong. Try again.',

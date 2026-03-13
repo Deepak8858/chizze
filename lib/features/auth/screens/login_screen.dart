@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -69,12 +70,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Auth success → router redirect will handle navigation based on role + onboarding
       if (prev?.status != AuthStatus.authenticated &&
           next.status == AuthStatus.authenticated) {
-        debugPrint('[Login] Auth success! Router redirect will navigate.');
+        if (kDebugMode) {
+          debugPrint('[Login] Auth success! Router redirect will navigate.');
+        }
         return;
       }
       // Error → show snackbar
       if (next.error != null) {
-        debugPrint('[Login] Error: ${next.error}');
+        if (kDebugMode) debugPrint('[Login] Error: ${next.error}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.error!),

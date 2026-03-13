@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../core/services/map_config.dart';
@@ -97,9 +98,11 @@ class _DeliveryMapState extends State<DeliveryMap> {
             cameraOptions: _initialCamera(),
             onMapCreated: _onMapCreated,
                   onMapLoadErrorListener: (MapLoadingErrorEventData error) {
-                    debugPrint(
+                    if (kDebugMode) {
+                      debugPrint(
                       '[DeliveryMap] Map load error: ${error.type}, ${error.message}',
                     );
+                    }
                     if (mounted) setState(() => _mapError = true);
                   },
           ),
@@ -317,7 +320,7 @@ class _DeliveryMapState extends State<DeliveryMap> {
         await _addRouteLine();
       }
     } catch (e) {
-      debugPrint('[DeliveryMap] _refreshRoute error: $e');
+      if (kDebugMode) debugPrint('[DeliveryMap] _refreshRoute error: $e');
     }
   }
 
@@ -330,7 +333,7 @@ class _DeliveryMapState extends State<DeliveryMap> {
     } catch (e) {
       // Mapbox platform channel can fail if the map surface is disposed
       // while annotations are being updated (FLUTTER-D on Sentry).
-      debugPrint('[DeliveryMap] _refreshMarkers error: $e');
+      if (kDebugMode) debugPrint('[DeliveryMap] _refreshMarkers error: $e');
       if (mounted) {
         setState(() => _mapError = true);
       }

@@ -98,7 +98,7 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
     } on ApiException {
       // Keep current state
     } catch (e) {
-      debugPrint('[Address] fetchAddresses error: $e');
+      if (kDebugMode) debugPrint('[Address] fetchAddresses error: $e');
     }
   }
 
@@ -132,13 +132,15 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
       if (r.success && r.data != null) {
         final serverAddress = _parseDoc(r.data as Map<String, dynamic>, fallback: address);
         state = [...state, serverAddress];
-        debugPrint('[Address] add success: ${serverAddress.id}');
+        if (kDebugMode) {
+          debugPrint('[Address] add success: ${serverAddress.id}');
+        }
         return serverAddress;
       }
-      debugPrint('[Address] add failed: ${r.error}');
+      if (kDebugMode) debugPrint('[Address] add failed: ${r.error}');
       return null;
     } catch (e) {
-      debugPrint('[Address] add error: $e');
+      if (kDebugMode) debugPrint('[Address] add error: $e');
       return null;
     }
   }
@@ -150,11 +152,11 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
     try {
       final r = await _api.delete('${ApiConfig.addresses}/$id');
       if (r.success) return true;
-      debugPrint('[Address] remove failed: ${r.error}');
+      if (kDebugMode) debugPrint('[Address] remove failed: ${r.error}');
       state = prev;
       return false;
     } catch (e) {
-      debugPrint('[Address] remove error: $e');
+      if (kDebugMode) debugPrint('[Address] remove error: $e');
       state = prev;
       return false;
     }
@@ -184,11 +186,11 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
         }
         return updated;
       }
-      debugPrint('[Address] update failed: ${r.error}');
+      if (kDebugMode) debugPrint('[Address] update failed: ${r.error}');
       state = state.map((a) => a.id == updated.id ? old : a).toList();
       return null;
     } catch (e) {
-      debugPrint('[Address] update error: $e');
+      if (kDebugMode) debugPrint('[Address] update error: $e');
       state = state.map((a) => a.id == updated.id ? old : a).toList();
       return null;
     }
@@ -202,7 +204,9 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
     try {
       final r = await _api.put('${ApiConfig.addresses}/$id', body: {'is_default': true});
       if (!r.success) {
-        debugPrint('[Address] setDefault failed for $id: ${r.error}');
+        if (kDebugMode) {
+          debugPrint('[Address] setDefault failed for $id: ${r.error}');
+        }
         state = prev;
         return false;
       }
@@ -211,12 +215,14 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
         try {
           await _api.put('${ApiConfig.addresses}/${addr.id}', body: {'is_default': false});
         } catch (e) {
-          debugPrint('[Address] clear old default error for ${addr.id}: $e');
+          if (kDebugMode) {
+            debugPrint('[Address] clear old default error for ${addr.id}: $e');
+          }
         }
       }
       return true;
     } catch (e) {
-      debugPrint('[Address] setDefault error for $id: $e');
+      if (kDebugMode) debugPrint('[Address] setDefault error for $id: $e');
       state = prev;
       return false;
     }

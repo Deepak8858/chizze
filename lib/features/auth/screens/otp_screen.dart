@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -65,7 +66,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   void _verifyOTP() {
     if (_isVerifying) return;
     setState(() => _isVerifying = true);
-    debugPrint('[OTP] Verifying OTP for userId=${widget.userId}');
+    if (kDebugMode) {
+      debugPrint('[OTP] Verifying OTP for userId=${widget.userId}');
+    }
     ref.read(authProvider.notifier).verifyPhoneOTP(widget.userId, _otp);
   }
 
@@ -85,7 +88,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       // Auth success → GoRouter refreshListenable will auto-redirect based on role + onboarding
       if (prev?.status != AuthStatus.authenticated &&
           next.status == AuthStatus.authenticated) {
-        debugPrint('[OTP] Auth success! role=${next.userRole}, isNew=${next.isNewUser}');
+        if (kDebugMode) debugPrint('[OTP] Auth success! role=${next.userRole}, isNew=${next.isNewUser}');
         // GoRouter's refreshListenable already redirects from /otp (auth route)
         // to the correct destination based on role + onboarding state.
         // No manual context.go() needed — the redirect fires automatically.
@@ -93,7 +96,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       }
       // Error → show snackbar, reset verify flag, clear OTP
       if (next.error != null) {
-        debugPrint('[OTP] Error: ${next.error}');
+        if (kDebugMode) debugPrint('[OTP] Error: ${next.error}');
         setState(() => _isVerifying = false);
         _clearOtp();
         ScaffoldMessenger.of(context).showSnackBar(

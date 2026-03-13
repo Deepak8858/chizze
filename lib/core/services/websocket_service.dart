@@ -140,7 +140,7 @@ class WebSocketService {
   Future<void> connect() async {
     final token = _apiClient.currentToken;
     if (token == null || token.isEmpty) {
-      debugPrint('[WS] No auth token — skipping connect');
+      if (kDebugMode) debugPrint('[WS] No auth token — skipping connect');
       return;
     }
     if (_state == WsConnectionState.connected ||
@@ -150,7 +150,7 @@ class WebSocketService {
 
     _setState(WsConnectionState.connecting);
     final wsUrl = _wsUri(token);
-    debugPrint('[WS] Connecting to ${wsUrl.toString().replaceAll(RegExp(r'token=[^&]+'), 'token=***')}');
+    if (kDebugMode) debugPrint('[WS] Connecting to ${wsUrl.toString().replaceAll(RegExp(r'token=[^&]+'), 'token=***')}');
 
     try {
       _channel = WebSocketChannel.connect(wsUrl);
@@ -166,9 +166,9 @@ class WebSocketService {
 
       _setState(WsConnectionState.connected);
       _startHeartbeat();
-      debugPrint('[WS] Connected');
+      if (kDebugMode) debugPrint('[WS] Connected');
     } catch (e) {
-      debugPrint('[WS] Connection failed: $e');
+      if (kDebugMode) debugPrint('[WS] Connection failed: $e');
       _channel = null;
       _setState(WsConnectionState.disconnected);
       _scheduleReconnect();
@@ -183,7 +183,7 @@ class WebSocketService {
     _channel = null;
     _setState(WsConnectionState.disconnected);
     _reconnectAttempts = 0;
-    debugPrint('[WS] Disconnected');
+    if (kDebugMode) debugPrint('[WS] Disconnected');
   }
 
   /// Send a JSON message to the server
@@ -192,7 +192,7 @@ class WebSocketService {
     try {
       _channel!.sink.add(jsonEncode(message));
     } catch (e) {
-      debugPrint('[WS] Send error: $e');
+      if (kDebugMode) debugPrint('[WS] Send error: $e');
     }
   }
 
@@ -207,19 +207,19 @@ class WebSocketService {
         _eventController.add(event);
       }
     } catch (e) {
-      debugPrint('[WS] Parse error: $e');
+      if (kDebugMode) debugPrint('[WS] Parse error: $e');
     }
   }
 
   void _onError(Object error) {
-    debugPrint('[WS] Error: $error');
+    if (kDebugMode) debugPrint('[WS] Error: $error');
     _heartbeatTimer?.cancel();
     _setState(WsConnectionState.disconnected);
     _scheduleReconnect();
   }
 
   void _onDone() {
-    debugPrint('[WS] Connection closed');
+    if (kDebugMode) debugPrint('[WS] Connection closed');
     _heartbeatTimer?.cancel();
     if (_state != WsConnectionState.disconnected) {
       _setState(WsConnectionState.disconnected);
@@ -242,7 +242,7 @@ class WebSocketService {
       seconds: (1 << _reconnectAttempts).clamp(1, _maxReconnectDelay.inSeconds),
     );
     _reconnectAttempts++;
-    debugPrint('[WS] Reconnecting in ${delay.inSeconds}s (attempt $_reconnectAttempts)');
+    if (kDebugMode) debugPrint('[WS] Reconnecting in ${delay.inSeconds}s (attempt $_reconnectAttempts)');
     _reconnectTimer = Timer(delay, connect);
   }
 

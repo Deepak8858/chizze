@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
 import '../constants/appwrite_constants.dart';
+import '../../config/environment.dart';
 import 'appwrite_service.dart';
 
 /// Service for uploading images to Appwrite Storage
@@ -25,7 +26,7 @@ class ImageUploadService {
       if (source == ImageSource.camera) {
         final status = await ph.Permission.camera.request();
         if (!status.isGranted) {
-          debugPrint('[ImageUploadService] Camera permission denied');
+          if (kDebugMode) debugPrint('[ImageUploadService] Camera permission denied');
           return null;
         }
       } else {
@@ -34,7 +35,7 @@ class ImageUploadService {
         if (!status.isGranted) {
           status = await ph.Permission.storage.request();
           if (!status.isGranted) {
-            debugPrint('[ImageUploadService] Photo access denied');
+            if (kDebugMode) debugPrint('[ImageUploadService] Photo access denied');
             return null;
           }
         }
@@ -51,7 +52,7 @@ class ImageUploadService {
         return File(picked.path);
       }
     } catch (e) {
-      debugPrint('[ImageUploadService] pickImage error: $e');
+      if (kDebugMode) debugPrint('[ImageUploadService] pickImage error: $e');
     }
     return null;
   }
@@ -90,19 +91,19 @@ class ImageUploadService {
       await _storage.deleteFile(bucketId: bucketId, fileId: fileId);
       return true;
     } catch (e) {
-      debugPrint('[ImageUploadService] deleteFile error: $e');
+      if (kDebugMode) debugPrint('[ImageUploadService] deleteFile error: $e');
       return false;
     }
   }
 
   /// Get the preview URL for a file
   static String getFilePreviewUrl(String bucketId, String fileId) {
-    return '${AppwriteConfig.endpoint}/storage/buckets/$bucketId/files/$fileId/preview?project=${AppwriteConfig.projectId}&width=400&height=400&gravity=center&quality=80';
+    return '${Environment.appwritePublicEndpoint}/storage/buckets/$bucketId/files/$fileId/preview?project=${Environment.appwriteProjectId}&width=400&height=400&gravity=center&quality=80';
   }
 
   /// Get the view URL for a file (full resolution)
   static String getFileViewUrl(String bucketId, String fileId) {
-    return '${AppwriteConfig.endpoint}/storage/buckets/$bucketId/files/$fileId/view?project=${AppwriteConfig.projectId}';
+    return '${Environment.appwritePublicEndpoint}/storage/buckets/$bucketId/files/$fileId/view?project=${Environment.appwriteProjectId}';
   }
 
   /// Internal upload helper
@@ -125,7 +126,7 @@ class ImageUploadService {
       // Return the preview URL for the uploaded file
       return getFilePreviewUrl(bucketId, result.$id);
     } catch (e) {
-      debugPrint('[ImageUploadService] upload error: $e');
+      if (kDebugMode) debugPrint('[ImageUploadService] upload error: $e');
       return null;
     }
   }

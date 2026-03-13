@@ -152,12 +152,14 @@ class Order {
   /// Parse placed_at with explicit logging when missing/invalid.
   static DateTime? _parsePlacedAt(dynamic raw) {
     if (raw == null || (raw is String && raw.isEmpty)) {
-      debugPrint('[Order] placed_at is missing or empty in API response');
+      if (kDebugMode) {
+        debugPrint('[Order] placed_at is missing or empty in API response');
+      }
       return null;
     }
     final parsed = DateTime.tryParse(raw.toString());
     if (parsed == null) {
-      debugPrint('[Order] placed_at failed to parse: "$raw"');
+      if (kDebugMode) debugPrint('[Order] placed_at failed to parse: "$raw"');
     }
     return parsed;
   }

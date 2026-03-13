@@ -5,7 +5,12 @@ import 'map_config.dart';
 /// Service to fetch driving routes from Mapbox Directions API v5.
 /// Returns a list of [lng, lat] coordinate pairs for the route polyline.
 class RouteService {
-  RouteService._() : _dio = Dio();
+  RouteService._()
+      : _dio = Dio(BaseOptions(
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+          sendTimeout: const Duration(seconds: 10),
+        ));
   static final RouteService instance = RouteService._();
 
   final Dio _dio;
@@ -26,7 +31,7 @@ class RouteService {
     try {
       final response = await _dio.get(url);
       if (response.statusCode != 200) {
-        debugPrint('[RouteService] HTTP ${response.statusCode}');
+        if (kDebugMode) debugPrint('[RouteService] HTTP ${response.statusCode}');
         return null;
       }
 
@@ -45,7 +50,7 @@ class RouteService {
               ])
           .toList();
     } catch (e) {
-      debugPrint('[RouteService] Error fetching route: $e');
+      if (kDebugMode) debugPrint('[RouteService] Error fetching route: $e');
       return null;
     }
   }

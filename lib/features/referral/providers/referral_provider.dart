@@ -80,7 +80,7 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
     } on ApiException {
       // Keep current state
     } catch (e) {
-      debugPrint('[Referral] fetchReferralCode error: $e');
+      if (kDebugMode) debugPrint('[Referral] fetchReferralCode error: $e');
     }
   }
 
@@ -114,7 +114,7 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
     } on ApiException {
       state = state.copyWith(isLoading: false);
     } catch (e) {
-      debugPrint('[Referral] fetchReferrals error: $e');
+      if (kDebugMode) debugPrint('[Referral] fetchReferrals error: $e');
       state = state.copyWith(
         referrals: const [],
         isLoading: false,

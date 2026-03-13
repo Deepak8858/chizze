@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -55,7 +56,7 @@ class _RouterNotifier extends ChangeNotifier {
     final newUserChanged = newState.isNewUser != _authState.isNewUser;
     _authState = newState;
     if (statusChanged || roleChanged || newUserChanged) {
-      debugPrint('[Router] Auth state changed → status=${newState.status}, role=${newState.userRole}, isNew=${newState.isNewUser}');
+      if (kDebugMode) debugPrint('[Router] Auth state changed → status=${newState.status}, role=${newState.userRole}, isNew=${newState.isNewUser}');
       notifyListeners();
     }
   }
@@ -114,7 +115,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           state.uri.path.startsWith('/restaurant') ||
           state.uri.path.startsWith('/scheduled-orders');
 
-      debugPrint('[Router] redirect: path=${state.uri.path}, status=${authState.status}, isAuth=$isAuth, isNew=${authState.isNewUser}');
+      if (kDebugMode) debugPrint('[Router] redirect: path=${state.uri.path}, status=${authState.status}, isAuth=$isAuth, isNew=${authState.isNewUser}');
 
       // Still loading initial auth check — stay on splash
       if (authState.status == AuthStatus.initial) return isSplash ? null : '/';

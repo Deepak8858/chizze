@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'features/profile/providers/user_profile_provider.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'core/services/map_config.dart';
+import 'config/environment.dart';
 
 
 void main() async {
@@ -21,9 +23,9 @@ void main() async {
   // Initialize Firebase (non-fatal if config not present)
   try {
     await Firebase.initializeApp();
-    debugPrint('[Firebase] Initialized successfully');
+    if (kDebugMode) debugPrint('[Firebase] Initialized successfully');
   } catch (e) {
-    debugPrint('[Firebase] Not available: $e');
+    if (kDebugMode) debugPrint('[Firebase] Not available: $e');
   }
 
   // Initialize offline cache (Hive)
@@ -40,7 +42,9 @@ void main() async {
   // that respects beforeSend, so we set this BEFORE init as a pre-init safety net.
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    debugPrint('[ErrorBoundary] ${details.exceptionAsString()}');
+    if (kDebugMode) {
+      debugPrint('[ErrorBoundary] ${details.exceptionAsString()}');
+    }
     // Don't manually report — SentryFlutter's onError handler will take over
     // after init and apply beforeSend filters. Manual capture here would
     // bypass those filters and cause duplicate/noisy events.
@@ -48,13 +52,15 @@ void main() async {
 
   await SentryFlutter.init(
     (options) {
-      options.dsn = 'https://18c1661519b0d5cdebbb190efc5e66bd@o4509849175326720.ingest.us.sentry.io/4510951045922816';
-      // Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
-      // We recommend adjusting this value in production.
-      options.tracesSampleRate = 1.0;
-      // The sampling rate for profiling is relative to tracesSampleRate
-      // Setting to 1.0 will profile 100% of sampled transactions:
-      options.profilesSampleRate = 1.0;
+      options.dsn = const String.fromEnvironment(
+        'SENTRY_DSN',
+        defaultValue: 'https://18c1661519b0d5cdebbb190efc5e66bd@o4509849175326720.ingest.us.sentry.io/4510951045922816',
+      );
+      // Production: sample 20% of transactions and 10% of profiles to control costs.
+      // Dev/staging: 100% for full observability.
+      options.tracesSampleRate = Environment.isProduction ? 0.2 : 1.0;
+      options.profilesSampleRate = Environment.isProduction ? 0.1 : 1.0;
+      options.environment = Environment.env;
 
       // Filter out transient/non-actionable errors before they reach Sentry
       // (Fixes FLUTTER-1, FLUTTER-8, FLUTTER-A, FLUTTER-9)

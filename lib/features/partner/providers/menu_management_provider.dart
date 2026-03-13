@@ -102,7 +102,7 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
         return;
       }
     } catch (e) {
-      debugPrint('[MenuMgmt] loadData error: $e');
+      if (kDebugMode) debugPrint('[MenuMgmt] loadData error: $e');
     }
 
     // API failed — show empty state
@@ -150,7 +150,7 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
         );
       }
     } catch (e) {
-      debugPrint('[MenuMgmt] addCategory error: $e');
+      if (kDebugMode) debugPrint('[MenuMgmt] addCategory error: $e');
       // Rollback temp category on network / parsing failure
       state = state.copyWith(
         categories: state.categories
@@ -182,11 +182,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
         body: {'name': newName},
       );
       if (!r.success) {
-        debugPrint('[Menu] renameCategory failed: ${r.error}');
+        if (kDebugMode) debugPrint('[Menu] renameCategory failed: ${r.error}');
         state = state.copyWith(categories: oldCategories);
       }
     } catch (e) {
-      debugPrint('[Menu] renameCategory error: $e');
+      if (kDebugMode) debugPrint('[Menu] renameCategory error: $e');
       state = state.copyWith(categories: oldCategories);
     }
   }
@@ -216,11 +216,13 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
           body: {'is_active': toggled!.isActive},
         );
         if (!r.success) {
-          debugPrint('[Menu] toggleCategory failed: ${r.error}');
+          if (kDebugMode) {
+            debugPrint('[Menu] toggleCategory failed: ${r.error}');
+          }
           state = state.copyWith(categories: oldCategories);
         }
       } catch (e) {
-        debugPrint('[Menu] toggleCategory error: $e');
+        if (kDebugMode) debugPrint('[Menu] toggleCategory error: $e');
         state = state.copyWith(categories: oldCategories);
       }
     }
@@ -236,11 +238,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     try {
       final r = await _api.delete('${ApiConfig.partnerCategories}/$categoryId');
       if (!r.success) {
-        debugPrint('[Menu] deleteCategory failed: ${r.error}');
+        if (kDebugMode) debugPrint('[Menu] deleteCategory failed: ${r.error}');
         state = state.copyWith(categories: oldCategories, items: oldItems);
       }
     } catch (e) {
-      debugPrint('[Menu] deleteCategory error: $e');
+      if (kDebugMode) debugPrint('[Menu] deleteCategory error: $e');
       state = state.copyWith(categories: oldCategories, items: oldItems);
     }
   }
@@ -355,11 +357,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
           body: body,
         );
         if (!r.success) {
-          debugPrint('[Menu] updateItem failed: ${r.error}');
+          if (kDebugMode) debugPrint('[Menu] updateItem failed: ${r.error}');
           state = state.copyWith(items: oldItems);
         }
       } catch (e) {
-        debugPrint('[Menu] updateItem error: $e');
+        if (kDebugMode) debugPrint('[Menu] updateItem error: $e');
         state = state.copyWith(items: oldItems);
       }
     }
@@ -402,11 +404,13 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
           body: {'is_available': toggled!.isAvailable},
         );
         if (!r.success) {
-          debugPrint('[Menu] toggleAvailability failed: ${r.error}');
+          if (kDebugMode) {
+            debugPrint('[Menu] toggleAvailability failed: ${r.error}');
+          }
           state = state.copyWith(items: oldItems);
         }
       } catch (e) {
-        debugPrint('[Menu] toggleAvailability error: $e');
+        if (kDebugMode) debugPrint('[Menu] toggleAvailability error: $e');
         state = state.copyWith(items: oldItems);
       }
     }
@@ -420,11 +424,11 @@ class MenuManagementNotifier extends StateNotifier<MenuManagementState> {
     try {
       final r = await _api.delete('${ApiConfig.partnerMenu}/$itemId');
       if (!r.success) {
-        debugPrint('[Menu] deleteItem failed: ${r.error}');
+        if (kDebugMode) debugPrint('[Menu] deleteItem failed: ${r.error}');
         state = state.copyWith(items: oldItems);
       }
     } catch (e) {
-      debugPrint('[Menu] deleteItem error: $e');
+      if (kDebugMode) debugPrint('[Menu] deleteItem error: $e');
       state = state.copyWith(items: oldItems);
     }
   }

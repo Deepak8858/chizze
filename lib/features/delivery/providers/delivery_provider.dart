@@ -94,9 +94,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           // This prevents duplicate request popups when the matcher resends
           // (e.g. after a Redis lock expired) or if there's a timing overlap.
           if (state.hasActiveDelivery) {
-            debugPrint(
+            if (kDebugMode) {
+              debugPrint(
               '[Delivery] Ignoring delivery_request — already on active delivery',
             );
+            }
             return;
           }
 
@@ -105,19 +107,21 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           // Also skip if an identical request is already showing (same order)
           if (state.incomingRequest != null &&
               state.incomingRequest!.order.id == request.order.id) {
-            debugPrint(
+            if (kDebugMode) {
+              debugPrint(
               '[Delivery] Ignoring duplicate delivery_request for same order',
             );
+            }
             return;
           }
 
           state = state.copyWith(incomingRequest: request);
         } catch (e) {
-          debugPrint('[Delivery] WS delivery_request parse error: $e');
+          if (kDebugMode) debugPrint('[Delivery] WS delivery_request parse error: $e');
         }
       });
     } catch (e) {
-      debugPrint('[Delivery] WS subscribe error: $e');
+      if (kDebugMode) debugPrint('[Delivery] WS subscribe error: $e');
     }
   }
 
@@ -183,7 +187,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         );
       });
     } catch (e) {
-      debugPrint('[Delivery] WS order updates subscribe error: $e');
+      if (kDebugMode) debugPrint('[Delivery] WS order updates subscribe error: $e');
     }
   }
 
@@ -196,11 +200,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     try {
       final hasPermission = await _location.checkPermissions();
       if (!hasPermission || !mounted) {
-        debugPrint('[Delivery] Location permission not granted — skipping tracking');
+        if (kDebugMode) debugPrint('[Delivery] Location permission not granted — skipping tracking');
         return;
       }
     } catch (e) {
-      debugPrint('[Delivery] Permission check failed: $e');
+      if (kDebugMode) debugPrint('[Delivery] Permission check failed: $e');
       return;
     }
 
@@ -220,7 +224,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       },
       onError: (error) {
         // Gracefully handle location permission denied / GPS errors (Fixes FLUTTER-1)
-        debugPrint('[Delivery] Location stream error: $error');
+        if (kDebugMode) debugPrint('[Delivery] Location stream error: $error');
         _stopLocationTracking();
       },
     );
@@ -254,7 +258,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           ),
         );
       } catch (e) {
-        debugPrint('[Delivery] one-shot location error: $e');
+        if (kDebugMode) debugPrint('[Delivery] one-shot location error: $e');
         return;
       }
     }
@@ -273,11 +277,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         },
       );
       if (!r.success) {
-        debugPrint('[Delivery] location update failed: ${r.error}');
+        if (kDebugMode) debugPrint('[Delivery] location update failed: ${r.error}');
       }
     } catch (e) {
       // Don't rethrow — the timer will retry in 15s anyway
-      debugPrint('[Delivery] location update error: $e');
+      if (kDebugMode) debugPrint('[Delivery] location update error: $e');
     }
   }
 
@@ -334,7 +338,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         return;
       }
     } catch (e) {
-      debugPrint('[Delivery] _loadData error: $e');
+      if (kDebugMode) debugPrint('[Delivery] _loadData error: $e');
     }
 
     // API failed — show empty state
@@ -402,7 +406,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         acceptedAt: acceptedAt,
       );
     } catch (e) {
-      debugPrint('[Delivery] Failed to restore active delivery: $e');
+      if (kDebugMode) debugPrint('[Delivery] Failed to restore active delivery: $e');
       return null;
     }
   }
@@ -437,7 +441,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         );
       }
     } catch (e) {
-      debugPrint('[Delivery] toggleOnline error: $e');
+      if (kDebugMode) debugPrint('[Delivery] toggleOnline error: $e');
       state = state.copyWith(
         partner: state.partner.copyWith(isOnline: !newOnline),
       );
@@ -467,7 +471,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       _loadData();
     } catch (e) {
       // Accept already optimistic — don't rollback UI
-      debugPrint('[Delivery] acceptRequest error: $e');
+      if (kDebugMode) debugPrint('[Delivery] acceptRequest error: $e');
     }
   }
 
@@ -480,7 +484,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       try {
         await _api.put('${ApiConfig.deliveryOrders}/$orderId/reject');
       } catch (e) {
-        debugPrint('[Delivery] rejectRequest error: $e');
+        if (kDebugMode) debugPrint('[Delivery] rejectRequest error: $e');
       }
     }
   }
@@ -517,7 +521,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
             body: {'status': apiStatus},
           );
           if (!r.success) {
-            debugPrint('[Delivery] advanceStep failed: ${r.error}');
+            if (kDebugMode) debugPrint('[Delivery] advanceStep failed: ${r.error}');
             // Revert step on API failure to keep state consistent
             if (state.activeDelivery != null) {
               state = state.copyWith(
@@ -528,7 +532,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
             }
           }
         } catch (e) {
-          debugPrint('[Delivery] advanceStep error: $e');
+          if (kDebugMode) debugPrint('[Delivery] advanceStep error: $e');
           // Revert step on error to keep state consistent
           if (state.activeDelivery != null) {
             state = state.copyWith(
@@ -578,7 +582,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           body: {'status': 'delivered'},
         );
         if (!r.success) {
-          debugPrint('[Delivery] complete failed: ${r.error}');
+          if (kDebugMode) debugPrint('[Delivery] complete failed: ${r.error}');
           // Rollback — restore the active delivery and metrics
           state = state.copyWith(
             activeDelivery: activeDelivery,
@@ -592,7 +596,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         // Reload dashboard to sync metrics and clear active_order
         _loadData();
       } catch (e) {
-        debugPrint('[Delivery] complete error: $e');
+        if (kDebugMode) debugPrint('[Delivery] complete error: $e');
         // Rollback — restore the active delivery and metrics
         state = state.copyWith(
           activeDelivery: activeDelivery,
@@ -618,9 +622,9 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           body: {'reason': reason, 'details': details},
         )
         .then((r) {
-      if (!r.success) debugPrint('[Delivery] reportIssue failed: ${r.error}');
+      if (!r.success) if (kDebugMode) debugPrint('[Delivery] reportIssue failed: ${r.error}');
     }).catchError((e) {
-      debugPrint('[Delivery] reportIssue error: $e');
+      if (kDebugMode) debugPrint('[Delivery] reportIssue error: $e');
     });
   }
 
@@ -668,7 +672,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         return true;
       }
     } catch (e) {
-      debugPrint('[Delivery] updateProfile error: $e');
+      if (kDebugMode) debugPrint('[Delivery] updateProfile error: $e');
     }
     return false;
   }
@@ -681,7 +685,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         return response.data as Map<String, dynamic>;
       }
     } catch (e) {
-      debugPrint('[Delivery] fetchPerformance error: $e');
+      if (kDebugMode) debugPrint('[Delivery] fetchPerformance error: $e');
     }
     return null;
   }

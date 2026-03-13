@@ -9,7 +9,7 @@ class Environment {
     'APPWRITE_PROJECT_ID',
     defaultValue: '6993347c0006ead7404d',
   );
-  static const String appwriteProjectName = 'chizze-restaurent';
+  static const String appwriteProjectName = 'chizze-restaurant';
   static const String appwritePublicEndpoint = String.fromEnvironment(
     'APPWRITE_ENDPOINT',
     defaultValue: 'https://sgp.cloud.appwrite.io/v1',

@@ -73,7 +73,7 @@ class LocationService {
         timestamp: position.timestamp,
       );
     } catch (e) {
-      debugPrint('[Location] getCurrentPosition error: $e');
+      if (kDebugMode) debugPrint('[Location] getCurrentPosition error: $e');
       return LocationData(
         latitude: MapConfig.defaultLatitude,
         longitude: MapConfig.defaultLongitude,
@@ -111,7 +111,7 @@ class LocationService {
     ).handleError((error, stackTrace) {
       // Swallow PermissionDeniedException and other geolocator errors
       // so they never reach PlatformDispatcher.onError as unhandled fatals.
-      debugPrint('[LocationService] Stream error (handled): $error');
+      if (kDebugMode) debugPrint('[LocationService] Stream error (handled): $error');
     });
   }
 

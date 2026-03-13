@@ -58,7 +58,9 @@ class RestaurantNotifier extends StateNotifier<RestaurantListState> {
         state = state.copyWith(restaurants: restaurants, isLoading: false);
       } else {
         // API returned error — show empty state
-        debugPrint('[Restaurants] API error: ${response.error}');
+        if (kDebugMode) {
+          debugPrint('[Restaurants] API error: ${response.error}');
+        }
         state = state.copyWith(
           restaurants: const [],
           isLoading: false,
@@ -66,14 +68,14 @@ class RestaurantNotifier extends StateNotifier<RestaurantListState> {
         );
       }
     } on ApiException catch (e) {
-      debugPrint('[Restaurants] ApiException: ${e.message}');
+      if (kDebugMode) debugPrint('[Restaurants] ApiException: ${e.message}');
       state = state.copyWith(
         restaurants: const [],
         isLoading: false,
         error: e.message,
       );
     } catch (e) {
-      debugPrint('[Restaurants] Unexpected error: $e');
+      if (kDebugMode) debugPrint('[Restaurants] Unexpected error: $e');
       state = state.copyWith(
         restaurants: const [],
         isLoading: false,

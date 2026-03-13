@@ -74,7 +74,9 @@ class FavoritesNotifier extends StateNotifier<FavoritesState> {
               restaurants.add(Restaurant.fromMap(
                   m['restaurant'] as Map<String, dynamic>));
             } catch (e) {
-              debugPrint('[Favorites] parse restaurant error: $e');
+              if (kDebugMode) {
+                debugPrint('[Favorites] parse restaurant error: $e');
+              }
             }
           }
         }
@@ -87,7 +89,7 @@ class FavoritesNotifier extends StateNotifier<FavoritesState> {
         state = state.copyWith(isLoading: false);
       }
     } catch (e) {
-      debugPrint('[Favorites] fetch error: $e');
+      if (kDebugMode) debugPrint('[Favorites] fetch error: $e');
       state = const FavoritesState(isLoading: false);
     }
   }
@@ -103,7 +105,7 @@ class FavoritesNotifier extends StateNotifier<FavoritesState> {
         'restaurant_id': restaurantId,
       });
     } catch (e) {
-      debugPrint('[Favorites] addFavorite error: $e');
+      if (kDebugMode) debugPrint('[Favorites] addFavorite error: $e');
       // Revert on failure
       final revertIds = {...state.favoriteIds}..remove(restaurantId);
       state = state.copyWith(favoriteIds: revertIds);
@@ -121,7 +123,7 @@ class FavoritesNotifier extends StateNotifier<FavoritesState> {
     try {
       await _api.delete('${ApiConfig.favorites}/$restaurantId');
     } catch (e) {
-      debugPrint('[Favorites] removeFavorite error: $e');
+      if (kDebugMode) debugPrint('[Favorites] removeFavorite error: $e');
       // Revert on failure
       state = state.copyWith(
         favoriteIds: {...state.favoriteIds, restaurantId},

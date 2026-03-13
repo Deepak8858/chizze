@@ -162,10 +162,12 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
         }
       }
     } on ApiException catch (e) {
-      debugPrint('[Profile] fetchProfile ApiException: ${e.message}');
+      if (kDebugMode) {
+        debugPrint('[Profile] fetchProfile ApiException: ${e.message}');
+      }
       // Keep current state
     } catch (e) {
-      debugPrint('[Profile] fetchProfile error: $e');
+      if (kDebugMode) debugPrint('[Profile] fetchProfile error: $e');
       // Keep current state
     }
   }
@@ -176,13 +178,13 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
     try {
       final r = await _api.put(ApiConfig.profile, body: {'name': name});
       if (!r.success) {
-        debugPrint('[Profile] updateName failed: ${r.error}');
+        if (kDebugMode) debugPrint('[Profile] updateName failed: ${r.error}');
         state = state.copyWith(name: oldName);
         return false;
       }
       return true;
     } catch (e) {
-      debugPrint('[Profile] updateName error: $e');
+      if (kDebugMode) debugPrint('[Profile] updateName error: $e');
       state = state.copyWith(name: oldName);
       return false;
     }
@@ -194,13 +196,13 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
     try {
       final r = await _api.put(ApiConfig.profile, body: {'email': email});
       if (!r.success) {
-        debugPrint('[Profile] updateEmail failed: ${r.error}');
+        if (kDebugMode) debugPrint('[Profile] updateEmail failed: ${r.error}');
         state = state.copyWith(email: oldEmail);
         return false;
       }
       return true;
     } catch (e) {
-      debugPrint('[Profile] updateEmail error: $e');
+      if (kDebugMode) debugPrint('[Profile] updateEmail error: $e');
       state = state.copyWith(email: oldEmail);
       return false;
     }
@@ -213,10 +215,12 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
     // Sync to backend
     _api.put(ApiConfig.profile, body: {'is_veg': state.isVeg}).then((r) {
       if (!r.success) {
-        debugPrint('[Profile] toggleVeg sync failed: ${r.error}');
+            if (kDebugMode) {
+              debugPrint('[Profile] toggleVeg sync failed: ${r.error}');
+            }
       }
     }).catchError((e) {
-      debugPrint('[Profile] toggleVeg sync error: $e');
+          if (kDebugMode) debugPrint('[Profile] toggleVeg sync error: $e');
     });
   }
 
@@ -233,10 +237,14 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
     // Sync to backend so the default persists across devices / reinstalls
     _api.put(ApiConfig.profile, body: {'default_address_id': id}).then((r) {
       if (!r.success) {
-        debugPrint('[Profile] setDefaultAddress sync failed: ${r.error}');
+            if (kDebugMode) {
+              debugPrint('[Profile] setDefaultAddress sync failed: ${r.error}');
+            }
       }
     }).catchError((e) {
-      debugPrint('[Profile] setDefaultAddress sync error: $e');
+          if (kDebugMode) {
+            debugPrint('[Profile] setDefaultAddress sync error: $e');
+          }
     });
   }
 }

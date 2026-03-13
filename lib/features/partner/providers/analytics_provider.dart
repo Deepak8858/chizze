@@ -116,7 +116,7 @@ class AnalyticsNotifier extends StateNotifier<AnalyticsState> {
         return;
       }
     } catch (e) {
-      debugPrint('[Analytics] fetchAnalytics error: $e');
+      if (kDebugMode) debugPrint('[Analytics] fetchAnalytics error: $e');
     }
 
     // API failed — show empty state with error

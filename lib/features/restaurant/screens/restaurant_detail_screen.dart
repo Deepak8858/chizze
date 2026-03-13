@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -90,7 +91,7 @@ class _RestaurantDetailScreenState
         if (mounted) setState(() => _isMenuLoading = false);
       }
     } catch (e) {
-      debugPrint('[RestaurantDetail] Failed to fetch menu: $e');
+      if (kDebugMode) debugPrint('[RestaurantDetail] Failed to fetch menu: $e');
       if (mounted) setState(() => _isMenuLoading = false);
     }
   }

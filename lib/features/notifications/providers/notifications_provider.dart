@@ -89,18 +89,24 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
               }
             },
             onError: (error, stack) {
-              debugPrint('[Notifications] realtime stream error: $error');
+              if (kDebugMode) {
+                debugPrint('[Notifications] realtime stream error: $error');
+              }
               _realtimeSub?.cancel();
               _realtimeSub = null;
             },
             onDone: () {
-              debugPrint('[Notifications] realtime stream closed');
+              if (kDebugMode) {
+                debugPrint('[Notifications] realtime stream closed');
+              }
               _realtimeSub?.cancel();
               _realtimeSub = null;
             },
           );
     } catch (e) {
-      debugPrint('[Notifications] realtime subscription error: $e');
+      if (kDebugMode) {
+        debugPrint('[Notifications] realtime subscription error: $e');
+      }
     }
   }
 
@@ -133,7 +139,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
     } on ApiException {
       // Keep current state
     } catch (e) {
-      debugPrint('[Notifications] fetchNotifications error: $e');
+      if (kDebugMode) debugPrint('[Notifications] fetchNotifications error: $e');
     }
   }
 
@@ -160,18 +166,21 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
         .map((n) => n.id == id ? n.copyWith(isRead: true) : n)
         .toList();
     _api.put('${ApiConfig.notifications}/$id/read').then((r) {
-      if (!r.success) debugPrint('[Notifications] markRead failed: ${r.error}');
+          if (!r.success)
+            if (kDebugMode) {
+              debugPrint('[Notifications] markRead failed: ${r.error}');
+            }
     }).catchError((e) {
-      debugPrint('[Notifications] markRead error: $e');
+          if (kDebugMode) debugPrint('[Notifications] markRead error: $e');
     });
   }
 
   void markAllRead() {
     state = state.map((n) => n.copyWith(isRead: true)).toList();
     _api.put('${ApiConfig.notifications}/read-all').then((r) {
-      if (!r.success) debugPrint('[Notifications] markAllRead failed: ${r.error}');
+      if (!r.success) if (kDebugMode) debugPrint('[Notifications] markAllRead failed: ${r.error}');
     }).catchError((e) {
-      debugPrint('[Notifications] markAllRead error: $e');
+          if (kDebugMode) debugPrint('[Notifications] markAllRead error: $e');
     });
   }
 

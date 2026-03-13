@@ -82,7 +82,7 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
               }
             },
             onError: (error, stack) {
-              debugPrint('[Orders] realtime stream error: $error');
+              if (kDebugMode) debugPrint('[Orders] realtime stream error: $error');
               _realtimeSub?.cancel();
               _realtimeSub = null;
             },
@@ -93,7 +93,7 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
           );
     } catch (e) {
       // Realtime not available — rely on polling/manual refresh
-      debugPrint('[Orders] realtime subscription error: $e');
+      if (kDebugMode) debugPrint('[Orders] realtime subscription error: $e');
     }
   }
 
@@ -122,7 +122,7 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
         }
       },
       onError: (error, stack) {
-        debugPrint('[Orders] WebSocket stream error: $error');
+        if (kDebugMode) debugPrint('[Orders] WebSocket stream error: $error');
         _wsSub?.cancel();
         _wsSub = null;
       },
@@ -238,7 +238,7 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
         return order;
       }
     } catch (e) {
-      debugPrint('[Orders] fetchOrderById error: $e');
+      if (kDebugMode) debugPrint('[Orders] fetchOrderById error: $e');
     }
     return null;
   }

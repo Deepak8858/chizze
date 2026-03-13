@@ -94,7 +94,7 @@ class ScheduledOrdersNotifier extends StateNotifier<ScheduledOrdersState> {
     } on ApiException {
       state = state.copyWith(isLoading: false);
     } catch (e) {
-      debugPrint('[ScheduledOrders] fetch error: $e');
+      if (kDebugMode) debugPrint('[ScheduledOrders] fetch error: $e');
       state = state.copyWith(
         orders: const [],
         isLoading: false,
