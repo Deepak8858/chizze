@@ -1,11 +1,53 @@
 package handlers
 
 import (
+	"fmt"
+	"regexp"
+	"strings"
+
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
+
+var pincodeRegex = regexp.MustCompile(`^\d{6}$`)
+
+// sanitizeAddressFields trims whitespace and validates string address fields
+// in-place. Enforces max lengths and validates pincode for any field present
+// in req. Required-field checks remain the caller's responsibility.
+// Returns an empty string on success, or a human-readable error message.
+func sanitizeAddressFields(req map[string]interface{}) string {
+	maxLengths := map[string]int{
+		"label": 50, "line1": 100, "line2": 100, "city": 50, "state": 50,
+	}
+	for field, maxLen := range maxLengths {
+		val, ok := req[field]
+		if !ok {
+			continue
+		}
+		strVal, isStr := val.(string)
+		if !isStr {
+			continue
+		}
+		trimmed := strings.TrimSpace(strVal)
+		if len(trimmed) > maxLen {
+			return fmt.Sprintf("Field %s exceeds max length of %d", field, maxLen)
+		}
+		req[field] = trimmed
+	}
+	// Trim then validate pincode if provided
+	if pincodeVal, ok := req["pincode"]; ok {
+		if pincodeStr, isStr := pincodeVal.(string); isStr {
+			trimmed := strings.TrimSpace(pincodeStr)
+			req["pincode"] = trimmed
+			if !pincodeRegex.MatchString(trimmed) {
+				return "Pincode must be exactly 6 digits"
+			}
+		}
+	}
+	return ""
+}
 
 // Allowed fields for profile update
 var allowedProfileFields = map[string]bool{
@@ -122,6 +164,10 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 // @Router /api/v1/users/me/addresses [get]
 func (h *UserHandler) ListAddresses(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	if userID == "" {
+		utils.Unauthorized(c, "Authentication required")
+		return
+	}
 	result, err := h.appwrite.ListAddresses(userID)
 	if err != nil {
 		utils.InternalError(c, "Failed to fetch addresses")
@@ -144,12 +190,37 @@ func (h *UserHandler) ListAddresses(c *gin.Context) {
 // @Router /api/v1/users/me/addresses [post]
 func (h *UserHandler) CreateAddress(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	if userID == "" {
+		utils.Unauthorized(c, "Authentication required")
+		return
+	}
 
 	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, "Invalid address data")
 		return
 	}
+
+	// Validate required fields
+	for _, field := range []string{"label", "line1", "city", "state", "pincode"} {
+		val, ok := req[field]
+		if !ok {
+			utils.BadRequest(c, fmt.Sprintf("Missing required field: %s", field))
+			return
+		}
+		strVal, isStr := val.(string)
+		if !isStr || strings.TrimSpace(strVal) == "" {
+			utils.BadRequest(c, fmt.Sprintf("Field %s must be a non-empty string", field))
+			return
+		}
+	}
+
+	// Sanitize and validate (trims whitespace, enforces max lengths, validates pincode)
+	if errMsg := sanitizeAddressFields(req); errMsg != "" {
+		utils.BadRequest(c, errMsg)
+		return
+	}
+
 	req["user_id"] = userID
 
 	doc, err := h.appwrite.CreateAddress("unique()", req)
@@ -177,6 +248,10 @@ func (h *UserHandler) CreateAddress(c *gin.Context) {
 // @Router /api/v1/users/me/addresses/{id} [put]
 func (h *UserHandler) UpdateAddress(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	if userID == "" {
+		utils.Unauthorized(c, "Authentication required")
+		return
+	}
 	addrID := c.Param("id")
 
 	// Verify ownership
@@ -198,6 +273,12 @@ func (h *UserHandler) UpdateAddress(c *gin.Context) {
 	}
 	// Prevent changing user_id
 	delete(req, "user_id")
+
+	// Sanitize and validate present fields (trims, max lengths, pincode if provided)
+	if errMsg := sanitizeAddressFields(req); errMsg != "" {
+		utils.BadRequest(c, errMsg)
+		return
+	}
 
 	doc, err := h.appwrite.UpdateAddress(addrID, req)
 	if err != nil {
@@ -221,6 +302,10 @@ func (h *UserHandler) UpdateAddress(c *gin.Context) {
 // @Router /api/v1/users/me/addresses/{id} [delete]
 func (h *UserHandler) DeleteAddress(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	if userID == "" {
+		utils.Unauthorized(c, "Authentication required")
+		return
+	}
 	addrID := c.Param("id")
 
 	// Verify ownership
@@ -256,6 +341,10 @@ func (h *UserHandler) DeleteAddress(c *gin.Context) {
 // @Router /api/v1/users/me/fcm-token [put]
 func (h *UserHandler) UpdateFCMToken(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	if userID == "" {
+		utils.Unauthorized(c, "Authentication required")
+		return
+	}
 
 	var req struct {
 		Token string `json:"token" binding:"required"`

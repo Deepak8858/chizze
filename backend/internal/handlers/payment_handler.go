@@ -229,23 +229,39 @@ func (h *PaymentHandler) Webhook(c *gin.Context) {
 
 	switch event.Event {
 	case "payment.captured":
-		// Payment successful — update order if not already updated via Verify()
+		// Payment successful — verify amount then update order if not already updated via Verify()
 		rzpOrderID := event.Payload.Payment.Entity.OrderID
+		capturedAmountPaise := int64(event.Payload.Payment.Entity.Amount)
 		paymentResult, err := h.appwrite.GetPaymentByRazorpayOrder(rzpOrderID)
 		if err == nil && paymentResult.Total > 0 {
 			paymentDoc := paymentResult.Documents[0]
 			paymentID, _ := paymentDoc["$id"].(string)
 			orderID, _ := paymentDoc["order_id"].(string)
 
-			h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
+			// Verify captured amount matches stored amount (stored in rupees, webhook in paise)
+			storedAmountRupees, _ := paymentDoc["amount"].(float64)
+			expectedPaise := int64(math.Round(storedAmountRupees * 100))
+			if capturedAmountPaise != expectedPaise {
+				log.Printf("[SECURITY] payment.captured amount mismatch: captured=%d expected=%d rzp_order=%s payment=%s — ignoring",
+					capturedAmountPaise, expectedPaise, rzpOrderID, paymentID)
+				break
+			}
+
+			if _, err := h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
 				"razorpay_payment_id": event.Payload.Payment.Entity.ID,
 				"status":              "success",
-			})
+			}); err != nil {
+				log.Printf("[ERROR] webhook payment.captured: UpdatePayment failed: payment=%s rzp_order=%s: %v",
+					paymentID, rzpOrderID, err)
+			}
 
-			h.appwrite.UpdateOrder(orderID, map[string]interface{}{
+			if _, err := h.appwrite.UpdateOrder(orderID, map[string]interface{}{
 				"payment_status": models.PaymentPaid,
 				"payment_id":     event.Payload.Payment.Entity.ID,
-			})
+			}); err != nil {
+				log.Printf("[ERROR] webhook payment.captured: UpdateOrder failed: order=%s payment=%s: %v",
+					orderID, paymentID, err)
+			}
 		}
 
 	case "payment.failed":
@@ -256,13 +272,19 @@ func (h *PaymentHandler) Webhook(c *gin.Context) {
 			paymentID, _ := paymentDoc["$id"].(string)
 			orderID, _ := paymentDoc["order_id"].(string)
 
-			h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
+			if _, err := h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
 				"status": "failed",
-			})
+			}); err != nil {
+				log.Printf("[ERROR] webhook payment.failed: UpdatePayment failed: payment=%s rzp_order=%s: %v",
+					paymentID, rzpOrderID, err)
+			}
 
-			h.appwrite.UpdateOrder(orderID, map[string]interface{}{
+			if _, err := h.appwrite.UpdateOrder(orderID, map[string]interface{}{
 				"payment_status": models.PaymentFailed,
-			})
+			}); err != nil {
+				log.Printf("[ERROR] webhook payment.failed: UpdateOrder failed: order=%s payment=%s: %v",
+					orderID, paymentID, err)
+			}
 		}
 
 	case "refund.processed":

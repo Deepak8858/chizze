@@ -59,6 +59,10 @@ android/key.properties
 android/app/*.jks
 android/app/*.keystore
 
+# Firebase config (contains API keys — distribute via CI/CD secrets)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
 # SSL / Certificates
 deploy/ssl/
 deploy/certbot/
@@ -96,6 +100,5 @@ sentry.properties
 tools/test_api.py
 tools/ssh_cmd.py
 tools/appwrite_setup/add_attributes.cmd
-tools/ssh_cmd.py
 tools/fix_schema_flutter3.sh
 tools/fix_razorpay_secret.py

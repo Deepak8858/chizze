@@ -50,12 +50,21 @@ void main() async {
     // bypass those filters and cause duplicate/noisy events.
   };
 
+  // Guard: prevent HTTP API connections in profile/release builds.
+  // If ENV is not passed at build time, default branch resolves to the
+  // correct HTTPS production URL, so this only fires on misconfigured builds.
+  if (!kDebugMode && !Environment.apiBaseUrl.startsWith('https://')) {
+    throw StateError(
+      'Non-HTTPS API URL in release/profile build: ${Environment.apiBaseUrl}. '
+      'Build with --dart-define=ENV=production',
+    );
+  }
+
   await SentryFlutter.init(
     (options) {
-      options.dsn = const String.fromEnvironment(
-        'SENTRY_DSN',
-        defaultValue: 'https://18c1661519b0d5cdebbb190efc5e66bd@o4509849175326720.ingest.us.sentry.io/4510951045922816',
-      );
+      // DSN injected at build time: --dart-define=SENTRY_DSN=https://...
+      // No defaultValue — empty DSN disables Sentry silently in dev/CI.
+      options.dsn = const String.fromEnvironment('SENTRY_DSN');
       // Production: sample 20% of transactions and 10% of profiles to control costs.
       // Dev/staging: 100% for full observability.
       options.tracesSampleRate = Environment.isProduction ? 0.2 : 1.0;
@@ -90,8 +99,10 @@ void main() async {
         // Drop server 5xx errors (ApiException) — backend issues, not client bugs.
         // These are already logged server-side; no need to pollute Flutter Sentry.
         // (Fixes FLUTTER-6 regression: ApiException(500) from payment initiation)
+        // Keep 4xx errors visible in Sentry (they indicate client bugs) — except
+        // 429 Too Many Requests which is transient and not actionable.
         if (message.contains('ApiException(5') ||
-            message.contains('ApiException(4')) {
+            message.contains('ApiException(429)')) {
           return null;
         }
 

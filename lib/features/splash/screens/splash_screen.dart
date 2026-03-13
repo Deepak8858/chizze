@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/theme.dart';
+import '../../../shared/widgets/app_logo.dart';
 
 /// Animated splash screen with Chizze branding
 class SplashScreen extends StatelessWidget {
@@ -14,27 +15,8 @@ class SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Logo icon
-            Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.4),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.restaurant_rounded,
-                    color: Colors.white,
-                    size: 40,
-                  ),
-                )
+            // Logo
+            const AppLogo(size: 110, borderRadius: 26)
                 .animate()
                 .scale(duration: 600.ms, curve: Curves.easeOutBack)
                 .fadeIn(duration: 400.ms),

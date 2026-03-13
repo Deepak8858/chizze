@@ -6,6 +6,9 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../config/environment.dart';
 import '../auth/auth_provider.dart';
 import 'api_client.dart';
+import 'ws_connect_stub.dart'
+    if (dart.library.io) 'ws_connect_io.dart'
+    if (dart.library.html) 'ws_connect_html.dart';
 
 // ─── WebSocket Event Types (mirror Go backend events.go) ───
 
@@ -119,20 +122,23 @@ class WebSocketService {
 
   WebSocketService(this._apiClient);
 
-  /// Derive the WebSocket URL from the REST API URL
-  Uri _wsUri(String token) {
+  /// Derive the WebSocket URL from the REST API URL.
+  /// Token is passed via Authorization header, not query param,
+  /// to prevent leakage in proxy/server access logs.
+  Uri _wsUri() {
     final base = Environment.apiBaseUrl;
     final uri = Uri.parse(base);
     final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
     final port = uri.hasPort
         ? uri.port
         : (uri.scheme == 'https' ? 443 : 80);
+    // Strip trailing slashes to avoid double-slash paths (e.g. /api/v1//ws)
+    final cleanedPath = uri.path.replaceAll(RegExp(r'/+$'), '');
     return Uri(
       scheme: scheme,
       host: uri.host,
       port: port,
-      path: '${uri.path}/ws',
-      queryParameters: {'token': token},
+      path: '$cleanedPath/ws',
     );
   }
 
@@ -149,11 +155,11 @@ class WebSocketService {
     }
 
     _setState(WsConnectionState.connecting);
-    final wsUrl = _wsUri(token);
-    if (kDebugMode) debugPrint('[WS] Connecting to ${wsUrl.toString().replaceAll(RegExp(r'token=[^&]+'), 'token=***')}');
+    final wsUrl = _wsUri();
+    if (kDebugMode) debugPrint('[WS] Connecting to $wsUrl');
 
     try {
-      _channel = WebSocketChannel.connect(wsUrl);
+      _channel = connectWithAuthHeader(wsUrl, token);
 
       await _channel!.ready;
 

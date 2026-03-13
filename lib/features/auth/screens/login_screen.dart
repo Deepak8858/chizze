@@ -8,6 +8,7 @@ import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/app_logo.dart';
 
 /// Login screen — Phone OTP + Email + Social login
 class LoginScreen extends ConsumerStatefulWidget {
@@ -139,19 +140,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       children: [
         // Logo
         ExcludeSemantics(
-        child: Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: const Icon(
-            Icons.restaurant_rounded,
-            color: Colors.white,
-            size: 28,
-          ),
-        ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+          child: const AppLogo(size: 72, borderRadius: 18)
+              .animate()
+              .scale(duration: 400.ms, curve: Curves.easeOutBack),
         ),
 
         const SizedBox(height: AppSpacing.xl),
