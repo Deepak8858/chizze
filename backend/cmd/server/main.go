@@ -27,7 +27,7 @@ import (
 )
 
 // @title           Chizze Food Delivery API
-// @version         1.0
+// @version         1.2
 // @description     Backend API for Chizze — a food delivery platform with customer, restaurant partner, and delivery partner roles.
 // @termsOfService  https://chizze.app/terms
 
@@ -53,7 +53,7 @@ func main() {
 
 	// ─── Startup Info ───
 	log.Printf("═══════════════════════════════════════")
-	log.Printf("  Chizze API Server v1.0.0")
+	log.Printf("  Chizze API Server v%s", version)
 	log.Printf("  Mode: %s | Port: %s", cfg.GinMode, cfg.Port)
 	log.Printf("  GOMAXPROCS: %d | CPUs: %d", runtime.GOMAXPROCS(0), runtime.NumCPU())
 	log.Printf("  Appwrite: %s", cfg.AppwriteEndpoint)
@@ -411,4 +411,4 @@ func main() {
 var startTime = time.Now()
 
 // version is set at build time via -ldflags
-var version = "1.0.0"
+var version = "1.2.0"

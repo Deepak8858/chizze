@@ -110,31 +110,36 @@ void main() {
       expect(state.isNotEmpty, isFalse);
       expect(state.totalItems, 0);
       expect(state.itemTotal, 0);
-      expect(state.deliveryFee, 40); // under ₹500
+      expect(state.deliveryFee, 40); // under ₹299
       expect(state.platformFee, 5);
       expect(state.gst, 0);
       expect(state.discount, 0);
       expect(state.grandTotal, 45.0); // 0 + 40 + 5 + 0 - 0
     });
 
-    test('delivery fee is 0 above 500', () {
+    test('delivery fee is 0 at or above 299', () {
       final items = [makeCartItem(price: 600, quantity: 1)];
       final state = CartState(items: items);
       expect(state.itemTotal, 600.0);
-      expect(state.deliveryFee, 0); // free above ₹500
+      expect(state.deliveryFee, 0); // free at or above ₹299
     });
 
-    test('delivery fee is 40 below 500', () {
+    test('delivery fee is 40 below 299', () {
       final items = [makeCartItem(price: 200, quantity: 1)];
       final state = CartState(items: items);
       expect(state.deliveryFee, 40);
     });
 
+    test('delivery fee is 0 at exactly 299', () {
+      final items = [makeCartItem(price: 299, quantity: 1)];
+      final state = CartState(items: items);
+      expect(state.deliveryFee, 0);
+    });
+
     test('delivery fee is 0 at exactly 500', () {
       final items = [makeCartItem(price: 500, quantity: 1)];
       final state = CartState(items: items);
-      // 500 > 500 is false, so deliveryFee = 40
-      expect(state.deliveryFee, 40);
+      expect(state.deliveryFee, 0);
     });
 
     test('delivery fee is 0 above 500', () {
