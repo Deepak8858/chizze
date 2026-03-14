@@ -171,8 +171,10 @@ func main() {
 		})
 	})
 
-	// ─── Swagger UI ───
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// ─── Swagger UI (dev only) ───
+	if cfg.GinMode != "release" {
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	}
 
 	// ─── API v1 Routes ───
 	v1 := r.Group("/api/v1")

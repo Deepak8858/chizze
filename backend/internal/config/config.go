@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -95,6 +96,13 @@ func Load() *Config {
 			log.Fatal("FATAL: RAZORPAY_KEY_SECRET not set — all payments will fail with 401")
 		}
 		log.Println("WARNING: RAZORPAY_KEY_SECRET not set — Razorpay payments will fail")
+	}
+
+	if cfg.IsProduction() && strings.HasPrefix(cfg.RazorpayKeyID, "rzp_test_") {
+		log.Println("WARNING: Razorpay TEST keys detected in production — real payments will NOT be processed")
+	}
+	if cfg.IsProduction() && cfg.RazorpayWebhookSecret == "" {
+		log.Println("WARNING: RAZORPAY_WEBHOOK_SECRET is empty — webhook signature verification is disabled")
 	}
 
 	return cfg

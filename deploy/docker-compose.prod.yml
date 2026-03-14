@@ -7,8 +7,6 @@
 #   docker compose -f docker-compose.prod.yml down
 # ══════════════════════════════════════════
 
-version: "3.9"
-
 services:
   # ─── Nginx Reverse Proxy + SSL ───
   nginx:
@@ -19,7 +17,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/proxy_params.conf:/etc/nginx/proxy_params.conf:ro
-      - ./ssl:/etc/nginx/ssl
+      - ./ssl:/etc/nginx/ssl:ro
       - ./certbot/www:/var/www/certbot
     depends_on:
       api:
@@ -32,7 +30,6 @@ services:
           cpus: "0.5"
     networks:
       - frontend
-      - backend
 
   # ─── Go API Server ───
   api:
@@ -48,9 +45,6 @@ services:
       - PORT=8080
     expose:
       - "8080"
-    depends_on:
-      redis:
-        condition: service_healthy
     restart: unless-stopped
     deploy:
       resources:
@@ -67,6 +61,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -79,46 +75,6 @@ services:
       - backend
       - frontend
 
-  # ─── Redis (Cache + Rate Limiting + Pub/Sub) ───
-  redis:
-    image: redis:7-alpine
-    command: >
-      redis-server
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
-      --save 900 1
-      --save 300 10
-      --save 60 10000
-      --appendonly yes
-      --appendfsync everysec
-      --requirepass ${REDIS_PASSWORD}
-      --tcp-backlog 511
-      --timeout 300
-    volumes:
-      - redis_data:/data
-    expose:
-      - "6379"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 640M
-          cpus: "1"
-        reservations:
-          memory: 256M
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "3"
-    networks:
-      - backend
-
   # ─── Certbot (SSL certificate renewal) ───
   certbot:
     image: certbot/certbot:latest
@@ -129,6 +85,31 @@ services:
     restart: unless-stopped
     networks:
       - frontend
+
+  # ─── Redis (Docker-internal — disabled, using external Redis) ───
+  # Uncomment to use Docker-internal Redis instead of external.
+  # Also update .env.prod REDIS_URL to point to redis:6379.
+  # redis:
+  #   image: redis:7-alpine
+  #   command: >
+  #     redis-server
+  #     --maxmemory 512mb
+  #     --maxmemory-policy allkeys-lru
+  #     --appendonly yes
+  #     --appendfsync everysec
+  #     --requirepass ${REDIS_PASSWORD}
+  #   volumes:
+  #     - redis_data:/data
+  #   expose:
+  #     - "6379"
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 5
+  #   networks:
+  #     - backend
 
 volumes:
   redis_data:

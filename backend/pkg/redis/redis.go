@@ -162,8 +162,38 @@ func (c *Client) GeoAdd(ctx context.Context, key string, members ...*redis.GeoLo
 
 // GeoSearch searches for members within a sorted set that match geo criteria.
 // Returns a list of member names (strings).
+// Falls back to GEORADIUS when GEOSEARCH is not available (e.g. older Redis / miniredis).
 func (c *Client) GeoSearch(ctx context.Context, key string, q *redis.GeoSearchQuery) ([]string, error) {
-	return c.rdb.GeoSearch(ctx, key, q).Result()
+	results, err := c.rdb.GeoSearch(ctx, key, q).Result()
+	if err == nil {
+		return results, nil
+	}
+
+	// Fallback to GEORADIUS for environments that don't support GEOSEARCH
+	if q.Radius > 0 && q.RadiusUnit != "" {
+		unit := q.RadiusUnit
+		count := q.Count
+		if count == 0 {
+			count = 50
+		}
+		geoQuery := &redis.GeoRadiusQuery{
+			Radius:   q.Radius,
+			Unit:     unit,
+			Sort:     q.Sort,
+			Count:    int(count),
+		}
+		locs, err2 := c.rdb.GeoRadius(ctx, key, q.Longitude, q.Latitude, geoQuery).Result()
+		if err2 != nil {
+			return nil, err // return original error if fallback also fails
+		}
+		names := make([]string, len(locs))
+		for i, loc := range locs {
+			names[i] = loc.Name
+		}
+		return names, nil
+	}
+
+	return results, err
 }
 
 // GeoPos returns the longitude and latitude for one or more members of a geo set.
