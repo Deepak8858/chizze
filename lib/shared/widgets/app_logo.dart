@@ -1,12 +1,6 @@
 import 'package:flutter/material.dart';
 
 /// Chizze branded logo widget.
-///
-/// The source JPEG has a white canvas with the navy rounded-square logo
-/// centered inside it. [BoxFit.cover] fills a square container from the
-/// landscape image (clipping the wide white left/right margins), and
-/// [Transform.scale] zooms in slightly to remove the remaining thin
-/// white strip at the top and bottom.
 class AppLogo extends StatelessWidget {
   final double size;
   final double borderRadius;
@@ -33,10 +27,9 @@ class AppLogo extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
         child: Transform.scale(
-          // Zoom in 18 % so the white canvas margins are clipped away
-          scale: 1.18,
+          scale: 1.15,
           child: Image.asset(
-            'assets/logo.jpeg',
+            'assets/logo-new.png',
             width: size,
             height: size,
             fit: BoxFit.cover,

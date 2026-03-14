@@ -101,6 +101,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
   final OrderNotificationService _notificationService;
   StreamSubscription? _realtimeSub;
   StreamSubscription? _wsSub;
+  StreamSubscription? _wsNewOrderSub;
   Timer? _pollingTimer;
   Timer? _reconnectTimer;
   Set<String> _knownOrderIds = {};
@@ -185,6 +186,17 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     } catch (e) {
       if (kDebugMode) debugPrint('[PartnerNotifier] WS subscribe error: $e');
     }
+
+    // Also subscribe to new_order events so a customer's order placement
+    // triggers an instant refresh + alert, not just the Appwrite Realtime path.
+    try {
+      _wsNewOrderSub = _ws.newOrders.listen((_) {
+        _loadData(notifyNewOrders: true);
+      });
+    } catch (e) {
+      if (kDebugMode)
+        debugPrint('[PartnerNotifier] WS new_order subscribe error: $e');
+    }
   }
 
   /// Polling fallback: fetch orders every 15 seconds when Realtime is down
@@ -232,6 +244,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     _disposed = true;
     _realtimeSub?.cancel();
     _wsSub?.cancel();
+    _wsNewOrderSub?.cancel();
     _pollingTimer?.cancel();
     _reconnectTimer?.cancel();
     _notificationService.dispose();

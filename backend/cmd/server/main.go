@@ -351,6 +351,11 @@ func main() {
 	orderHandler.SetMatcherCallback(func() {
 		deliveryMatcher.Process(context.Background())
 	})
+	// Also re-run matching instantly when a rider rejects, so the next
+	// eligible rider receives the request without waiting for the ticker.
+	deliveryHandler.SetMatcherCallback(func() {
+		deliveryMatcher.Process(context.Background())
+	})
 
 	orderTimeout := workers.NewOrderTimeout(awService, hub, 30*time.Second, 5*time.Minute)
 	go orderTimeout.Start(workerCtx)

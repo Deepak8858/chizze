@@ -20,10 +20,17 @@ import (
 
 // DeliveryHandler handles delivery partner endpoints
 type DeliveryHandler struct {
-	appwrite    *services.AppwriteService
-	geo         *services.GeoService
-	redis       *redispkg.Client
-	broadcaster *websocket.EventBroadcaster
+	appwrite        *services.AppwriteService
+	geo             *services.GeoService
+	redis           *redispkg.Client
+	broadcaster     *websocket.EventBroadcaster
+	matcherCallback func() // called after rejection to instantly re-dispatch
+}
+
+// SetMatcherCallback registers a function that is called after a rider rejects
+// an order, so the delivery matcher can immediately find the next eligible rider.
+func (h *DeliveryHandler) SetMatcherCallback(fn func()) {
+	h.matcherCallback = fn
 }
 
 // NewDeliveryHandler creates a delivery handler
@@ -1170,6 +1177,12 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 		rejectedKey := "rejected_riders:" + orderID
 		h.redis.SAdd(ctx, rejectedKey, userID)
 		h.redis.Expire(ctx, rejectedKey, 30*time.Minute)
+	}
+
+	// Immediately retry matching so the next eligible rider gets the request
+	// without waiting for the next ticker interval.
+	if h.matcherCallback != nil {
+		go h.matcherCallback()
 	}
 
 	// If the order was already assigned to this partner, unassign

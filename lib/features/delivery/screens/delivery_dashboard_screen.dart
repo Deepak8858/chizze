@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -19,22 +18,6 @@ class DeliveryDashboardScreen extends ConsumerStatefulWidget {
 
 class _DeliveryDashboardScreenState
     extends ConsumerState<DeliveryDashboardScreen> {
-  Timer? _countdownTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final dState = ref.watch(deliveryProvider);
@@ -67,12 +50,22 @@ class _DeliveryDashboardScreenState
                 const SizedBox(height: AppSpacing.xxl),
 
                 // ─── Incoming Request / Active Delivery ───
-                if (dState.hasActiveDelivery)
-                  _buildActiveDeliveryBanner(dState)
-                else if (dState.hasIncomingRequest)
-                  _buildIncomingRequest(dState.incomingRequest!)
-                else
-                  _buildWaitingForOrders(),
+                if (dState.hasActiveDelivery) ...[
+                  _buildActiveDeliveryBanner(dState),
+                  const SizedBox(height: AppSpacing.xl),
+                ],
+                if (!dState.hasActiveDelivery) ...[
+                  if (dState.hasIncomingRequest) ...[
+                    for (int i = 0;
+                        i < dState.incomingRequests.length;
+                        i++) ...[
+                      _buildIncomingRequest(dState.incomingRequests[i]),
+                      if (i < dState.incomingRequests.length - 1)
+                        const SizedBox(height: AppSpacing.md),
+                    ],
+                  ] else
+                    _buildWaitingForOrders(),
+                ],
 
                 const SizedBox(height: AppSpacing.xxl),
 
@@ -329,29 +322,23 @@ class _DeliveryDashboardScreenState
                   ],
                 ),
               ),
-              // Countdown
+              // Request availability (no auto-expiry)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: request.secondsRemaining < 10
-                      ? AppColors.error.withValues(alpha: 0.15)
-                      : AppColors.warning.withValues(alpha: 0.15),
+                  color: AppColors.success.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: request.secondsRemaining < 10
-                        ? AppColors.error
-                        : AppColors.warning,
+                    color: AppColors.success,
                   ),
                 ),
                 child: Text(
-                  '${request.secondsRemaining}s',
+                  'No time limit',
                   style: AppTypography.buttonSmall.copyWith(
-                    color: request.secondsRemaining < 10
-                        ? AppColors.error
-                        : AppColors.warning,
+                    color: AppColors.success,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -449,8 +436,9 @@ class _DeliveryDashboardScreenState
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () =>
-                      ref.read(deliveryProvider.notifier).rejectRequest(),
+                  onPressed: () => ref
+                      .read(deliveryProvider.notifier)
+                      .rejectRequest(request.order.id),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.error,
                     side: const BorderSide(color: AppColors.error),
@@ -463,7 +451,9 @@ class _DeliveryDashboardScreenState
                 flex: 2,
                 child: ElevatedButton(
                   onPressed: () {
-                    ref.read(deliveryProvider.notifier).acceptRequest();
+                    ref
+                        .read(deliveryProvider.notifier)
+                        .acceptRequest(request.order.id);
                     context.go('/delivery/active');
                   },
                   style: ElevatedButton.styleFrom(

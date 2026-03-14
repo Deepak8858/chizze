@@ -114,9 +114,8 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		restaurantID, _ := doc["restaurant_id"].(string)
 		customerID, _ := doc["customer_id"].(string)
 
-		// 2. Check Redis lock to prevent re-matching an already-pending order
-		// Use 2-minute TTL so the lock doesn't expire before the rider can accept/reject.
-		// The lock is explicitly cleared on accept (AcceptOrder) or reject (RejectOrder).
+		// 2. Check Redis lock to prevent re-matching an already-pending order.
+		// Keep a finite TTL as a safety net; accept/reject paths clear it immediately.
 		pendingKey := "pending_delivery:" + orderID
 		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 2*time.Minute)
 		if lockErr != nil || !acquired {
@@ -138,8 +137,8 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		restCuisine, _ := restaurant["cuisine_type"].(string)
 		restAddr, _ := restaurant["address"].(string)
 
-		// 4. Find online riders within 5 km via Redis geo index
-		riderIDs, err := w.findNearbyRiders(ctx, restLat, restLng, 5.0)
+		// 4. Find online riders within 15 km via Redis geo index
+		riderIDs, err := w.findNearbyRiders(ctx, restLat, restLng, 15.0)
 		if err != nil || len(riderIDs) == 0 {
 			log.Printf("[worker] DeliveryMatcher: no riders near restaurant %s for order %s", restaurantID, orderID)
 			_ = w.redisClient.Del(ctx, pendingKey)
@@ -240,7 +239,7 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			continue
 		}
 
-		// Update Redis lock with rider ID for reference (keep 2-minute TTL)
+		// Keep TTL consistent with SetNX while accept/reject remains the fast clear path.
 		_ = w.redisClient.Set(ctx, pendingKey, riderID, 2*time.Minute)
 
 		log.Printf("[worker] DeliveryMatcher: assigned rider %s to order %s", riderID, orderID)

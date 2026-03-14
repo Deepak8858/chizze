@@ -13,7 +13,7 @@ import '../models/delivery_partner.dart';
 class DeliveryState {
   final DeliveryPartner partner;
   final DeliveryMetrics metrics;
-  final DeliveryRequest? incomingRequest;
+  final List<DeliveryRequest> incomingRequests;
   final ActiveDelivery? activeDelivery;
   final bool isLoading;
   final bool
@@ -23,7 +23,7 @@ class DeliveryState {
   const DeliveryState({
     required this.partner,
     this.metrics = const DeliveryMetrics(),
-    this.incomingRequest,
+    this.incomingRequests = const [],
     this.activeDelivery,
     this.isLoading = false,
     this.isStepBusy = false,
@@ -33,21 +33,18 @@ class DeliveryState {
   DeliveryState copyWith({
     DeliveryPartner? partner,
     DeliveryMetrics? metrics,
-    DeliveryRequest? incomingRequest,
+    List<DeliveryRequest>? incomingRequests,
     ActiveDelivery? activeDelivery,
     bool? isLoading,
     bool? isStepBusy,
     String? errorMessage,
-    bool clearRequest = false,
     bool clearDelivery = false,
     bool clearError = false,
   }) {
     return DeliveryState(
       partner: partner ?? this.partner,
       metrics: metrics ?? this.metrics,
-      incomingRequest: clearRequest
-          ? null
-          : (incomingRequest ?? this.incomingRequest),
+      incomingRequests: incomingRequests ?? this.incomingRequests,
       activeDelivery: clearDelivery
           ? null
           : (activeDelivery ?? this.activeDelivery),
@@ -58,8 +55,7 @@ class DeliveryState {
   }
 
   bool get hasActiveDelivery => activeDelivery != null;
-  bool get hasIncomingRequest =>
-      incomingRequest != null && !incomingRequest!.hasExpired;
+  bool get hasIncomingRequest => incomingRequests.isNotEmpty;
 }
 
 /// Delivery notifier — API-backed with WebSocket + location tracking
@@ -91,8 +87,6 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       _wsSub = _ws.deliveryRequests.listen((event) {
         try {
           // Ignore incoming delivery requests if rider already has an active delivery.
-          // This prevents duplicate request popups when the matcher resends
-          // (e.g. after a Redis lock expired) or if there's a timing overlap.
           if (state.hasActiveDelivery) {
             if (kDebugMode) {
               debugPrint(
@@ -104,9 +98,10 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
 
           final request = DeliveryRequest.fromMap(event.payload);
 
-          // Also skip if an identical request is already showing (same order)
-          if (state.incomingRequest != null &&
-              state.incomingRequest!.order.id == request.order.id) {
+          // Skip if an identical request is already queued (same order)
+          if (state.incomingRequests.any(
+            (r) => r.order.id == request.order.id,
+          )) {
             if (kDebugMode) {
               debugPrint(
               '[Delivery] Ignoring duplicate delivery_request for same order',
@@ -115,7 +110,10 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
             return;
           }
 
-          state = state.copyWith(incomingRequest: request);
+          // Append to the queue so multiple orders are visible at once
+          state = state.copyWith(
+            incomingRequests: [...state.incomingRequests, request],
+          );
         } catch (e) {
           if (kDebugMode) debugPrint('[Delivery] WS delivery_request parse error: $e');
         }
@@ -422,7 +420,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     );
 
     if (!newOnline) {
-      state = state.copyWith(clearRequest: true);
+      state = state.copyWith(incomingRequests: []);
       _stopLocationTracking();
     } else {
       _startLocationTracking();
@@ -448,20 +446,31 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     }
   }
 
-  /// Accept a delivery request
-  Future<void> acceptRequest() async {
-    if (state.incomingRequest == null) return;
+  /// Accept a specific delivery request by order ID
+  Future<void> acceptRequest(String orderId) async {
+    final index = state.incomingRequests.indexWhere(
+      (r) => r.order.id == orderId,
+    );
+    if (index == -1) {
+      if (kDebugMode) {
+        debugPrint('[Delivery] acceptRequest: orderId $orderId not found in queue');
+      }
+      return;
+    }
+    final request = state.incomingRequests[index];
 
-    final orderId = state.incomingRequest!.order.id;
     final delivery = ActiveDelivery(
-      request: state.incomingRequest!,
+      request: request,
       acceptedAt: DateTime.now(),
     );
 
     state = state.copyWith(
       activeDelivery: delivery,
       partner: state.partner.copyWith(isOnDelivery: true),
-      clearRequest: true,
+      // Remove the accepted request; keep any other queued requests
+      incomingRequests: state.incomingRequests
+          .where((r) => r.order.id != orderId)
+          .toList(),
     );
 
     // Push to API
@@ -475,17 +484,21 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     }
   }
 
-  /// Reject/skip a delivery request — notify backend so order re-enters the queue
-  Future<void> rejectRequest() async {
-    final orderId = state.incomingRequest?.order.id;
-    state = state.copyWith(clearRequest: true);
+  /// Reject/skip a specific delivery request — order re-enters the queue
+  Future<void> rejectRequest(String orderId) async {
+    final previousRequests = state.incomingRequests;
+    state = state.copyWith(
+      incomingRequests: state.incomingRequests
+          .where((r) => r.order.id != orderId)
+          .toList(),
+    );
 
-    if (orderId != null && orderId.isNotEmpty) {
-      try {
-        await _api.put('${ApiConfig.deliveryOrders}/$orderId/reject');
-      } catch (e) {
-        if (kDebugMode) debugPrint('[Delivery] rejectRequest error: $e');
-      }
+    try {
+      await _api.put('${ApiConfig.deliveryOrders}/$orderId/reject');
+    } catch (e) {
+      // Rollback — re-insert the removed request so client/server stay consistent
+      state = state.copyWith(incomingRequests: previousRequests);
+      if (kDebugMode) debugPrint('[Delivery] rejectRequest error: $e');
     }
   }
 

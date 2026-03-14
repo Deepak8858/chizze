@@ -554,7 +554,7 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 
 // UpdateStatus updates order status with role-based validation
 // @Summary Update order status
-// @Description Updates order status with role-based validation; restaurant owners set confirmed/preparing/ready, delivery partners set pickedUp/outForDelivery/delivered
+// @Description Updates order status with role-based validation; restaurant owners set confirmed/preparing/ready/cancelled, delivery partners set pickedUp/outForDelivery/delivered
 // @Tags Orders
 // @Accept json
 // @Produce json
@@ -575,6 +575,7 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 
 	var req struct {
 		Status string `json:"status" binding:"required"`
+		Reason string `json:"reason"` // used when status is "cancelled"
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, "Status is required")
@@ -589,9 +590,10 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 
 	// Role-based authorization
 	restOwnerStatuses := map[string]bool{
-		models.OrderStatusConfirmed: true,
-		models.OrderStatusPreparing: true,
-		models.OrderStatusReady:     true,
+		models.OrderStatusConfirmed:  true,
+		models.OrderStatusPreparing:  true,
+		models.OrderStatusReady:      true,
+		models.OrderStatusCancelled:  true,
 	}
 	deliveryStatuses := map[string]bool{
 		models.OrderStatusPickedUp:       true,
@@ -602,7 +604,7 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	switch role {
 	case "restaurant_owner":
 		if !restOwnerStatuses[req.Status] {
-			utils.Forbidden(c, "Restaurant owners can only set confirmed/preparing/ready")
+			utils.Forbidden(c, "Restaurant owners can only set confirmed/preparing/ready/cancelled")
 			return
 		}
 		// Verify this is their restaurant's order
@@ -661,6 +663,12 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		if paymentMethod == "cod" {
 			updateData["payment_status"] = "paid"
 		}
+	case models.OrderStatusCancelled:
+		updateData["cancelled_at"] = now
+		updateData["cancelled_by"] = role
+		if req.Reason != "" {
+			updateData["cancellation_reason"] = req.Reason
+		}
 	}
 
 	updated, err := h.appwrite.UpdateOrder(orderID, updateData)
@@ -716,6 +724,12 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		case models.OrderStatusDelivered:
 			notifTitle = "Order Delivered"
 			notifBody = "Your order " + orderNumber + " has been delivered. Enjoy your meal!"
+		case models.OrderStatusCancelled:
+			notifTitle = "Order Cancelled"
+			notifBody = "Your order " + orderNumber + " was cancelled by the restaurant"
+			if req.Reason != "" {
+				notifBody += ": " + req.Reason
+			}
 		}
 		if notifTitle != "" {
 			_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{

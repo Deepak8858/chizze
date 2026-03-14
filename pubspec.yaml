@@ -1,7 +1,7 @@
 name: chizze
 description: "Chizze — Premium food delivery app"
 publish_to: "none"
-version: 1.2.0+5
+version: 1.2.1+6
 
 environment:
   sdk: ^3.10.8
@@ -82,24 +82,24 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/animations/
-    - assets/logo.jpeg
+    - assets/logo-new.png
 
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true
-  image_path: "assets/logo.jpeg"
+  image_path: "assets/logo-new.png"
   min_sdk_android: 21
   web:
     generate: true
-    image_path: "assets/logo.jpeg"
+    image_path: "assets/logo-new.png"
     background_color: "#0D0D0D"
     theme_color: "#F49D25"
   windows:
     generate: true
-    image_path: "assets/logo.jpeg"
+    image_path: "assets/logo-new.png"
   macos:
     generate: true
-    image_path: "assets/logo.jpeg"
+    image_path: "assets/logo-new.png"
 
 sentry:
   upload_debug_symbols: true
