@@ -22,6 +22,9 @@ type Hub struct {
 	// Unregister requests from clients.
 	unregister chan *Client
 
+	// stop signals Run() to exit.
+	stop chan struct{}
+
 	mu sync.RWMutex
 }
 
@@ -32,12 +35,15 @@ func NewHub() *Hub {
 		unregister:  make(chan *Client),
 		clients:     make(map[*Client]bool),
 		userClients: make(map[string]map[*Client]bool),
+		stop:        make(chan struct{}),
 	}
 }
 
 func (h *Hub) Run() {
 	for {
 		select {
+		case <-h.stop:
+			return
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
@@ -73,6 +79,16 @@ func (h *Hub) Run() {
 			}
 			h.mu.RUnlock()
 		}
+	}
+}
+
+// Stop signals the Run loop to exit.
+func (h *Hub) Stop() {
+	select {
+	case <-h.stop:
+		// already stopped
+	default:
+		close(h.stop)
 	}
 }
 

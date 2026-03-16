@@ -194,8 +194,9 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         _loadData(notifyNewOrders: true);
       });
     } catch (e) {
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint('[PartnerNotifier] WS new_order subscribe error: $e');
+      }
     }
   }
 

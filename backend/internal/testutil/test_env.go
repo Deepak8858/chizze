@@ -127,6 +127,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 
 // Close tears down all test infrastructure.
 func (te *TestEnv) Close() {
+	te.Hub.Stop()
 	te.FakeAW.Close()
 	te.MiniRedis.Close()
 }

@@ -390,19 +390,32 @@ func filterIsNull(docs []map[string]interface{}, attr string) []map[string]inter
 
 func filterCompare(docs []map[string]interface{}, attr string, value interface{}, op string) []map[string]interface{} {
 	var result []map[string]interface{}
-	targetStr := docValStr(value)
 	for _, doc := range docs {
-		docStr := docValStr(doc[attr])
 		var pass bool
-		switch op {
-		case ">":
-			pass = docStr > targetStr
-		case ">=":
-			pass = docStr >= targetStr
-		case "<":
-			pass = docStr < targetStr
-		case "<=":
-			pass = docStr <= targetStr
+		if numCmp, ok := compareNumeric(doc[attr], value); ok {
+			switch op {
+			case ">":
+				pass = numCmp > 0
+			case ">=":
+				pass = numCmp >= 0
+			case "<":
+				pass = numCmp < 0
+			case "<=":
+				pass = numCmp <= 0
+			}
+		} else {
+			a := docValStr(doc[attr])
+			b := docValStr(value)
+			switch op {
+			case ">":
+				pass = a > b
+			case ">=":
+				pass = a >= b
+			case "<":
+				pass = a < b
+			case "<=":
+				pass = a <= b
+			}
 		}
 		if pass {
 			result = append(result, doc)
@@ -425,6 +438,12 @@ func filterSearch(docs []map[string]interface{}, attr, term string) []map[string
 
 func sortDocs(docs []map[string]interface{}, attr string, desc bool) {
 	sort.SliceStable(docs, func(i, j int) bool {
+		if cmp, ok := compareNumeric(docs[i][attr], docs[j][attr]); ok {
+			if desc {
+				return cmp > 0
+			}
+			return cmp < 0
+		}
 		a := docValStr(docs[i][attr])
 		b := docValStr(docs[j][attr])
 		if desc {
@@ -446,6 +465,42 @@ func extractQueryInt(queries []parsedQuery, method string) int {
 		}
 	}
 	return 0
+}
+
+// toFloat64 attempts to convert a value to float64.
+func toFloat64(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	}
+	return 0, false
+}
+
+// compareNumeric compares two values numerically if both are numbers.
+// Returns -1, 0, or 1 like strings.Compare, and ok=true if both were numeric.
+func compareNumeric(a, b interface{}) (int, bool) {
+	af, aOk := toFloat64(a)
+	bf, bOk := toFloat64(b)
+	if !aOk || !bOk {
+		return 0, false
+	}
+	switch {
+	case af < bf:
+		return -1, true
+	case af > bf:
+		return 1, true
+	default:
+		return 0, true
+	}
 }
 
 // docValStr converts any value to a string for comparison.

@@ -219,6 +219,11 @@ func (c *Client) SMembers(ctx context.Context, key string) ([]string, error) {
 	return c.rdb.SMembers(ctx, key).Result()
 }
 
+// SIsMember checks if a value is a member of a set.
+func (c *Client) SIsMember(ctx context.Context, key string, member interface{}) *redis.BoolCmd {
+	return c.rdb.SIsMember(ctx, key, member)
+}
+
 // ─── List Helpers (for notification queue) ───
 
 // LPush prepends one or more values to a list.

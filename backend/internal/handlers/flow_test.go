@@ -31,14 +31,14 @@ func seedFlowData(te *testutil.TestEnv) {
 	te.AddRiderToGeoSet("dp_user_1", 12.97, 77.59)
 }
 
-func createMatcher(te *testutil.TestEnv) *workers.DeliveryMatcher {
+func createMatcher(te *testutil.TestEnv) (*workers.DeliveryMatcher, *websocket.Hub) {
 	te.T.Helper()
 	awClient := appwrite.NewClient(te.Config)
 	awService := services.NewAppwriteService(awClient)
 	geoService := services.NewGeoService()
 	hub := websocket.NewHub()
 	go hub.Run()
-	return workers.NewDeliveryMatcher(awService, geoService, te.RedisClient, hub, 15*time.Second)
+	return workers.NewDeliveryMatcher(awService, geoService, te.RedisClient, hub, 15*time.Second), hub
 }
 
 // ─── End-to-End: Place → Delivered ───
@@ -48,7 +48,8 @@ func TestFlow_EndToEnd_PlaceToDelivered(t *testing.T) {
 	defer te.Close()
 	seedFlowData(te)
 
-	matcher := createMatcher(te)
+	matcher, hub := createMatcher(te)
+	defer hub.Stop()
 
 	// 1. Customer places order
 	rec := te.AuthRequest("POST", "/api/v1/orders", map[string]interface{}{
@@ -268,7 +269,8 @@ func TestFlow_RejectionCascade(t *testing.T) {
 	te.AddRiderToGeoSet("rider_B", 12.971, 77.591)
 	te.AddRiderToGeoSet("rider_C", 12.972, 77.592)
 
-	matcher := createMatcher(te)
+	matcher, hub := createMatcher(te)
+	defer hub.Stop()
 
 	// Place and progress order to ready
 	rec := te.AuthRequest("POST", "/api/v1/orders", map[string]interface{}{
@@ -313,9 +315,12 @@ func TestFlow_RejectionCascade(t *testing.T) {
 	}
 
 	// Verify rider_A is in rejected set
-	members, _ := te.RedisClient.SMembers(ctx, "rejected_riders:"+orderID)
-	if len(members) == 0 || members[0] != firstRider {
-		t.Errorf("expected %s in rejected set, got %v", firstRider, members)
+	isMember, err := te.RedisClient.SIsMember(ctx, "rejected_riders:"+orderID, firstRider).Result()
+	if err != nil {
+		t.Fatalf("SIsMember: %v", err)
+	}
+	if !isMember {
+		t.Errorf("expected %s in rejected set", firstRider)
 	}
 
 	// Round 2: matcher should skip the rejected rider and assign another

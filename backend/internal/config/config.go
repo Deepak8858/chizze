@@ -102,7 +102,7 @@ func Load() *Config {
 		log.Println("WARNING: Razorpay TEST keys detected in production — real payments will NOT be processed")
 	}
 	if cfg.IsProduction() && cfg.RazorpayWebhookSecret == "" {
-		log.Println("WARNING: RAZORPAY_WEBHOOK_SECRET is empty — webhook signature verification is disabled")
+		log.Fatal("FATAL: RAZORPAY_WEBHOOK_SECRET not set — webhook signatures cannot be verified in production")
 	}
 
 	return cfg
