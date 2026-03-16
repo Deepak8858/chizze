@@ -211,7 +211,7 @@ func TestGetUserID_NoContext(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
 	if body["id"] != "" {
 		t.Errorf("Expected empty string, got %q", body["id"])
 	}
@@ -229,7 +229,7 @@ func TestGetUserRole_NoContext(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
 	if body["role"] != "" {
 		t.Errorf("Expected empty string, got %q", body["role"])
 	}
