@@ -445,7 +445,9 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 	// Enrich with delivery partner name/phone (delivery_partners may not store
 	// name/phone — fall back to users collection)
 	if deliveryID != "" {
-		if _, exists := order["delivery_partner_name"]; !exists || order["delivery_partner_name"] == nil {
+		existingDPName, _ := order["delivery_partner_name"].(string)
+		existingDPPhone, _ := order["delivery_partner_phone"].(string)
+		if existingDPName == "" || existingDPPhone == "" {
 			dpName, dpPhone := h.resolveDeliveryPartnerDetails(deliveryID)
 			if dpName != "" {
 				order["delivery_partner_name"] = dpName
@@ -527,7 +529,9 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 			}
 		}
 		if dpID, _ := order["delivery_partner_id"].(string); dpID != "" {
-			if _, exists := order["delivery_partner_name"]; !exists || order["delivery_partner_name"] == nil {
+			existingDPName, _ := order["delivery_partner_name"].(string)
+			existingDPPhone, _ := order["delivery_partner_phone"].(string)
+			if existingDPName == "" || existingDPPhone == "" {
 				dpName, dpPhone := h.resolveDeliveryPartnerDetails(dpID)
 				if dpName != "" {
 					order["delivery_partner_name"] = dpName

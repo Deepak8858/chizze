@@ -536,7 +536,9 @@ func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 			}
 		}
 		if dpID, _ := order["delivery_partner_id"].(string); dpID != "" {
-			if _, exists := order["delivery_partner_name"]; !exists || order["delivery_partner_name"] == nil {
+			existingDPName, _ := order["delivery_partner_name"].(string)
+			existingDPPhone, _ := order["delivery_partner_phone"].(string)
+			if existingDPName == "" || existingDPPhone == "" {
 				dpName, dpPhone := h.resolveDeliveryPartnerDetails(dpID)
 				if dpName != "" {
 					order["delivery_partner_name"] = dpName
@@ -725,7 +727,9 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 			}
 		}
 		if dpID, _ := activeDeliveryOrder["delivery_partner_id"].(string); dpID != "" {
-			if _, exists := activeDeliveryOrder["delivery_partner_name"]; !exists || activeDeliveryOrder["delivery_partner_name"] == nil {
+			existingDPName, _ := activeDeliveryOrder["delivery_partner_name"].(string)
+			existingDPPhone, _ := activeDeliveryOrder["delivery_partner_phone"].(string)
+			if existingDPName == "" || existingDPPhone == "" {
 				dpName, dpPhone := h.resolveDeliveryPartnerDetails(dpID)
 				if dpName != "" {
 					activeDeliveryOrder["delivery_partner_name"] = dpName
