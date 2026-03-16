@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.chizze.app",
+      "sha256_cert_fingerprints": [
+        "39:06:7D:79:C3:8C:AA:E4:76:90:07:9A:D3:D9:B6:2F:3C:54:0B:5B:2B:2C:AA:86:0B:64:D4:F6:A7:27:F1:41"
+      ]
+    }
+  }
+]
