@@ -33,6 +33,32 @@ func (h *OrderHandler) SetMatcherCallback(fn func()) {
 	h.matcherCallback = fn
 }
 
+// resolveDeliveryPartnerDetails returns (name, phone) for a delivery partner.
+// It checks the delivery_partners collection first, then falls back to the
+// users collection because name/phone are stored in users, not delivery_partners.
+func (h *OrderHandler) resolveDeliveryPartnerDetails(userID string) (string, string) {
+	var name, phone string
+	if dp, dpErr := h.appwrite.GetDeliveryPartner(userID); dpErr == nil && dp != nil && dp.Total > 0 {
+		name, _ = dp.Documents[0]["name"].(string)
+		phone, _ = dp.Documents[0]["phone"].(string)
+	}
+	if name == "" || phone == "" {
+		if user, uErr := h.appwrite.GetUser(userID); uErr == nil && user != nil {
+			if name == "" {
+				if n, _ := user["name"].(string); n != "" {
+					name = n
+				}
+			}
+			if phone == "" {
+				if p, _ := user["phone"].(string); p != "" {
+					phone = p
+				}
+			}
+		}
+	}
+	return name, phone
+}
+
 // NewOrderHandler creates an order handler
 func NewOrderHandler(aw *services.AppwriteService, os *services.OrderService, geo *services.GeoService, redis *redispkg.Client, broadcaster ...*websocket.EventBroadcaster) *OrderHandler {
 	h := &OrderHandler{appwrite: aw, orders: os, geo: geo, redis: redis}
@@ -416,6 +442,20 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		}
 	}
 
+	// Enrich with delivery partner name/phone (delivery_partners may not store
+	// name/phone — fall back to users collection)
+	if deliveryID != "" {
+		if _, exists := order["delivery_partner_name"]; !exists || order["delivery_partner_name"] == nil {
+			dpName, dpPhone := h.resolveDeliveryPartnerDetails(deliveryID)
+			if dpName != "" {
+				order["delivery_partner_name"] = dpName
+			}
+			if dpPhone != "" {
+				order["delivery_partner_phone"] = dpPhone
+			}
+		}
+	}
+
 	utils.Success(c, order)
 }
 
@@ -471,7 +511,8 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 		return
 	}
 
-	// Enrich orders with customer name from users collection
+	// Enrich orders with customer name/phone and delivery partner name/phone.
+	// delivery_partners collection does not store name/phone — must fall back to users.
 	for _, order := range result.Documents {
 		if custID, _ := order["customer_id"].(string); custID != "" {
 			if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
@@ -479,6 +520,20 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 					if name, _ := user["name"].(string); name != "" {
 						order["customer_name"] = name
 					}
+					if phone, _ := user["phone"].(string); phone != "" {
+						order["customer_phone"] = phone
+					}
+				}
+			}
+		}
+		if dpID, _ := order["delivery_partner_id"].(string); dpID != "" {
+			if _, exists := order["delivery_partner_name"]; !exists || order["delivery_partner_name"] == nil {
+				dpName, dpPhone := h.resolveDeliveryPartnerDetails(dpID)
+				if dpName != "" {
+					order["delivery_partner_name"] = dpName
+				}
+				if dpPhone != "" {
+					order["delivery_partner_phone"] = dpPhone
 				}
 			}
 		}

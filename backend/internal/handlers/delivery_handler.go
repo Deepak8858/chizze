@@ -282,9 +282,24 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 		return
 	}
 
-	// Extract partner name and phone from profile
+	// Extract partner name and phone from profile, falling back to users collection
+	// because delivery_partners collection may not store name/phone directly.
 	partnerName, _ := partnerResult.Documents[0]["name"].(string)
 	partnerPhone, _ := partnerResult.Documents[0]["phone"].(string)
+	if partnerName == "" || partnerPhone == "" {
+		if user, uErr := h.appwrite.GetUser(userID); uErr == nil && user != nil {
+			if partnerName == "" {
+				if n, _ := user["name"].(string); n != "" {
+					partnerName = n
+				}
+			}
+			if partnerPhone == "" {
+				if p, _ := user["phone"].(string); p != "" {
+					partnerPhone = p
+				}
+			}
+		}
+	}
 
 	// Assign partner to order with name/phone for enrichment
 	updateData := map[string]interface{}{
@@ -392,6 +407,32 @@ func (h *DeliveryHandler) getDeliveryPartnerProfile(c *gin.Context) (map[string]
 	return partner, partnerID, true
 }
 
+// resolveDeliveryPartnerDetails returns (name, phone) for a delivery partner.
+// It checks the delivery_partners collection first, then falls back to the
+// users collection because name/phone may only be stored there.
+func (h *DeliveryHandler) resolveDeliveryPartnerDetails(userID string) (string, string) {
+	var name, phone string
+	if dp, dpErr := h.appwrite.GetDeliveryPartner(userID); dpErr == nil && dp != nil && dp.Total > 0 {
+		name, _ = dp.Documents[0]["name"].(string)
+		phone, _ = dp.Documents[0]["phone"].(string)
+	}
+	if name == "" || phone == "" {
+		if user, uErr := h.appwrite.GetUser(userID); uErr == nil && user != nil {
+			if name == "" {
+				if n, _ := user["name"].(string); n != "" {
+					name = n
+				}
+			}
+			if phone == "" {
+				if p, _ := user["phone"].(string); p != "" {
+					phone = p
+				}
+			}
+		}
+	}
+	return name, phone
+}
+
 // ActiveOrders returns orders assigned to or available for this delivery partner
 // @Summary List active delivery orders
 // @Description Returns orders assigned to the partner or available for pickup depending on mode query param
@@ -480,7 +521,7 @@ func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 		totalCount = result.Total
 	}
 
-	// Enrich orders with customer name and delivery partner details
+	// Enrich orders with customer name/phone and delivery partner details
 	for _, order := range allDocs {
 		if custID, _ := order["customer_id"].(string); custID != "" {
 			if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
@@ -488,18 +529,20 @@ func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 					if name, _ := user["name"].(string); name != "" {
 						order["customer_name"] = name
 					}
+					if phone, _ := user["phone"].(string); phone != "" {
+						order["customer_phone"] = phone
+					}
 				}
 			}
 		}
 		if dpID, _ := order["delivery_partner_id"].(string); dpID != "" {
 			if _, exists := order["delivery_partner_name"]; !exists || order["delivery_partner_name"] == nil {
-				if dp, dpErr := h.appwrite.GetDeliveryPartner(dpID); dpErr == nil && dp != nil && dp.Total > 0 {
-					if name, _ := dp.Documents[0]["name"].(string); name != "" {
-						order["delivery_partner_name"] = name
-					}
-					if phone, _ := dp.Documents[0]["phone"].(string); phone != "" {
-						order["delivery_partner_phone"] = phone
-					}
+				dpName, dpPhone := h.resolveDeliveryPartnerDetails(dpID)
+				if dpName != "" {
+					order["delivery_partner_name"] = dpName
+				}
+				if dpPhone != "" {
+					order["delivery_partner_phone"] = dpPhone
 				}
 			}
 		}
@@ -647,25 +690,48 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 	}
 
 	if activeDeliveryOrder != nil {
-		// Enrich active order with customer name and delivery partner details
+		// Enrich active order with customer name/phone and delivery partner details
 		if custID, _ := activeDeliveryOrder["customer_id"].(string); custID != "" {
 			if _, exists := activeDeliveryOrder["customer_name"]; !exists || activeDeliveryOrder["customer_name"] == nil {
 				if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
 					if name, _ := user["name"].(string); name != "" {
 						activeDeliveryOrder["customer_name"] = name
 					}
+					if phone, _ := user["phone"].(string); phone != "" {
+						activeDeliveryOrder["customer_phone"] = phone
+					}
+				}
+			}
+		}
+		// Enrich with restaurant phone (fall back to owner's phone)
+		if restID, _ := activeDeliveryOrder["restaurant_id"].(string); restID != "" {
+			if _, exists := activeDeliveryOrder["restaurant_phone"]; !exists || activeDeliveryOrder["restaurant_phone"] == nil {
+				if rest, restErr := h.appwrite.GetRestaurant(restID); restErr == nil && rest != nil {
+					if phone, _ := rest["phone"].(string); phone != "" {
+						activeDeliveryOrder["restaurant_phone"] = phone
+					} else if ownerID, _ := rest["owner_id"].(string); ownerID != "" {
+						if owner, oErr := h.appwrite.GetUser(ownerID); oErr == nil && owner != nil {
+							if oPhone, _ := owner["phone"].(string); oPhone != "" {
+								activeDeliveryOrder["restaurant_phone"] = oPhone
+							}
+						}
+					}
+					if addr, _ := rest["address"].(string); addr != "" {
+						if _, addrExists := activeDeliveryOrder["restaurant_address"]; !addrExists || activeDeliveryOrder["restaurant_address"] == nil {
+							activeDeliveryOrder["restaurant_address"] = addr
+						}
+					}
 				}
 			}
 		}
 		if dpID, _ := activeDeliveryOrder["delivery_partner_id"].(string); dpID != "" {
 			if _, exists := activeDeliveryOrder["delivery_partner_name"]; !exists || activeDeliveryOrder["delivery_partner_name"] == nil {
-				if dp, dpErr := h.appwrite.GetDeliveryPartner(dpID); dpErr == nil && dp != nil && dp.Total > 0 {
-					if name, _ := dp.Documents[0]["name"].(string); name != "" {
-						activeDeliveryOrder["delivery_partner_name"] = name
-					}
-					if phone, _ := dp.Documents[0]["phone"].(string); phone != "" {
-						activeDeliveryOrder["delivery_partner_phone"] = phone
-					}
+				dpName, dpPhone := h.resolveDeliveryPartnerDetails(dpID)
+				if dpName != "" {
+					activeDeliveryOrder["delivery_partner_name"] = dpName
+				}
+				if dpPhone != "" {
+					activeDeliveryOrder["delivery_partner_phone"] = dpPhone
 				}
 			}
 		}

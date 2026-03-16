@@ -163,9 +163,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           restaurantName: state.activeDelivery!.request.restaurantName,
           restaurantCuisine: state.activeDelivery!.request.restaurantCuisine,
           restaurantAddress: state.activeDelivery!.request.restaurantAddress,
+          restaurantPhone: state.activeDelivery!.request.restaurantPhone,
           restaurantLatitude: state.activeDelivery!.request.restaurantLatitude,
           restaurantLongitude: state.activeDelivery!.request.restaurantLongitude,
           customerName: state.activeDelivery!.request.customerName,
+          customerPhone: state.activeDelivery!.request.customerPhone,
           customerAddress: state.activeDelivery!.request.customerAddress,
           customerLatitude: state.activeDelivery!.request.customerLatitude,
           customerLongitude: state.activeDelivery!.request.customerLongitude,
@@ -378,11 +380,13 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         restaurantName:
             orderData['restaurant_name'] as String? ?? order.restaurantName,
         restaurantAddress: orderData['restaurant_address'] as String? ?? '',
+        restaurantPhone: orderData['restaurant_phone'] as String? ?? '',
         restaurantLatitude:
             (orderData['restaurant_latitude'] as num?)?.toDouble() ?? 0,
         restaurantLongitude:
             (orderData['restaurant_longitude'] as num?)?.toDouble() ?? 0,
         customerName: orderData['customer_name'] as String? ?? 'Customer',
+        customerPhone: orderData['customer_phone'] as String? ?? '',
         customerAddress: orderData['customer_address'] as String? ?? '',
         customerLatitude:
             (orderData['customer_latitude'] as num?)?.toDouble() ?? 0,

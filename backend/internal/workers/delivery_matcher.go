@@ -136,6 +136,15 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		restName, _ := restaurant["name"].(string)
 		restCuisine, _ := restaurant["cuisine_type"].(string)
 		restAddr, _ := restaurant["address"].(string)
+		restPhone, _ := restaurant["phone"].(string)
+		// Fall back to the restaurant owner's phone if restaurant has no direct phone
+		if restPhone == "" {
+			if ownerID, _ := restaurant["owner_id"].(string); ownerID != "" {
+				if owner, oErr := w.awService.GetUser(ownerID); oErr == nil && owner != nil {
+					restPhone, _ = owner["phone"].(string)
+				}
+			}
+		}
 
 		// 4. Find online riders within 15 km via Redis geo index
 		riderIDs, err := w.findNearbyRiders(ctx, restLat, restLng, 15.0)
@@ -180,11 +189,15 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 				custLng, _ = addr["longitude"].(float64)
 			}
 		}
-		// Try to get customer name from user doc
+		// Try to get customer name and phone from user doc
+		custPhone := ""
 		if customerID != "" {
 			if user, uErr := w.awService.GetUser(customerID); uErr == nil && user != nil {
 				if n, _ := user["name"].(string); n != "" {
 					custName = n
+				}
+				if p, _ := user["phone"].(string); p != "" {
+					custPhone = p
 				}
 			}
 		}
@@ -281,9 +294,11 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			"restaurant_name":     restName,
 			"restaurant_cuisine":  restCuisine,
 			"restaurant_address":  restAddr,
+			"restaurant_phone":    restPhone,
 			"restaurant_latitude": restLat,
 			"restaurant_longitude": restLng,
 			"customer_name":       custName,
+			"customer_phone":      custPhone,
 			"customer_address":    custAddr,
 			"customer_latitude":   custLat,
 			"customer_longitude":  custLng,
