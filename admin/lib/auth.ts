@@ -41,7 +41,8 @@ export function getUser(): AdminUser | null {
 }
 
 export function isAuthenticated(): boolean {
-  return !!getToken() && getUser()?.role === "admin";
+  const user = getUser();
+  return !!getToken() && !!user?.role;
 }
 
 /** Hook: redirect to /login if not authenticated */

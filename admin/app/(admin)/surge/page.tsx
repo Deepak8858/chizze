@@ -43,7 +43,7 @@ export default function SurgePage() {
 
   const columns: ColumnDef<SurgePricing, unknown>[] = [
     {
-      accessorKey: "zone_id",
+      accessorKey: "zone_name",
       header: "Zone",
       cell: ({ getValue }) => <span className="text-white text-sm">{getValue() as string}</span>,
     },

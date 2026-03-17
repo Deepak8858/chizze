@@ -16,7 +16,7 @@ export default function AdminLayout({
   useEffect(() => {
     const token = getToken();
     const user = getUser();
-    if (!token || user?.role !== "admin") {
+    if (!token || !user?.role) {
       router.replace("/login");
     } else {
       setReady(true);

@@ -16,12 +16,12 @@ function SLACard({ order }: { order: Order & { elapsed_min: number } }) {
   return (
     <div className={`card p-4 border ${cls === "sla-critical" ? "border-status-error/40" : cls === "sla-warning" ? "border-status-warning/40" : "border-white/5"}`}>
       <div className="flex items-center justify-between mb-2">
-        <span className="font-mono text-xs text-brand-400">#{order.$id.slice(-8).toUpperCase()}</span>
+        <span className="font-mono text-xs text-brand-400">#{order.order_number ?? order.$id.slice(-8).toUpperCase()}</span>
         <span className={`text-xs font-bold ${cls === "sla-critical" ? "text-status-error" : cls === "sla-warning" ? "text-status-warning" : "text-status-success"}`}>
           {order.elapsed_min}m elapsed
         </span>
       </div>
-      <p className="text-white text-sm font-medium truncate">{order.restaurant_id}</p>
+      <p className="text-white text-sm font-medium truncate">{order.restaurant_name}</p>
       <p className="text-text-muted text-xs mt-1 capitalize">{order.status.replace(/_/g, " ")}</p>
       <div className="mt-2 bg-surface-200 rounded-full h-1.5 overflow-hidden">
         <div

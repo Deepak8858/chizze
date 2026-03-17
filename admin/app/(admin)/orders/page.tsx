@@ -18,11 +18,11 @@ export default function OrdersPage() {
 
   const columns: ColumnDef<Order, unknown>[] = [
     {
-      accessorKey: "$id",
-      header: "Order ID",
-      cell: ({ getValue }) => (
-        <Link href={`/orders/${getValue()}`} className="text-brand-400 hover:underline font-mono text-xs flex items-center gap-1">
-          #{(getValue() as string).slice(-8).toUpperCase()} <ExternalLink size={11} />
+      accessorKey: "order_number",
+      header: "Order #",
+      cell: ({ row }) => (
+        <Link href={`/orders/${row.original.$id}`} className="text-brand-400 hover:underline font-mono text-xs flex items-center gap-1">
+          #{row.original.order_number} <ExternalLink size={11} />
         </Link>
       ),
     },
@@ -72,8 +72,8 @@ export default function OrdersPage() {
         columns={columns}
         data={data?.data ?? []}
         loading={isLoading}
-        searchColumn="$id"
-        searchPlaceholder="Search order ID…"
+        searchColumn="order_number"
+        searchPlaceholder="Search order #…"
       />
     </div>
   );

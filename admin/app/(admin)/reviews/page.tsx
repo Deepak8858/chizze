@@ -27,14 +27,14 @@ export default function ReviewsPage() {
 
   const columns: ColumnDef<Review, unknown>[] = [
     {
-      accessorKey: "restaurant_id",
+      accessorKey: "restaurant_name",
       header: "Restaurant",
-      cell: ({ getValue }) => <span className="text-white text-xs">{(getValue() as string).slice(-8)}</span>,
+      cell: ({ row }) => <span className="text-white text-xs">{row.original.restaurant_name ?? row.original.restaurant_id.slice(-8)}</span>,
     },
     {
-      accessorKey: "customer_id",
+      accessorKey: "customer_name",
       header: "User",
-      cell: ({ getValue }) => <span className="text-text-secondary text-xs">{(getValue() as string).slice(-8)}</span>,
+      cell: ({ row }) => <span className="text-text-secondary text-xs">{row.original.customer_name ?? row.original.customer_id.slice(-8)}</span>,
     },
     {
       accessorKey: "food_rating",

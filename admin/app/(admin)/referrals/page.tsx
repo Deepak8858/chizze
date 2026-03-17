@@ -20,12 +20,11 @@ export default function ReferralsPage() {
   });
 
   const columns: ColumnDef<Referral, unknown>[] = [
-    { accessorKey: "referrer_id", header: "Referrer", cell: ({ getValue }) => <span className="font-mono text-xs text-brand-400">{(getValue() as string).slice(-10)}</span> },
-    { accessorKey: "referred_id", header: "Referred", cell: ({ getValue }) => <span className="font-mono text-xs text-text-secondary">{(getValue() as string).slice(-10)}</span> },
-    { accessorKey: "code", header: "Code", cell: ({ getValue }) => <span className="font-mono text-xs text-white uppercase">{getValue() as string}</span> },
+    { accessorKey: "referrer_user_id", header: "Referrer", cell: ({ row }) => <span className="font-mono text-xs text-brand-400">{row.original.referrer_name ?? row.original.referrer_user_id.slice(-10)}</span> },
+    { accessorKey: "referred_user_id", header: "Referred", cell: ({ row }) => <span className="font-mono text-xs text-text-secondary">{row.original.referred_name ?? row.original.referred_user_id.slice(-10)}</span> },
+    { accessorKey: "referral_code", header: "Code", cell: ({ getValue }) => <span className="font-mono text-xs text-white uppercase">{getValue() as string}</span> },
     { accessorKey: "reward_amount", header: "Reward", cell: ({ getValue }) => <span className="text-status-success text-xs">{formatCurrency(getValue() as number)}</span> },
     { accessorKey: "status", header: "Status", cell: ({ getValue }) => <StatusBadge status={getValue() as string} /> },
-    { accessorKey: "completed_at", header: "Completed", cell: ({ getValue }) => <span className="text-xs text-text-muted">{getValue() ? formatDate(getValue() as string) : "—"}</span> },
     { accessorKey: "created_at", header: "Created", cell: ({ getValue }) => <span className="text-xs text-text-muted">{formatDate(getValue() as string)}</span> },
   ];
 
@@ -53,7 +52,7 @@ export default function ReferralsPage() {
         </div>
       </div>
 
-      <DataTable columns={columns} data={data?.data ?? []} loading={isLoading} searchColumn="code" searchPlaceholder="Search referral code…" />
+      <DataTable columns={columns} data={data?.data ?? []} loading={isLoading} searchColumn="referral_code" searchPlaceholder="Search referral code…" />
     </div>
   );
 }

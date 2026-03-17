@@ -62,6 +62,16 @@ function Breadcrumbs() {
     admins: "Admins",
   };
 
+  // Resolve dynamic segments like /orders/[id] to "Order Detail"
+  const resolveLabel = (seg: string, i: number): string => {
+    if (labelMap[seg]) return labelMap[seg];
+    // If previous segment is a known parent, this is a detail page
+    const parent = segments[i - 1];
+    if (parent === "orders") return `#${seg.slice(-8).toUpperCase()}`;
+    if (parent === "users" || parent === "restaurants" || parent === "delivery-partners" || parent === "disputes" || parent === "support") return "Detail";
+    return seg;
+  };
+
   return (
     <div className="flex items-center gap-1 text-sm text-text-muted">
       <span className="text-text-secondary">Chizze</span>
@@ -69,7 +79,7 @@ function Breadcrumbs() {
         <span key={i} className="flex items-center gap-1">
           <ChevronRight size={12} />
           <span className={i === segments.length - 1 ? "text-white font-medium" : ""}>
-            {labelMap[seg] ?? seg}
+            {resolveLabel(seg, i)}
           </span>
         </span>
       ))}

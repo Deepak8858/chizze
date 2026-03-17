@@ -60,7 +60,7 @@ export async function DELETE<T>(path: string): Promise<T> {
 export const authApi = {
   sendOtp: (phone: string) => POST("/auth/send-otp", { phone }),
   verifyOtp: (phone: string, otp: string) =>
-    POST<{ token: string; user: { role: string } }>("/auth/verify-otp", { phone, otp }),
+    POST<{ token: string; user: { id: string; name: string; phone: string; role: string; permission?: string } }>("/auth/verify-otp", { phone, otp }),
   logout: () => api.delete("/auth/logout"),
 };
 

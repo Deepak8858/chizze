@@ -42,7 +42,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.verifyOtp(`+91${phone}`, otp);
-      if (res.user.role !== "admin") {
+      const role = res.user?.role;
+      if (!role || role === "customer" || role === "restaurant_owner" || role === "delivery_partner") {
         toast.error("Access denied. Admin accounts only.");
         setLoading(false);
         return;
