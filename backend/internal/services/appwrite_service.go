@@ -412,3 +412,71 @@ func (s *AppwriteService) ListDeliveryIssues(orderID string) (*appwrite.Document
 		appwrite.QueryOrderDesc("created_at"),
 	})
 }
+
+// ─── Admin-specific methods ───
+
+func (s *AppwriteService) DeleteRestaurant(id string) error {
+	return s.client.DeleteDocument(models.CollectionRestaurants, id)
+}
+
+func (s *AppwriteService) CreateCoupon(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(models.CollectionCoupons, id, data)
+}
+
+func (s *AppwriteService) DeleteCoupon(id string) error {
+	return s.client.DeleteDocument(models.CollectionCoupons, id)
+}
+
+func (s *AppwriteService) DeleteReview(id string) error {
+	return s.client.DeleteDocument(models.CollectionReviews, id)
+}
+
+func (s *AppwriteService) ListAllGoldSubscriptions(queries []string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionGoldSubscriptions, queries)
+}
+
+func (s *AppwriteService) ListAllReferrals(queries []string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionReferrals, queries)
+}
+
+func (s *AppwriteService) ListAllNotifications(queries []string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionNotifications, queries)
+}
+
+func (s *AppwriteService) GetDeliveryIssue(id string) (map[string]interface{}, error) {
+	return s.client.GetDocument(models.CollectionDeliveryIssues, id)
+}
+
+func (s *AppwriteService) UpdateDeliveryIssue(id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.UpdateDocument(models.CollectionDeliveryIssues, id, data)
+}
+
+func (s *AppwriteService) ListDeliveryIssuesByQuery(queries []string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(models.CollectionDeliveryIssues, queries)
+}
+
+func (s *AppwriteService) DeleteDeliveryPartner(id string) error {
+	return s.client.DeleteDocument(models.CollectionDeliveryPartners, id)
+}
+
+// ─── New collection CRUD (audit_log, zones, surge_rules, feature_flags, support_issues, banners, settings) ───
+
+func (s *AppwriteService) ListDocuments(collection string, queries []string) (*appwrite.DocumentList, error) {
+	return s.client.ListDocuments(collection, queries)
+}
+
+func (s *AppwriteService) GetDocument(collection, id string) (map[string]interface{}, error) {
+	return s.client.GetDocument(collection, id)
+}
+
+func (s *AppwriteService) CreateDocument(collection, id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.CreateDocument(collection, id, data)
+}
+
+func (s *AppwriteService) UpdateDocument(collection, id string, data map[string]interface{}) (map[string]interface{}, error) {
+	return s.client.UpdateDocument(collection, id, data)
+}
+
+func (s *AppwriteService) DeleteDocument(collection, id string) error {
+	return s.client.DeleteDocument(collection, id)
+}

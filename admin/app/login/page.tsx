@@ -1,9 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Phone, KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import { authApi } from "@/lib/api";
+import { account, ID } from "@/lib/appwrite";
 import { saveAuth, useRedirectIfAuthed } from "@/lib/auth";
 import type { AdminUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const userIdRef = useRef<string>("");
 
   const handleSendOtp = async () => {
     if (phone.length < 10) {
@@ -24,7 +26,9 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      await authApi.sendOtp(`+91${phone}`);
+      // Use Appwrite phone auth to send OTP
+      const token = await account.createPhoneToken(ID.unique(), `+91${phone}`);
+      userIdRef.current = token.userId;
       toast.success("OTP sent!");
       setStep("otp");
     } catch {
@@ -41,14 +45,34 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const res = await authApi.verifyOtp(`+91${phone}`, otp);
-      const role = res.user?.role;
+      // 1. Verify OTP with Appwrite → creates session
+      await account.createSession(userIdRef.current, otp);
+
+      // 2. Get Appwrite JWT from the session
+      const { jwt } = await account.createJWT();
+
+      // 3. Exchange Appwrite JWT for Chizze API token
+      const res = await authApi.exchange(jwt);
+
+      // 4. Check admin role
+      const role = res.role;
       if (!role || role === "customer" || role === "restaurant_owner" || role === "delivery_partner") {
         toast.error("Access denied. Admin accounts only.");
+        // Clean up Appwrite session
+        try { await account.deleteSession("current"); } catch { /* ignore */ }
         setLoading(false);
         return;
       }
-      saveAuth(res.token, res.user as unknown as AdminUser);
+
+      // 5. Store token, then fetch user profile
+      localStorage.setItem("chizze_admin_token", res.token);
+      let user: AdminUser = { id: res.user_id, name: "", phone: `+91${phone}`, role };
+      try {
+        const profile = await authApi.me();
+        user = { id: profile.$id || res.user_id, name: profile.name || "", phone: profile.phone || `+91${phone}`, role: profile.role || role };
+      } catch { /* profile fetch is best-effort */ }
+
+      saveAuth(res.token, user);
       toast.success("Welcome back!");
       router.replace("/");
     } catch {

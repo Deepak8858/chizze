@@ -33,25 +33,35 @@ api.interceptors.response.use(
   }
 );
 
-// ─── Typed convenience methods ────────────────────────────────────────────────
+// ─── Response unwrapper ───────────────────────────────────────────────────────────────────────────────
+// Backend wraps all responses in { success: bool, data: T, meta?: ... }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function unwrap<T>(body: any): T {
+  if (body && typeof body === "object" && "success" in body && "data" in body) {
+    return body.data as T;
+  }
+  return body as T;
+}
+
+// ─── Typed convenience methods ────────────────────────────────────────────────────────────────────────
 export async function GET<T>(path: string, params?: Record<string, unknown>): Promise<T> {
-  const res = await api.get<T>(path, { params });
-  return res.data;
+  const res = await api.get(path, { params });
+  return unwrap<T>(res.data);
 }
 
 export async function POST<T>(path: string, body?: unknown): Promise<T> {
-  const res = await api.post<T>(path, body);
-  return res.data;
+  const res = await api.post(path, body);
+  return unwrap<T>(res.data);
 }
 
 export async function PUT<T>(path: string, body?: unknown): Promise<T> {
-  const res = await api.put<T>(path, body);
-  return res.data;
+  const res = await api.put(path, body);
+  return unwrap<T>(res.data);
 }
 
 export async function DELETE<T>(path: string): Promise<T> {
-  const res = await api.delete<T>(path);
-  return res.data;
+  const res = await api.delete(path);
+  return unwrap<T>(res.data);
 }
 
 // ─── Admin-specific API helpers ───────────────────────────────────────────────
@@ -59,8 +69,11 @@ export async function DELETE<T>(path: string): Promise<T> {
 // Auth
 export const authApi = {
   sendOtp: (phone: string) => POST("/auth/send-otp", { phone }),
-  verifyOtp: (phone: string, otp: string) =>
-    POST<{ token: string; user: { id: string; name: string; phone: string; role: string; permission?: string } }>("/auth/verify-otp", { phone, otp }),
+  /** Exchange an Appwrite JWT for a Chizze API token */
+  exchange: (appwriteJwt: string) =>
+    POST<{ token: string; user_id: string; role: string; is_new: boolean }>("/auth/exchange", { jwt: appwriteJwt }),
+  /** Fetch current user profile (requires auth token in header) */
+  me: () => GET<{ $id: string; name: string; phone: string; role: string }>("/users/me"),
   logout: () => api.delete("/auth/logout"),
 };
 

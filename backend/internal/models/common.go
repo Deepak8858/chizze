@@ -55,6 +55,13 @@ const (
 	CollectionReferrals         = "referrals"
 	CollectionScheduledOrders   = "scheduled_orders"
 	CollectionDeliveryIssues    = "delivery_issues"
+	CollectionAuditLog          = "audit_log"
+	CollectionZones             = "zones"
+	CollectionSurgeRules        = "surge_rules"
+	CollectionFeatureFlags      = "feature_flags"
+	CollectionSupportIssues     = "support_issues"
+	CollectionBanners           = "banners"
+	CollectionSettings          = "settings"
 )
 
 // AppError is a structured error for API responses

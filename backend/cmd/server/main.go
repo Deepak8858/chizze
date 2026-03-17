@@ -339,6 +339,136 @@ func main() {
 		delivery.POST("/payouts/request", deliveryHandler.RequestPayout)
 	}
 
+	// ─── Admin Routes (admin / super_admin only) ───
+	adminHandler := handlers.NewAdminHandler(awService, redisClient)
+	admin := v1.Group("/admin")
+	admin.Use(middleware.Auth(cfg, redisClient))
+	admin.Use(middleware.RequireRole("admin", "super_admin"))
+	{
+		// Dashboard & Analytics
+		admin.GET("/dashboard", adminHandler.Dashboard)
+		admin.GET("/analytics", adminHandler.Analytics)
+		admin.GET("/analytics/sla", adminHandler.AnalyticsSLA)
+		admin.GET("/analytics/items", adminHandler.AnalyticsItems)
+		admin.GET("/analytics/cities", adminHandler.AnalyticsCities)
+		admin.GET("/analytics/retention", adminHandler.AnalyticsRetention)
+		admin.GET("/analytics/revenue", adminHandler.AnalyticsRevenue)
+		admin.GET("/reports/financial", adminHandler.ReportsFinancial)
+		admin.GET("/reports/cancellations", adminHandler.ReportsCancellations)
+		admin.GET("/leaderboards", adminHandler.Leaderboards)
+
+		// Users
+		admin.GET("/users", adminHandler.ListUsers)
+		admin.GET("/users/:id", adminHandler.GetUser)
+		admin.PUT("/users/:id", adminHandler.UpdateUser)
+		admin.DELETE("/users/:id", adminHandler.DeleteUser)
+
+		// Restaurants
+		admin.GET("/restaurants", adminHandler.ListRestaurants)
+		admin.GET("/restaurants/pending", adminHandler.PendingRestaurants)
+		admin.GET("/restaurants/:id", adminHandler.GetRestaurant)
+		admin.GET("/restaurants/:id/menu", adminHandler.GetRestaurantMenu)
+		admin.PUT("/restaurants/:id", adminHandler.UpdateRestaurant)
+		admin.PUT("/restaurants/:id/approve", adminHandler.ApproveRestaurant)
+		admin.PUT("/restaurants/:id/reject", adminHandler.RejectRestaurant)
+		admin.DELETE("/restaurants/:id", adminHandler.DeleteRestaurant)
+
+		// Orders
+		admin.GET("/orders", adminHandler.ListOrders)
+		admin.GET("/orders/active", adminHandler.ActiveOrders)
+		admin.GET("/orders/:id", adminHandler.GetOrder)
+		admin.PUT("/orders/:id/cancel", adminHandler.CancelOrder)
+		admin.PUT("/orders/:id/reassign", adminHandler.ReassignOrder)
+
+		// Delivery Partners
+		admin.GET("/delivery-partners", adminHandler.ListDeliveryPartners)
+		admin.GET("/delivery-partners/pending", adminHandler.PendingDeliveryPartners)
+		admin.GET("/delivery-partners/:id", adminHandler.GetDeliveryPartner)
+		admin.PUT("/delivery-partners/:id", adminHandler.UpdateDeliveryPartner)
+		admin.PUT("/delivery-partners/:id/verify", adminHandler.VerifyDeliveryPartner)
+		admin.GET("/delivery-partners/:id/payouts", adminHandler.DeliveryPartnerPayouts)
+
+		// Payouts
+		admin.GET("/payouts", adminHandler.ListPayouts)
+		admin.PUT("/payouts/:id", adminHandler.UpdatePayout)
+
+		// Coupons
+		admin.GET("/coupons", adminHandler.ListCoupons)
+		admin.POST("/coupons", adminHandler.CreateCoupon)
+		admin.PUT("/coupons/:id", adminHandler.UpdateCoupon)
+		admin.DELETE("/coupons/:id", adminHandler.DeleteCoupon)
+
+		// Reviews
+		admin.GET("/reviews", adminHandler.ListReviews)
+		admin.PUT("/reviews/:id", adminHandler.UpdateReview)
+		admin.DELETE("/reviews/:id", adminHandler.DeleteReview)
+
+		// Gold
+		admin.GET("/gold/subscriptions", adminHandler.ListGoldSubscriptions)
+		admin.GET("/gold/stats", adminHandler.GoldStats)
+
+		// Referrals
+		admin.GET("/referrals", adminHandler.ListReferrals)
+		admin.GET("/referrals/stats", adminHandler.ReferralStats)
+
+		// Notifications
+		admin.POST("/notifications/broadcast", adminHandler.BroadcastNotification)
+		admin.GET("/notifications/history", adminHandler.NotificationHistory)
+
+		// Disputes
+		admin.GET("/disputes", adminHandler.ListDisputes)
+		admin.GET("/disputes/:id", adminHandler.GetDispute)
+		admin.PUT("/disputes/:id", adminHandler.UpdateDispute)
+
+		// Admin Accounts
+		admin.GET("/admins", adminHandler.ListAdmins)
+		admin.POST("/admins", adminHandler.CreateAdmin)
+		admin.PUT("/admins/:id", adminHandler.UpdateAdmin)
+		admin.DELETE("/admins/:id", adminHandler.DeleteAdmin)
+
+		// Live
+		admin.GET("/live/sessions", adminHandler.LiveSessions)
+		admin.GET("/live/riders", adminHandler.LiveRiders)
+		admin.GET("/live/orders", adminHandler.LiveOrders)
+
+		// Zones
+		admin.GET("/zones", adminHandler.ListZones)
+		admin.POST("/zones", adminHandler.CreateZone)
+		admin.PUT("/zones/:id", adminHandler.UpdateZone)
+		admin.DELETE("/zones/:id", adminHandler.DeleteZone)
+
+		// Surge
+		admin.GET("/surge", adminHandler.ListSurge)
+		admin.POST("/surge", adminHandler.CreateSurge)
+		admin.PUT("/surge/:id", adminHandler.UpdateSurge)
+		admin.DELETE("/surge/:id", adminHandler.DeleteSurge)
+
+		// Feature Flags
+		admin.GET("/feature-flags", adminHandler.ListFeatureFlags)
+		admin.PUT("/feature-flags/:key", adminHandler.UpdateFeatureFlag)
+
+		// Audit Log
+		admin.GET("/audit-log", adminHandler.ListAuditLog)
+
+		// Support
+		admin.GET("/support/issues", adminHandler.ListSupportIssues)
+		admin.GET("/support/issues/:id", adminHandler.GetSupportIssue)
+		admin.PUT("/support/issues/:id", adminHandler.UpdateSupportIssue)
+		admin.GET("/support/issues/:id/messages", adminHandler.SupportIssueMessages)
+		admin.POST("/support/issues/:id/reply", adminHandler.ReplySupportIssue)
+
+		// Content
+		admin.GET("/content/banners", adminHandler.ListBanners)
+		admin.POST("/content/banners", adminHandler.CreateBanner)
+		admin.PUT("/content/banners/:id", adminHandler.UpdateBanner)
+		admin.DELETE("/content/banners/:id", adminHandler.DeleteBanner)
+		admin.GET("/content/categories", adminHandler.ListContentCategories)
+
+		// Settings
+		admin.GET("/settings", adminHandler.GetSettings)
+		admin.PUT("/settings", adminHandler.UpdateSettings)
+	}
+
 	// Webhooks (no auth — validated by signature)
 	v1.POST("/payments/webhook", paymentHandler.Webhook)
 
