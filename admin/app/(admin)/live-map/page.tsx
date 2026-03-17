@@ -4,7 +4,7 @@ import Map, { Marker, Source, Layer, type MapRef } from "react-map-gl";
 import type { LayerProps } from "react-map-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useRiderLocations, useLiveOrders } from "@/lib/sse";
-import { liveApi } from "@/lib/api";
+import { restaurantsApi } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { Bike, MapPin, UtensilsCrossed, Layers, Zap, Thermometer, Search } from "lucide-react";
 import { cn, formatCurrency, timeAgo } from "@/lib/utils";
@@ -53,7 +53,9 @@ export default function LiveMapPage() {
 
   const { data: restaurants } = useQuery<Restaurant[]>({
     queryKey: ["admin-restaurants-map"],
-    queryFn: () => liveApi.ridersSnapshot() as Promise<Restaurant[]>,
+    queryFn: () =>
+      (restaurantsApi.list({ is_online: true, limit: 100 }) as Promise<{ data: Restaurant[] }>)
+        .then((r) => r.data),
     staleTime: 5 * 60_000,
   });
 

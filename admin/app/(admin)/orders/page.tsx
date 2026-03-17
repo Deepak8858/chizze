@@ -9,8 +9,6 @@ import type { Order } from "@/types";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 
-const STATUS_TABS = ["all", "pending", "accepted", "preparing", "picked_up", "delivered", "cancelled"];
-
 export default function OrdersPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-orders"],
@@ -58,7 +56,7 @@ export default function OrdersPage() {
       ),
     },
     {
-      accessorKey: "created_at",
+      accessorKey: "placed_at",
       header: "Placed At",
       cell: ({ getValue }) => <span className="text-xs text-text-muted">{formatDateTime(getValue() as string)}</span>,
     },

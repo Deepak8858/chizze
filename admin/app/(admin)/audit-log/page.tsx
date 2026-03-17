@@ -15,9 +15,9 @@ export default function AuditLogPage() {
 
   const columns: ColumnDef<AuditLog, unknown>[] = [
     {
-      accessorKey: "admin_id",
+      accessorKey: "admin_name",
       header: "Admin",
-      cell: ({ getValue }) => <span className="font-mono text-xs text-brand-400">{(getValue() as string).slice(-8)}</span>,
+      cell: ({ getValue }) => <span className="text-sm text-white font-medium">{getValue() as string}</span>,
     },
     {
       accessorKey: "action",
@@ -37,14 +37,9 @@ export default function AuditLogPage() {
       ),
     },
     {
-      accessorKey: "description",
-      header: "Description",
+      accessorKey: "summary",
+      header: "Summary",
       cell: ({ getValue }) => <span className="text-text-secondary text-xs">{getValue() as string}</span>,
-    },
-    {
-      accessorKey: "ip_address",
-      header: "IP",
-      cell: ({ getValue }) => <span className="font-mono text-xs text-text-muted">{getValue() as string}</span>,
     },
     {
       accessorKey: "created_at",

@@ -14,7 +14,7 @@ export default function FlagsPage() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => flagsApi.update(id, { enabled }),
+    mutationFn: ({ id, value }: { id: string; value: boolean }) => flagsApi.update(id, value),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["feature-flags"] }); toast.success("Flag updated"); },
     onError: () => toast.error("Failed"),
   });
@@ -47,7 +47,7 @@ export default function FlagsPage() {
                     {isEnabled ? "Enabled" : "Disabled"}
                   </span>
                   <button
-                    onClick={() => toggleMutation.mutate({ id: flag.key, enabled: !isEnabled })}
+                    onClick={() => toggleMutation.mutate({ id: flag.key, value: !isEnabled })}
                     className="transition-colors"
                   >
                     {isEnabled

@@ -11,11 +11,11 @@ import type { Admin } from "@/types";
 import { Plus, Shield, Trash2 } from "lucide-react";
 import { getUser } from "@/lib/auth";
 
-const ROLES = ["super_admin", "admin", "support", "analyst"];
+const ROLES = ["super_admin", "finance", "operations", "support", "read_only"];
 
 export default function AdminAccountsPage() {
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", role: "support" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", permission: "support" });
   const qc = useQueryClient();
   const me = getUser();
 
@@ -38,9 +38,10 @@ export default function AdminAccountsPage() {
 
   const ROLE_COLORS: Record<string, string> = {
     super_admin: "text-brand-400 bg-brand-500/10",
-    admin: "text-status-info bg-status-info/10",
+    finance: "text-status-info bg-status-info/10",
+    operations: "text-status-warning bg-status-warning/10",
     support: "text-status-success bg-status-success/10",
-    analyst: "text-rating bg-rating/10",
+    read_only: "text-text-muted bg-white/5",
   };
 
   const columns: ColumnDef<Admin, unknown>[] = [
@@ -60,8 +61,8 @@ export default function AdminAccountsPage() {
       ),
     },
     {
-      accessorKey: "role",
-      header: "Role",
+      accessorKey: "permission",
+      header: "Permission",
       cell: ({ getValue }) => (
         <span className={`text-xs px-2 py-0.5 rounded capitalize font-medium ${ROLE_COLORS[(getValue() as string)] ?? "text-text-muted bg-white/5"}`}>
           {(getValue() as string).replace("_", " ")}
@@ -70,7 +71,7 @@ export default function AdminAccountsPage() {
     },
     { accessorKey: "phone", header: "Phone", cell: ({ getValue }) => <span className="text-text-secondary text-xs">{getValue() as string ?? "—"}</span> },
     { accessorKey: "is_active", header: "Status", cell: ({ getValue }) => <StatusBadge status={getValue() ? "active" : "inactive"} /> },
-    { accessorKey: "last_login_at", header: "Last Login", cell: ({ getValue }) => <span className="text-xs text-text-muted">{getValue() ? formatDate(getValue() as string) : "Never"}</span> },
+    { accessorKey: "last_login", header: "Last Login", cell: ({ getValue }) => <span className="text-xs text-text-muted">{getValue() ? formatDate(getValue() as string) : "Never"}</span> },
     {
       id: "actions",
       header: "",
@@ -118,8 +119,8 @@ export default function AdminAccountsPage() {
               </div>
             ))}
             <div>
-              <label className="text-xs text-text-muted mb-1 block">Role</label>
-              <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="w-full bg-surface-200 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
+              <label className="text-xs text-text-muted mb-1 block">Permission</label>
+              <select value={form.permission} onChange={e => setForm(f => ({ ...f, permission: e.target.value }))} className="w-full bg-surface-200 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
                 {ROLES.map(r => <option key={r} value={r}>{r.replace("_", " ")}</option>)}
               </select>
             </div>

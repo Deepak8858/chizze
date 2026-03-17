@@ -12,15 +12,15 @@ export function exportCSV(data: Record<string, unknown>[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-/** Export the innerHTML of an element as PDF */
-export async function exportPDF(elementId: string, filename: string) {
+/** Export an element (or element ID) as PDF */
+export async function exportPDF(el: HTMLElement | string, filename: string) {
   const { default: html2canvas } = await import("html2canvas");
   const { default: jsPDF } = await import("jspdf");
 
-  const el = document.getElementById(elementId);
-  if (!el) return;
+  const element = typeof el === "string" ? document.getElementById(el) : el;
+  if (!element) return;
 
-  const canvas = await html2canvas(el, {
+  const canvas = await html2canvas(element, {
     backgroundColor: "#0D0D0D",
     scale: 2,
   });

@@ -22,7 +22,7 @@ export default function GoldPage() {
   const columns: ColumnDef<GoldSubscription, unknown>[] = [
     { accessorKey: "user_id", header: "User", cell: ({ getValue }) => <span className="font-mono text-xs text-brand-400">{(getValue() as string).slice(-10)}</span> },
     {
-      accessorKey: "plan",
+      accessorKey: "plan_type",
       header: "Plan",
       cell: ({ getValue }) => (
         <div className="flex items-center gap-1">
@@ -31,15 +31,10 @@ export default function GoldPage() {
         </div>
       ),
     },
-    { accessorKey: "amount_paid", header: "Amount", cell: ({ getValue }) => <span className="text-white font-medium">{formatCurrency(getValue() as number)}</span> },
-    { accessorKey: "started_at", header: "Started", cell: ({ getValue }) => <span className="text-xs text-text-muted">{formatDate(getValue() as string)}</span> },
-    { accessorKey: "expires_at", header: "Expires", cell: ({ getValue }) => <span className="text-xs text-text-muted">{formatDate(getValue() as string)}</span> },
-    { accessorKey: "is_active", header: "Status", cell: ({ getValue }) => <StatusBadge status={getValue() ? "active" : "expired"} /> },
-    {
-      accessorKey: "auto_renew",
-      header: "Auto-Renew",
-      cell: ({ getValue }) => <span className={`text-xs ${getValue() ? "text-status-success" : "text-text-muted"}`}>{getValue() ? "On" : "Off"}</span>,
-    },
+    { accessorKey: "amount", header: "Amount", cell: ({ getValue }) => <span className="text-white font-medium">{formatCurrency(getValue() as number)}</span> },
+    { accessorKey: "start_date", header: "Started", cell: ({ getValue }) => <span className="text-xs text-text-muted">{formatDate(getValue() as string)}</span> },
+    { accessorKey: "end_date", header: "Expires", cell: ({ getValue }) => <span className="text-xs text-text-muted">{formatDate(getValue() as string)}</span> },
+    { accessorKey: "status", header: "Status", cell: ({ getValue }) => <StatusBadge status={getValue() as string} /> },
   ];
 
   return (

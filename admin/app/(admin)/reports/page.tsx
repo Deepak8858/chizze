@@ -49,7 +49,7 @@ export default function ReportsPage() {
             <Download size={14} /> CSV
           </button>
           <button
-            onClick={() => reportRef.current && exportPDF(reportRef.current as unknown as string, `report-${range}`)}
+            onClick={() => reportRef.current && exportPDF(reportRef.current, `report-${range}`)}
             className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 transition-colors"
           >
             <FileText size={14} /> PDF

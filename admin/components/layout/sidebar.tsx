@@ -6,8 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Map, Users, UtensilsCrossed, Package, Bike,
   DollarSign, CheckSquare, AlertTriangle, Ticket, Star, Link2,
-  Bell, Image, BarChart2, TrendingUp, Trophy, Coffee, Building2,
-  RotateCcw, MessageSquare, Layers, Zap, Flag, ClipboardList,
+  Bell, Image, BarChart2, TrendingUp, MessageSquare, Layers, Zap, Flag, ClipboardList,
   HeadphonesIcon, Settings, Shield, ChevronLeft, ChevronRight,
   Radio, MonitorPlay, KanbanSquare
 } from "lucide-react";
@@ -36,7 +35,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Dashboard",
     items: [
-      { label: "Overview", href: "/", icon: <LayoutDashboard size={16} /> },
+      { label: "Overview", href: "/dashboard", icon: <LayoutDashboard size={16} /> },
     ],
   },
   {
@@ -67,10 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "SLA Monitor", href: "/sla", icon: <MonitorPlay size={16} /> },
       { label: "Reports", href: "/reports", icon: <TrendingUp size={16} /> },
-      { label: "Leaderboards", href: "/leaderboards", icon: <Trophy size={16} /> },
-      { label: "Items", href: "/analytics/items", icon: <Coffee size={16} /> },
-      { label: "Cities", href: "/analytics/cities", icon: <Building2 size={16} /> },
-      { label: "Retention", href: "/analytics/retention", icon: <RotateCcw size={16} /> },
+      { label: "Analytics", href: "/analytics", icon: <BarChart2 size={16} /> },
       { label: "Reviews", href: "/reviews", icon: <MessageSquare size={16} /> },
     ],
   },
@@ -79,7 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Zones", href: "/zones", icon: <Layers size={16} /> },
       { label: "Surge Pricing", href: "/surge", icon: <Zap size={16} /> },
-      { label: "Feature Flags", href: "/feature-flags", icon: <Flag size={16} /> },
+      { label: "Feature Flags", href: "/flags", icon: <Flag size={16} /> },
       { label: "Audit Log", href: "/audit-log", icon: <ClipboardList size={16} /> },
       { label: "Support", href: "/support", icon: <HeadphonesIcon size={16} /> },
     ],
@@ -88,7 +84,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Settings",
     items: [
       { label: "Settings", href: "/settings", icon: <Settings size={16} /> },
-      { label: "Admins", href: "/settings/admins", icon: <Shield size={16} /> },
+      { label: "Admin Accounts", href: "/admin-accounts", icon: <Shield size={16} /> },
     ],
   },
 ];

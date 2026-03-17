@@ -33,19 +33,18 @@ export default function RiderApprovalsPage() {
         </div>
       ),
     },
-    { accessorKey: "email", header: "Email", cell: ({ getValue }) => <span className="text-text-secondary text-xs">{getValue() as string}</span> },
     {
       accessorKey: "vehicle_type",
       header: "Vehicle",
       cell: ({ getValue }) => <span className="capitalize text-text-secondary text-xs">{(getValue() as string).replace("_", " ")}</span>,
     },
     {
-      accessorKey: "vehicle_registration_number",
+      accessorKey: "vehicle_number",
       header: "Reg. No",
       cell: ({ getValue }) => <span className="font-mono text-xs text-text-secondary">{getValue() as string ?? "—"}</span>,
     },
     {
-      accessorKey: "driving_license_number",
+      accessorKey: "license_number",
       header: "License",
       cell: ({ getValue }) => <span className="font-mono text-xs text-text-secondary">{getValue() as string ?? "—"}</span>,
     },

@@ -4,9 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { analyticsApi } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
-import { Trophy, TrendingUp, ShoppingBag } from "lucide-react";
+import { Trophy, TrendingUp, ShoppingBag, ArrowUpDown } from "lucide-react";
+import type { ItemAnalytics } from "@/types";
 
 const LEADERBOARD_TABS = ["restaurants", "riders", "items"] as const;
+const ITEM_SORT_KEYS = ["order_count", "revenue"] as const;
 
 const CustomTooltip = ({ active, payload, label }: any) =>
   active && payload?.length ? (
@@ -22,6 +24,7 @@ const MEDAL_COLORS = ["#F49D25", "#9CA3AF", "#CD7F32"];
 
 export default function AnalyticsPage() {
   const [lbTab, setLbTab] = useState<typeof LEADERBOARD_TABS[number]>("restaurants");
+  const [itemSort, setItemSort] = useState<typeof ITEM_SORT_KEYS[number]>("order_count");
 
   const { data: leaderboard, isLoading: lbLoading } = useQuery({
     queryKey: ["leaderboard", lbTab],
@@ -37,6 +40,15 @@ export default function AnalyticsPage() {
     queryKey: ["city-analytics"],
     queryFn: () => analyticsApi.getCities() as Promise<{ data: { city: string; orders: number; revenue: number; restaurants: number }[] }>,
   });
+
+  const { data: itemsData, isLoading: itemsLoading } = useQuery({
+    queryKey: ["items-analytics"],
+    queryFn: () => analyticsApi.items() as Promise<{ data: ItemAnalytics[] }>,
+  });
+
+  const sortedItems = [...(itemsData?.data ?? [])]
+    .sort((a, b) => b[itemSort] - a[itemSort])
+    .slice(0, 20);
 
   return (
     <div className="space-y-6">
@@ -133,6 +145,68 @@ export default function AnalyticsPage() {
                       </td>
                     );
                   })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Items analytics */}
+      <div className="card p-4 overflow-x-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-white flex items-center gap-1.5">
+            <ShoppingBag size={14} className="text-brand-400" /> Top Items
+          </h2>
+          <div className="flex gap-1 bg-surface-200 rounded-lg p-1">
+            {ITEM_SORT_KEYS.map(k => (
+              <button
+                key={k}
+                onClick={() => setItemSort(k)}
+                className={`text-xs px-2.5 py-1 rounded-md capitalize transition-colors flex items-center gap-1 ${
+                  itemSort === k ? "bg-brand-500 text-white" : "text-text-muted hover:text-white"
+                }`}
+              >
+                <ArrowUpDown size={10} /> {k === "order_count" ? "Orders" : "Revenue"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {itemsLoading ? (
+          <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="skeleton h-9 rounded-lg" />)}</div>
+        ) : (
+          <table className="w-full text-xs min-w-[520px]">
+            <thead>
+              <tr className="text-text-muted border-b border-white/[0.06]">
+                <th className="text-left py-2 pr-4 font-medium w-6">#</th>
+                <th className="text-left py-2 pr-4 font-medium">Item</th>
+                <th className="text-left py-2 pr-4 font-medium">Restaurant</th>
+                <th className="text-left py-2 pr-4 font-medium">City</th>
+                <th className="text-right py-2 pr-4 font-medium">Orders</th>
+                <th className="text-right py-2 font-medium">Revenue</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.04]">
+              {sortedItems.map((item, i) => (
+                <tr key={item.item_id} className="hover:bg-white/[0.02] transition-colors">
+                  <td className="py-2.5 pr-4 text-text-muted">{i + 1}</td>
+                  <td className="py-2.5 pr-4">
+                    <span className="text-white font-medium">{item.item_name}</span>
+                  </td>
+                  <td className="py-2.5 pr-4 text-text-secondary">{item.restaurant_name}</td>
+                  <td className="py-2.5 pr-4">
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-text-muted">{item.city}</span>
+                  </td>
+                  <td className="py-2.5 pr-4 text-right">
+                    <span className={`font-medium ${itemSort === "order_count" ? "text-brand-400" : "text-text-secondary"}`}>
+                      {item.order_count.toLocaleString()}
+                    </span>
+                  </td>
+                  <td className="py-2.5 text-right">
+                    <span className={`font-medium ${itemSort === "revenue" ? "text-brand-400" : "text-text-secondary"}`}>
+                      {formatCurrency(item.revenue)}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
