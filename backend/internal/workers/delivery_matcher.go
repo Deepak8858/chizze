@@ -258,7 +258,9 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		log.Printf("[worker] DeliveryMatcher: assigned rider %s to order %s", riderID, orderID)
 
 		// 8. Build enriched order map for Flutter DeliveryRequest.fromMap()
-		orderItems, _ := doc["items"].([]interface{})
+		// items is stored as a JSON string in Appwrite — pass it through as-is
+		// so the Flutter _parseItems() can decode it.
+		orderItems := doc["items"]
 		enrichedOrder := map[string]interface{}{
 			"$id":                   orderID,
 			"order_number":          orderNumber,

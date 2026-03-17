@@ -692,6 +692,18 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 	}
 
 	if activeDeliveryOrder != nil {
+		// Map delivery_* fields to customer_* so frontend gets correct coordinates.
+		// Order stores delivery_latitude/longitude/address but frontend expects customer_*.
+		if _, ok := activeDeliveryOrder["customer_latitude"]; !ok {
+			activeDeliveryOrder["customer_latitude"] = activeDeliveryOrder["delivery_latitude"]
+		}
+		if _, ok := activeDeliveryOrder["customer_longitude"]; !ok {
+			activeDeliveryOrder["customer_longitude"] = activeDeliveryOrder["delivery_longitude"]
+		}
+		if _, ok := activeDeliveryOrder["customer_address"]; !ok {
+			activeDeliveryOrder["customer_address"] = activeDeliveryOrder["delivery_address"]
+		}
+
 		// Enrich active order with customer name/phone and delivery partner details
 		if custID, _ := activeDeliveryOrder["customer_id"].(string); custID != "" {
 			if _, exists := activeDeliveryOrder["customer_name"]; !exists || activeDeliveryOrder["customer_name"] == nil {

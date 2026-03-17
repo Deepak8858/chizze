@@ -50,7 +50,11 @@ class ApiClient {
         onError: (DioException error, ErrorInterceptorHandler handler) async {
           // Skip refresh for public auth endpoints (exchange, verify-otp, etc.)
           final path = error.requestOptions.path;
-          final isPublicAuth = path.contains('/auth/');
+          final isPublicAuth =
+              path.endsWith('/auth/exchange') ||
+              path.endsWith('/auth/send-otp') ||
+              path.endsWith('/auth/verify-otp') ||
+              path.endsWith('/auth/check-phone');
           if (error.response?.statusCode == 401 &&
               _refreshCallback != null &&
               !isPublicAuth) {

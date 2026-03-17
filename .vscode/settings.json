@@ -1,14 +1,8 @@
 {
     "java.configuration.updateBuildConfiguration": "automatic",
     "cmake.sourceDirectory": "${workspaceFolder}/windows/runner",
-    "go.gopath": "${workspaceFolder}/backend/.gopath",
-    "go.toolsEnvVars": {
-        "GOPATH": "${workspaceFolder}/backend/.gopath"
-    },
     "gopls": {
-        "build.env": {
-            "GOPATH": "${workspaceFolder}/backend/.gopath"
-        }
+        "build.env": {}
     },
     "cSpell.words": [
         "chizze"

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/chizze/backend/internal/middleware"
@@ -10,44 +9,6 @@ import (
 	"github.com/chizze/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
-
-var pincodeRegex = regexp.MustCompile(`^\d{6}$`)
-
-// sanitizeAddressFields trims whitespace and validates string address fields
-// in-place. Enforces max lengths and validates pincode for any field present
-// in req. Required-field checks remain the caller's responsibility.
-// Returns an empty string on success, or a human-readable error message.
-func sanitizeAddressFields(req map[string]interface{}) string {
-	maxLengths := map[string]int{
-		"label": 50, "line1": 100, "line2": 100, "city": 50, "state": 50,
-	}
-	for field, maxLen := range maxLengths {
-		val, ok := req[field]
-		if !ok {
-			continue
-		}
-		strVal, isStr := val.(string)
-		if !isStr {
-			continue
-		}
-		trimmed := strings.TrimSpace(strVal)
-		if len(trimmed) > maxLen {
-			return fmt.Sprintf("Field %s exceeds max length of %d", field, maxLen)
-		}
-		req[field] = trimmed
-	}
-	// Trim then validate pincode if provided
-	if pincodeVal, ok := req["pincode"]; ok {
-		if pincodeStr, isStr := pincodeVal.(string); isStr {
-			trimmed := strings.TrimSpace(pincodeStr)
-			req["pincode"] = trimmed
-			if !pincodeRegex.MatchString(trimmed) {
-				return "Pincode must be exactly 6 digits"
-			}
-		}
-	}
-	return ""
-}
 
 // Allowed fields for profile update
 var allowedProfileFields = map[string]bool{
@@ -201,8 +162,8 @@ func (h *UserHandler) CreateAddress(c *gin.Context) {
 		return
 	}
 
-	// Validate required fields
-	for _, field := range []string{"label", "line1", "city", "state", "pincode"} {
+	// Validate required fields (must match frontend: label, full_address)
+	for _, field := range []string{"label", "full_address"} {
 		val, ok := req[field]
 		if !ok {
 			utils.BadRequest(c, fmt.Sprintf("Missing required field: %s", field))
@@ -215,10 +176,25 @@ func (h *UserHandler) CreateAddress(c *gin.Context) {
 		}
 	}
 
-	// Sanitize and validate (trims whitespace, enforces max lengths, validates pincode)
-	if errMsg := sanitizeAddressFields(req); errMsg != "" {
-		utils.BadRequest(c, errMsg)
-		return
+	// Sanitize string fields — trim whitespace and enforce max lengths
+	stringMaxLengths := map[string]int{
+		"label": 50, "full_address": 200, "landmark": 100,
+	}
+	for field, maxLen := range stringMaxLengths {
+		val, ok := req[field]
+		if !ok {
+			continue
+		}
+		strVal, isStr := val.(string)
+		if !isStr {
+			continue
+		}
+		trimmed := strings.TrimSpace(strVal)
+		if len(trimmed) > maxLen {
+			utils.BadRequest(c, fmt.Sprintf("Field %s exceeds max length of %d", field, maxLen))
+			return
+		}
+		req[field] = trimmed
 	}
 
 	req["user_id"] = userID
@@ -274,10 +250,25 @@ func (h *UserHandler) UpdateAddress(c *gin.Context) {
 	// Prevent changing user_id
 	delete(req, "user_id")
 
-	// Sanitize and validate present fields (trims, max lengths, pincode if provided)
-	if errMsg := sanitizeAddressFields(req); errMsg != "" {
-		utils.BadRequest(c, errMsg)
-		return
+	// Sanitize present string fields
+	stringMaxLengths := map[string]int{
+		"label": 50, "full_address": 200, "landmark": 100,
+	}
+	for field, maxLen := range stringMaxLengths {
+		val, ok := req[field]
+		if !ok {
+			continue
+		}
+		strVal, isStr := val.(string)
+		if !isStr {
+			continue
+		}
+		trimmed := strings.TrimSpace(strVal)
+		if len(trimmed) > maxLen {
+			utils.BadRequest(c, fmt.Sprintf("Field %s exceeds max length of %d", field, maxLen))
+			return
+		}
+		req[field] = trimmed
 	}
 
 	doc, err := h.appwrite.UpdateAddress(addrID, req)

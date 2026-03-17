@@ -709,10 +709,6 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		updateData["confirmed_at"] = now
 	case models.OrderStatusReady:
 		updateData["prepared_at"] = now
-		// Trigger delivery matching immediately so nearest rider gets the request
-		if h.matcherCallback != nil {
-			go h.matcherCallback()
-		}
 	case models.OrderStatusPickedUp:
 		updateData["picked_up_at"] = now
 	case models.OrderStatusDelivered:
@@ -734,6 +730,12 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	if err != nil {
 		utils.InternalError(c, "Failed to update order status")
 		return
+	}
+
+	// Trigger delivery matching immediately AFTER persisting status="ready"
+	// so the matcher finds the order in Appwrite without a race condition.
+	if req.Status == models.OrderStatusReady && h.matcherCallback != nil {
+		go h.matcherCallback()
 	}
 
 	// Update delivery partner stats when order is delivered
