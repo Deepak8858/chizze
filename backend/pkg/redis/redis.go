@@ -219,6 +219,11 @@ func (c *Client) SMembers(ctx context.Context, key string) ([]string, error) {
 	return c.rdb.SMembers(ctx, key).Result()
 }
 
+// SRem removes one or more members from a set.
+func (c *Client) SRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
+	return c.rdb.SRem(ctx, key, members...).Result()
+}
+
 // SIsMember checks if a value is a member of a set.
 func (c *Client) SIsMember(ctx context.Context, key string, member interface{}) *redis.BoolCmd {
 	return c.rdb.SIsMember(ctx, key, member)

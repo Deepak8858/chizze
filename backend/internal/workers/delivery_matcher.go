@@ -176,6 +176,49 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			continue
 		}
 
+		// 4c. Filter out riders who are currently busy on another delivery
+		if w.redisClient != nil {
+			var available []string
+			for _, rid := range riderIDs {
+				busy, bErr := w.redisClient.SIsMember(ctx, "busy_riders", rid).Result()
+				if bErr != nil || !busy {
+					available = append(available, rid)
+				}
+			}
+			riderIDs = available
+		}
+		if len(riderIDs) == 0 {
+			log.Printf("[worker] DeliveryMatcher: all nearby riders busy for order %s — clearing lock for retry", orderID)
+			_ = w.redisClient.Del(ctx, pendingKey)
+			continue
+		}
+
+		// 4d. Filter out riders who already have a pending (unanswered) delivery request.
+		// This prevents the same closest rider from receiving ALL orders before they accept/reject.
+		// We double-check the per-rider TTL key to auto-clean stale set entries.
+		if w.redisClient != nil {
+			var notPending []string
+			for _, rid := range riderIDs {
+				inSet, pErr := w.redisClient.SIsMember(ctx, "pending_riders", rid).Result()
+				if pErr != nil || !inSet {
+					notPending = append(notPending, rid)
+				} else {
+					// Verify the TTL key still exists; if expired, clean up the stale set entry
+					ttlExists, _ := w.redisClient.Exists(ctx, "pending_rider:"+rid)
+					if !ttlExists {
+						w.redisClient.SRem(ctx, "pending_riders", rid)
+						notPending = append(notPending, rid)
+					}
+				}
+			}
+			riderIDs = notPending
+		}
+		if len(riderIDs) == 0 {
+			log.Printf("[worker] DeliveryMatcher: all nearby riders have pending requests for order %s — clearing lock for retry", orderID)
+			_ = w.redisClient.Del(ctx, pendingKey)
+			continue
+		}
+
 		// 5. Get customer delivery address info
 		addrID, _ := doc["delivery_address_id"].(string)
 		custName := "Customer"
@@ -254,6 +297,12 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 
 		// Keep TTL consistent with SetNX while accept/reject remains the fast clear path.
 		_ = w.redisClient.Set(ctx, pendingKey, riderID, 2*time.Minute)
+
+		// Mark rider as having a pending request so they don't get multiple orders at once.
+		// Auto-expires after 2 minutes (same as the pending_delivery lock) as a safety net.
+		w.redisClient.SAdd(ctx, "pending_riders", riderID)
+		// Store per-rider key with TTL so the pending state auto-clears even if accept/reject is missed
+		w.redisClient.Set(ctx, "pending_rider:"+riderID, orderID, 2*time.Minute)
 
 		log.Printf("[worker] DeliveryMatcher: assigned rider %s to order %s", riderID, orderID)
 

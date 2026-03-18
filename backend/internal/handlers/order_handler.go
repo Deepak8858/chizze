@@ -758,6 +758,16 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 					"status":           "available",
 				})
 			}
+			// Remove rider from busy set so matcher can assign new orders
+			if h.redis != nil {
+				rCtx := context.Background()
+				h.redis.SRem(rCtx, "busy_riders", dpUserID)
+			}
+		}
+		// Immediately trigger matcher so the now-available rider gets the
+		// next pending order without waiting for the 15s ticker.
+		if h.matcherCallback != nil {
+			go h.matcherCallback()
 		}
 	}
 

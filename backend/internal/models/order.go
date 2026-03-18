@@ -95,7 +95,7 @@ var ValidOrderTransitions = map[string][]string{
 	OrderStatusConfirmed:      {OrderStatusPreparing, OrderStatusCancelled},
 	OrderStatusPreparing:      {OrderStatusReady, OrderStatusCancelled},
 	OrderStatusReady:          {OrderStatusPickedUp},
-	OrderStatusPickedUp:       {OrderStatusOutForDelivery},
+	OrderStatusPickedUp:       {OrderStatusOutForDelivery, OrderStatusDelivered},
 	OrderStatusOutForDelivery: {OrderStatusDelivered},
 }
 

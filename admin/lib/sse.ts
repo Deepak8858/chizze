@@ -12,48 +12,49 @@ function getToken(): string | null {
   return localStorage.getItem("chizze_admin_token");
 }
 
-/** Generic SSE hook */
-export function useSSE<T>(
+/** Unwrap backend { success, data } envelope */
+function unwrap<T>(body: unknown): T {
+  if (body && typeof body === "object" && "success" in body && "data" in body) {
+    return (body as Record<string, unknown>).data as T;
+  }
+  return body as T;
+}
+
+/** Generic polling hook — replaces the old SSE EventSource hook */
+export function usePolling<T>(
   path: string,
-  onMessage: (data: T) => void,
+  onData: (data: T) => void,
+  intervalMs = 5000,
   enabled = true
 ) {
-  const esRef = useRef<EventSource | null>(null);
-  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connected, setConnected] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onDataRef = useRef(onData);
+  onDataRef.current = onData;
 
-  const connect = useCallback(() => {
+  const fetchData = useCallback(async () => {
     if (!enabled) return;
     const token = getToken();
-    const url = `${BASE_URL}${path}${token ? `?token=${token}` : ""}`;
-    const es = new EventSource(url, { withCredentials: true });
-    esRef.current = es;
-
-    es.onopen = () => setConnected(true);
-
-    es.onmessage = (e) => {
-      try {
-        onMessage(JSON.parse(e.data) as T);
-      } catch {
-        // skip malformed
-      }
-    };
-
-    es.onerror = () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${BASE_URL}${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { setConnected(false); return; }
+      const body = await res.json();
+      onDataRef.current(unwrap<T>(body));
+      setConnected(true);
+    } catch {
       setConnected(false);
-      es.close();
-      // exponential backoff retry
-      retryRef.current = setTimeout(connect, 5000);
-    };
-  }, [path, onMessage, enabled]);
+    }
+  }, [path, enabled]);
 
   useEffect(() => {
-    connect();
-    return () => {
-      esRef.current?.close();
-      if (retryRef.current) clearTimeout(retryRef.current);
-    };
-  }, [connect]);
+    if (!enabled) return;
+    fetchData();
+    intervalRef.current = setInterval(fetchData, intervalMs);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [fetchData, intervalMs, enabled]);
 
   return { connected };
 }
@@ -68,9 +69,10 @@ export function useLiveStats(enabled = true) {
     connected_by_role: { customer: 0, restaurant_owner: 0, delivery_partner: 0 },
   });
 
-  const { connected } = useSSE<LiveStats>(
+  const { connected } = usePolling<LiveStats>(
     "/admin/live/stats",
-    (data) => setStats(data),
+    (data) => setStats((prev) => ({ ...prev, ...data })),
+    10_000,
     enabled
   );
 
@@ -79,52 +81,28 @@ export function useLiveStats(enabled = true) {
 
 // ─── Live riders hook ─────────────────────────────────────────────────────────
 export function useRiderLocations(enabled = true) {
-  const [riders, setRiders] = useState<Map<string, LiveRider>>(new Map());
+  const [riders, setRiders] = useState<LiveRider[]>([]);
 
-  const handleMessage = useCallback((data: LiveRider | LiveRider[]) => {
-    setRiders((prev) => {
-      const next = new Map(prev);
-      const updates = Array.isArray(data) ? data : [data];
-      for (const r of updates) {
-        next.set(r.rider_id, r);
-      }
-      return next;
-    });
-  }, []);
-
-  const { connected } = useSSE<LiveRider | LiveRider[]>(
+  const { connected } = usePolling<LiveRider[]>(
     "/admin/live/riders",
-    handleMessage,
+    (data) => setRiders(Array.isArray(data) ? data : []),
+    5_000,
     enabled
   );
 
-  return { riders: Array.from(riders.values()), connected };
+  return { riders, connected };
 }
 
 // ─── Live orders hook ─────────────────────────────────────────────────────────
 export function useLiveOrders(enabled = true) {
-  const [orders, setOrders] = useState<Map<string, LiveOrder>>(new Map());
+  const [orders, setOrders] = useState<LiveOrder[]>([]);
 
-  const handleMessage = useCallback((data: LiveOrder | LiveOrder[]) => {
-    setOrders((prev) => {
-      const next = new Map(prev);
-      const updates = Array.isArray(data) ? data : [data];
-      for (const o of updates) {
-        if (o.status === "delivered" || o.status === "cancelled") {
-          next.delete(o.order_id);
-        } else {
-          next.set(o.order_id, o);
-        }
-      }
-      return next;
-    });
-  }, []);
-
-  const { connected } = useSSE<LiveOrder | LiveOrder[]>(
+  const { connected } = usePolling<LiveOrder[]>(
     "/admin/live/orders",
-    handleMessage,
+    (data) => setOrders(Array.isArray(data) ? data : []),
+    5_000,
     enabled
   );
 
-  return { orders: Array.from(orders.values()), connected };
+  return { orders, connected };
 }

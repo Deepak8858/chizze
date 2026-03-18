@@ -100,8 +100,11 @@ func (h *DeliveryHandler) ToggleOnline(c *gin.Context) {
 				})
 			}
 		} else {
-			// Remove rider from geo set when going offline
+			// Remove rider from geo set, busy set, and pending set when going offline
 			h.redis.ZRem(geoCtx, "rider_locations", userID)
+			h.redis.SRem(geoCtx, "busy_riders", userID)
+			h.redis.SRem(geoCtx, "pending_riders", userID)
+			h.redis.Del(geoCtx, "pending_rider:"+userID)
 		}
 	}
 
@@ -313,12 +316,24 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 		return
 	}
 
+	// Mark rider as busy so matcher won't assign them another order
+	partnerDocID, _ := partnerResult.Documents[0]["$id"].(string)
+	_, _ = h.appwrite.UpdateDeliveryPartner(partnerDocID, map[string]interface{}{
+		"current_order_id": orderID,
+		"status":           "on_delivery",
+	})
+
 	// Clear the pending_delivery key so matcher doesn't re-broadcast this order
 	if h.redis != nil {
 		ctx := context.Background()
 		h.redis.Del(ctx, "pending_delivery:"+orderID)
 		// Clean up rejected riders set since order is now accepted
 		h.redis.Del(ctx, "rejected_riders:"+orderID)
+		// Track rider as busy for fast matcher filtering
+		h.redis.SAdd(ctx, "busy_riders", userID)
+		// Remove from pending set since rider has now accepted
+		h.redis.SRem(ctx, "pending_riders", userID)
+		h.redis.Del(ctx, "pending_rider:"+userID)
 	}
 
 	// Notify customer that a delivery partner accepted their order
@@ -1259,6 +1274,9 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 		rejectedKey := "rejected_riders:" + orderID
 		h.redis.SAdd(ctx, rejectedKey, userID)
 		h.redis.Expire(ctx, rejectedKey, 30*time.Minute)
+		// Remove from pending set so rider can receive other orders
+		h.redis.SRem(ctx, "pending_riders", userID)
+		h.redis.Del(ctx, "pending_rider:"+userID)
 	}
 
 	// Immediately retry matching so the next eligible rider gets the request
@@ -1276,6 +1294,19 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 		if err != nil {
 			utils.InternalError(c, "Failed to reject order")
 			return
+		}
+		// Reset rider's status since they were previously marked as on_delivery
+		partnerResult, _ := h.appwrite.GetDeliveryPartner(userID)
+		if partnerResult != nil && partnerResult.Total > 0 {
+			dpDocID, _ := partnerResult.Documents[0]["$id"].(string)
+			_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, map[string]interface{}{
+				"current_order_id": "",
+				"status":           "available",
+			})
+		}
+		if h.redis != nil {
+			rCtx := context.Background()
+			h.redis.SRem(rCtx, "busy_riders", userID)
 		}
 	}
 

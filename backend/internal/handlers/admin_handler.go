@@ -1025,6 +1025,41 @@ func (h *AdminHandler) LiveSessions(c *gin.Context) {
 	})
 }
 
+func (h *AdminHandler) LiveStats(c *gin.Context) {
+	// Active orders (not delivered/cancelled)
+	activeOrders, _ := h.appwrite.ListOrders([]string{
+		appwrite.QueryNotEqual("status", "delivered"),
+		appwrite.QueryNotEqual("status", "cancelled"),
+		appwrite.QueryLimit(1),
+	})
+	activeCount := 0
+	if activeOrders != nil {
+		activeCount = activeOrders.Total
+	}
+
+	// Online riders
+	online, _ := h.appwrite.ListDeliveryPartners([]string{
+		appwrite.QueryEqual("is_online", true),
+		appwrite.QueryLimit(1),
+	})
+	ridersCount := 0
+	if online != nil {
+		ridersCount = online.Total
+	}
+
+	utils.Success(c, gin.H{
+		"active_orders":    activeCount,
+		"online_riders":    ridersCount,
+		"connected_users":  0,
+		"orders_per_minute": 0,
+		"connected_by_role": gin.H{
+			"customer":         0,
+			"restaurant_owner": 0,
+			"delivery_partner": ridersCount,
+		},
+	})
+}
+
 func (h *AdminHandler) LiveRiders(c *gin.Context) {
 	result, err := h.appwrite.ListDeliveryLocations([]string{
 		appwrite.QueryEqual("is_online", true),
@@ -1043,7 +1078,8 @@ func (h *AdminHandler) LiveRiders(c *gin.Context) {
 
 func (h *AdminHandler) LiveOrders(c *gin.Context) {
 	result, err := h.appwrite.ListOrders([]string{
-		appwrite.QueryNotEqual("status", "delivered", "cancelled"),
+		appwrite.QueryNotEqual("status", "delivered"),
+		appwrite.QueryNotEqual("status", "cancelled"),
 		appwrite.QueryOrderDesc("placed_at"),
 		appwrite.QueryLimit(100),
 	})

@@ -428,6 +428,7 @@ func main() {
 
 		// Live
 		admin.GET("/live/sessions", adminHandler.LiveSessions)
+		admin.GET("/live/stats", adminHandler.LiveStats)
 		admin.GET("/live/riders", adminHandler.LiveRiders)
 		admin.GET("/live/orders", adminHandler.LiveOrders)
 
