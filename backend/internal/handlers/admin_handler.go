@@ -41,62 +41,142 @@ func (h *AdminHandler) safeList(collection string, queries []string) ([]map[stri
 // ═══════════════════════════════════════════════════════════════════════════════
 
 func (h *AdminHandler) Dashboard(c *gin.Context) {
-	// Count collections
+	now := time.Now()
+
+	// --- Counts ---
 	users, _ := h.appwrite.ListUsers([]string{appwrite.QueryLimit(1)})
 	restaurants, _ := h.appwrite.ListRestaurants([]string{appwrite.QueryLimit(1)})
-	orders, _ := h.appwrite.ListOrders([]string{appwrite.QueryLimit(1)})
+	allOrders, _ := h.appwrite.ListOrders([]string{appwrite.QueryLimit(1)})
 	partners, _ := h.appwrite.ListDeliveryPartners([]string{appwrite.QueryLimit(1)})
 
 	totalUsers := 0
 	totalRestaurants := 0
 	totalOrders := 0
 	totalPartners := 0
-	if users != nil {
-		totalUsers = users.Total
-	}
-	if restaurants != nil {
-		totalRestaurants = restaurants.Total
-	}
-	if orders != nil {
-		totalOrders = orders.Total
-	}
-	if partners != nil {
-		totalPartners = partners.Total
+	if users != nil { totalUsers = users.Total }
+	if restaurants != nil { totalRestaurants = restaurants.Total }
+	if allOrders != nil { totalOrders = allOrders.Total }
+	if partners != nil { totalPartners = partners.Total }
+
+	// --- Today boundaries ---
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Format(time.RFC3339)
+
+	todayOrdResult, _ := h.appwrite.ListOrders([]string{
+		appwrite.QueryGreaterThanEqual("placed_at", todayStart),
+		appwrite.QueryLimit(500),
+	})
+	ordersToday := 0
+	revenuToday := 0.0
+	if todayOrdResult != nil {
+		ordersToday = todayOrdResult.Total
+		for _, o := range todayOrdResult.Documents {
+			if status, _ := o["status"].(string); status == "delivered" {
+				if gt, ok := o["grand_total"].(float64); ok {
+					revenuToday += gt
+				}
+			}
+		}
 	}
 
-	// Revenue: sum grand_total of delivered orders (last 30 days)
-	thirtyDaysAgo := time.Now().AddDate(0, 0, -30).Format(time.RFC3339)
+	newUsersRes, _ := h.appwrite.ListUsers([]string{
+		appwrite.QueryGreaterThanEqual("$createdAt", todayStart),
+		appwrite.QueryLimit(1),
+	})
+	newUsersTodayCount := 0
+	if newUsersRes != nil { newUsersTodayCount = newUsersRes.Total }
+
+	onlineRest, _ := h.appwrite.ListRestaurants([]string{
+		appwrite.QueryEqual("is_online", true), appwrite.QueryLimit(1),
+	})
+	onlineRestCount := 0
+	if onlineRest != nil { onlineRestCount = onlineRest.Total }
+
+	onlineRiders, _ := h.appwrite.ListDeliveryPartners([]string{
+		appwrite.QueryEqual("is_online", true), appwrite.QueryLimit(1),
+	})
+	onlineRidersCount := 0
+	if onlineRiders != nil { onlineRidersCount = onlineRiders.Total }
+
+	activeOrders, _ := h.appwrite.ListOrders([]string{
+		appwrite.QueryNotEqual("status", "delivered", "cancelled"),
+		appwrite.QueryLimit(1),
+	})
+	totalActive := 0
+	if activeOrders != nil { totalActive = activeOrders.Total }
+
+	// --- 30-day revenue chart ---
+	thirtyDaysAgo := now.AddDate(0, 0, -30).Format(time.RFC3339)
 	revenueOrders, _ := h.appwrite.ListOrders([]string{
 		appwrite.QueryEqual("status", "delivered"),
 		appwrite.QueryGreaterThanEqual("placed_at", thirtyDaysAgo),
 		appwrite.QueryLimit(500),
 	})
 	var totalRevenue float64
+	dailyRevenue := map[string]float64{}
+	dailyOrderCount := map[string]int{}
 	if revenueOrders != nil {
 		for _, o := range revenueOrders.Documents {
 			if gt, ok := o["grand_total"].(float64); ok {
 				totalRevenue += gt
+				if placedAt, ok := o["placed_at"].(string); ok && len(placedAt) >= 10 {
+					day := placedAt[:10]
+					dailyRevenue[day] += gt
+					dailyOrderCount[day]++
+				}
 			}
 		}
 	}
+	revenueChart := make([]gin.H, 0, 30)
+	for i := 29; i >= 0; i-- {
+		day := now.AddDate(0, 0, -i).Format("2006-01-02")
+		revenueChart = append(revenueChart, gin.H{
+			"date":    day,
+			"revenue": dailyRevenue[day],
+			"orders":  dailyOrderCount[day],
+		})
+	}
 
-	// Active orders
-	activeOrders, _ := h.appwrite.ListOrders([]string{
-		appwrite.QueryNotEqual("status", "delivered", "cancelled"),
-		appwrite.QueryLimit(1),
+	// --- Status chart + recent orders ---
+	allRecentOrders, _ := h.appwrite.ListOrders([]string{
+		appwrite.QueryOrderDesc("placed_at"),
+		appwrite.QueryLimit(200),
 	})
-	totalActive := 0
-	if activeOrders != nil {
-		totalActive = activeOrders.Total
+	statusCounts := map[string]int{}
+	recentOrdersList := []map[string]interface{}{}
+	if allRecentOrders != nil {
+		for _, o := range allRecentOrders.Documents {
+			if status, _ := o["status"].(string); status != "" {
+				statusCounts[status]++
+			}
+		}
+		limit := 20
+		if len(allRecentOrders.Documents) < limit {
+			limit = len(allRecentOrders.Documents)
+		}
+		recentOrdersList = allRecentOrders.Documents[:limit]
+	}
+	statusChart := []gin.H{}
+	for status, count := range statusCounts {
+		statusChart = append(statusChart, gin.H{"status": status, "count": count})
 	}
 
 	utils.Success(c, gin.H{
-		"total_users":       totalUsers,
-		"total_restaurants":  totalRestaurants,
-		"total_orders":       totalOrders,
-		"total_partners":     totalPartners,
-		"total_revenue":      totalRevenue,
-		"active_orders":      totalActive,
+		"stats": gin.H{
+			"total_users":        totalUsers,
+			"total_restaurants":  totalRestaurants,
+			"total_orders":       totalOrders,
+			"total_partners":     totalPartners,
+			"total_revenue":      totalRevenue,
+			"active_orders":      totalActive,
+			"orders_today":       ordersToday,
+			"revenue_today":      revenuToday,
+			"new_users_today":    newUsersTodayCount,
+			"online_restaurants": onlineRestCount,
+			"online_riders":      onlineRidersCount,
+		},
+		"revenue_chart": revenueChart,
+		"status_chart":  statusChart,
+		"recent_orders": recentOrdersList,
 	})
 }
 
@@ -105,16 +185,18 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 func (h *AdminHandler) Analytics(c *gin.Context) {
+	now := time.Now()
 	period := c.DefaultQuery("period", "month")
-	var since string
+	var days int
 	switch period {
 	case "day":
-		since = time.Now().AddDate(0, 0, -1).Format(time.RFC3339)
+		days = 1
 	case "week":
-		since = time.Now().AddDate(0, 0, -7).Format(time.RFC3339)
+		days = 7
 	default:
-		since = time.Now().AddDate(0, -1, 0).Format(time.RFC3339)
+		days = 30
 	}
+	since := now.AddDate(0, 0, -days).Format(time.RFC3339)
 
 	orders, _ := h.appwrite.ListOrders([]string{
 		appwrite.QueryGreaterThanEqual("placed_at", since),
@@ -124,6 +206,8 @@ func (h *AdminHandler) Analytics(c *gin.Context) {
 	var revenue float64
 	delivered := 0
 	cancelled := 0
+	dailyRevenue := map[string]float64{}
+	dailyOrderCount := map[string]int{}
 	if orders != nil {
 		for _, o := range orders.Documents {
 			status, _ := o["status"].(string)
@@ -131,6 +215,11 @@ func (h *AdminHandler) Analytics(c *gin.Context) {
 				delivered++
 				if gt, ok := o["grand_total"].(float64); ok {
 					revenue += gt
+					if placedAt, ok := o["placed_at"].(string); ok && len(placedAt) >= 10 {
+						day := placedAt[:10]
+						dailyRevenue[day] += gt
+						dailyOrderCount[day]++
+					}
 				}
 			} else if status == "cancelled" {
 				cancelled++
@@ -143,13 +232,24 @@ func (h *AdminHandler) Analytics(c *gin.Context) {
 		totalOrders = orders.Total
 	}
 
+	revenueChart := make([]gin.H, 0, days)
+	for i := days - 1; i >= 0; i-- {
+		day := now.AddDate(0, 0, -i).Format("2006-01-02")
+		revenueChart = append(revenueChart, gin.H{
+			"date":    day,
+			"revenue": dailyRevenue[day],
+			"orders":  dailyOrderCount[day],
+		})
+	}
+
 	utils.Success(c, gin.H{
-		"period":         period,
-		"total_orders":   totalOrders,
-		"delivered":      delivered,
-		"cancelled":      cancelled,
-		"revenue":        revenue,
+		"period":          period,
+		"total_orders":    totalOrders,
+		"delivered":       delivered,
+		"cancelled":       cancelled,
+		"revenue":         revenue,
 		"avg_order_value": func() float64 { if delivered > 0 { return revenue / float64(delivered) }; return 0 }(),
+		"revenue_chart":   revenueChart,
 	})
 }
 
@@ -207,22 +307,59 @@ func (h *AdminHandler) AnalyticsRetention(c *gin.Context) {
 }
 
 func (h *AdminHandler) AnalyticsRevenue(c *gin.Context) {
+	now := time.Now()
+	rangeParam := c.DefaultQuery("range", "30d")
+	var days int
+	switch rangeParam {
+	case "7d":
+		days = 7
+	case "90d":
+		days = 90
+	case "1y":
+		days = 365
+	default:
+		days = 30
+	}
+	since := now.AddDate(0, 0, -days).Format(time.RFC3339)
+
 	orders, _ := h.appwrite.ListOrders([]string{
 		appwrite.QueryEqual("status", "delivered"),
+		appwrite.QueryGreaterThanEqual("placed_at", since),
 		appwrite.QueryOrderDesc("placed_at"),
-		appwrite.QueryLimit(500),
+		appwrite.QueryLimit(1000),
 	})
-	var revenue float64
-	count := 0
+
+	dailyRevenue := map[string]float64{}
+	dailyCount := map[string]int{}
 	if orders != nil {
 		for _, o := range orders.Documents {
 			if gt, ok := o["grand_total"].(float64); ok {
-				revenue += gt
-				count++
+				if placedAt, ok := o["placed_at"].(string); ok && len(placedAt) >= 10 {
+					day := placedAt[:10]
+					dailyRevenue[day] += gt
+					dailyCount[day]++
+				}
 			}
 		}
 	}
-	utils.Success(c, gin.H{"total_revenue": revenue, "order_count": count})
+
+	chart := make([]gin.H, 0, days)
+	for i := days - 1; i >= 0; i-- {
+		day := now.AddDate(0, 0, -i).Format("2006-01-02")
+		rev := dailyRevenue[day]
+		ord := dailyCount[day]
+		avgOrd := 0.0
+		if ord > 0 {
+			avgOrd = rev / float64(ord)
+		}
+		chart = append(chart, gin.H{
+			"date":      day,
+			"revenue":   rev,
+			"orders":    ord,
+			"avg_order": avgOrd,
+		})
+	}
+	utils.Success(c, chart)
 }
 
 func (h *AdminHandler) ReportsFinancial(c *gin.Context) {
