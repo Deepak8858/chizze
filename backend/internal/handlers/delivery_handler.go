@@ -59,7 +59,9 @@ func NewDeliveryHandler(aw *services.AppwriteService, geo *services.GeoService, 
 func (h *DeliveryHandler) ToggleOnline(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
-		IsOnline bool `json:"is_online"`
+		IsOnline  bool    `json:"is_online"`
+		Latitude  float64 `json:"latitude"`  // Optional: immediate GPS position
+		Longitude float64 `json:"longitude"` // Optional: immediate GPS position
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, "Invalid request")
@@ -89,15 +91,31 @@ func (h *DeliveryHandler) ToggleOnline(c *gin.Context) {
 	if h.redis != nil {
 		geoCtx := context.Background()
 		if req.IsOnline {
-			// Re-add with last known location (will be overwritten by UpdateLocation)
-			lat, _ := partnerResult.Documents[0]["current_latitude"].(float64)
-			lng, _ := partnerResult.Documents[0]["current_longitude"].(float64)
+			// ── CRITICAL: Clear stale state from previous sessions ──
+			// If a rider's previous delivery wasn't properly completed (app crash,
+			// network issue, etc.), they may still be in busy_riders or pending_riders.
+			// Without clearing these, the matcher will PERMANENTLY skip this rider.
+			h.redis.SRem(geoCtx, "busy_riders", userID)
+			h.redis.SRem(geoCtx, "pending_riders", userID)
+			h.redis.Del(geoCtx, "pending_rider:"+userID)
+			log.Printf("[delivery] ToggleOnline: cleared stale busy/pending state for rider %s", userID)
+
+			// Use location from request body if provided, otherwise fall back to stored
+			lat := req.Latitude
+			lng := req.Longitude
+			if lat == 0 && lng == 0 {
+				lat, _ = partnerResult.Documents[0]["current_latitude"].(float64)
+				lng, _ = partnerResult.Documents[0]["current_longitude"].(float64)
+			}
 			if lat != 0 && lng != 0 {
 				h.redis.GeoAdd(geoCtx, "rider_locations", &redis.GeoLocation{
 					Name:      userID,
 					Longitude: lng,
 					Latitude:  lat,
 				})
+				log.Printf("[delivery] ToggleOnline: rider %s added to geo set at (%.4f, %.4f)", userID, lat, lng)
+			} else {
+				log.Printf("[delivery] ToggleOnline: rider %s online but no location available — will be added on first UpdateLocation", userID)
 			}
 		} else {
 			// Remove rider from geo set, busy set, and pending set when going offline
@@ -560,6 +578,45 @@ func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 				}
 				if dpPhone != "" {
 					order["delivery_partner_phone"] = dpPhone
+				}
+			}
+		}
+		// Enrich with restaurant data for the polling fallback (available mode)
+		// The WS path sends enriched data from the matcher; polling must match.
+		if restID, _ := order["restaurant_id"].(string); restID != "" {
+			if _, hasName := order["restaurant_name"]; !hasName || order["restaurant_name"] == nil || order["restaurant_name"] == "" {
+				if rest, rErr := h.appwrite.GetRestaurant(restID); rErr == nil && rest != nil {
+					if n, _ := rest["name"].(string); n != "" {
+						order["restaurant_name"] = n
+					}
+					if a, _ := rest["address"].(string); a != "" {
+						order["restaurant_address"] = a
+					}
+					if ph, _ := rest["phone"].(string); ph != "" {
+						order["restaurant_phone"] = ph
+					}
+					if lat, ok := rest["latitude"].(float64); ok {
+						order["restaurant_latitude"] = lat
+					}
+					if lng, ok := rest["longitude"].(float64); ok {
+						order["restaurant_longitude"] = lng
+					}
+				}
+			}
+		}
+		// Enrich delivery address lat/lng
+		if addrID, _ := order["delivery_address_id"].(string); addrID != "" {
+			if _, hasLat := order["delivery_latitude"]; !hasLat || order["delivery_latitude"] == nil {
+				if addr, aErr := h.appwrite.GetAddress(addrID); aErr == nil && addr != nil {
+					if lat, ok := addr["latitude"].(float64); ok {
+						order["delivery_latitude"] = lat
+					}
+					if lng, ok := addr["longitude"].(float64); ok {
+						order["delivery_longitude"] = lng
+					}
+					if full, _ := addr["full_address"].(string); full != "" {
+						order["delivery_address"] = full
+					}
 				}
 			}
 		}

@@ -92,17 +92,33 @@ func (h *Hub) Stop() {
 	}
 }
 
+// IsConnected returns true if the given userID has at least one active WebSocket connection.
+func (h *Hub) IsConnected(userID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.userClients[userID]) > 0
+}
+
 // SendToUser sends a message to a specific user (O(1) lookup via userClients index)
 func (h *Hub) SendToUser(userID string, message []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	for client := range h.userClients[userID] {
+	clients := h.userClients[userID]
+	if len(clients) == 0 {
+		log.Printf("[ws] SendToUser: NO active WebSocket connections for user %s — message dropped", userID)
+		return
+	}
+	sent := 0
+	for client := range clients {
 		select {
 		case client.send <- message:
+			sent++
 		default:
 			close(client.send)
 			delete(h.clients, client)
 			delete(h.userClients[userID], client)
+			log.Printf("[ws] SendToUser: dropped slow client for user %s", userID)
 		}
 	}
+	log.Printf("[ws] SendToUser: delivered message to %d/%d connections for user %s", sent, len(clients), userID)
 }

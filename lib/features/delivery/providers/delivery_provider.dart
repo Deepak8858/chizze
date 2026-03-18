@@ -67,6 +67,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   StreamSubscription? _orderUpdatesSub;
   StreamSubscription? _locationStreamSub;
   Timer? _locationTimer;
+  Timer? _expiryTimer; // auto-rejects expired delivery requests
+  Timer? _pollTimer;   // polling fallback for delivery requests
   bool _isLoadingGuard = false;
   bool _pendingReload = false;
   bool _isStepBusy =
@@ -79,6 +81,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     _loadData();
     _subscribeToWebSocket();
     _subscribeToOrderUpdates();
+    _startExpiryTimer();
   }
 
   /// Listen for new delivery request assignments via WebSocket (Go backend hub)
@@ -121,6 +124,97 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     } catch (e) {
       if (kDebugMode) debugPrint('[Delivery] WS subscribe error: $e');
     }
+  }
+
+  /// Periodically check for expired delivery requests and auto-reject them.
+  /// This is CRITICAL: without this, when a rider ignores a request and the
+  /// 30-second countdown expires, the backend Redis locks are never cleared,
+  /// blocking the order from being reassigned for up to 2 minutes.
+  void _startExpiryTimer() {
+    _expiryTimer?.cancel();
+    _expiryTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!mounted) return;
+      final expired = state.incomingRequests.where((r) => r.hasExpired).toList();
+      for (final req in expired) {
+        if (kDebugMode) {
+          debugPrint('[Delivery] Auto-rejecting expired request for order ${req.order.id}');
+        }
+        // Tell backend to clear Redis locks so order can be reassigned
+        _rejectOrderSilently(req.order.id);
+      }
+      if (expired.isNotEmpty) {
+        state = state.copyWith(
+          incomingRequests: state.incomingRequests
+              .where((r) => !r.hasExpired)
+              .toList(),
+        );
+      }
+    });
+  }
+
+  /// Silently reject an order without throwing errors. Used by the expiry timer.
+  Future<void> _rejectOrderSilently(String orderId) async {
+    try {
+      await _api.put('${ApiConfig.deliveryOrders}/$orderId/reject');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Delivery] Auto-reject error: $e');
+    }
+  }
+
+  /// Poll for pending delivery requests as a fallback when WebSocket is
+  /// disconnected. Checks every 10 seconds for available orders.
+  void _startDeliveryRequestPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      if (!mounted || !state.partner.isOnline || state.hasActiveDelivery) return;
+      try {
+        final response = await _api.get(
+          '${ApiConfig.deliveryOrders}?mode=available&per_page=5',
+        );
+        if (response.success && response.data != null) {
+          final data = response.data as Map<String, dynamic>;
+          final orders = (data['data'] as List<dynamic>?) ?? [];
+          // Don't show orders that are already in the incoming requests queue
+          final existingIds = state.incomingRequests.map((r) => r.order.id).toSet();
+          for (final orderData in orders) {
+            final orderId = orderData['\$id'] as String? ?? '';
+            if (orderId.isEmpty || existingIds.contains(orderId)) continue;
+            // Only add if not already shown
+            try {
+              final order = Order.fromMap(orderData as Map<String, dynamic>);
+              final request = DeliveryRequest(
+                id: orderId,
+                order: order,
+                restaurantName: orderData['restaurant_name'] as String? ?? '',
+                restaurantAddress: orderData['restaurant_address'] as String? ?? '',
+                restaurantLatitude: (orderData['restaurant_latitude'] as num?)?.toDouble() ?? 0,
+                restaurantLongitude: (orderData['restaurant_longitude'] as num?)?.toDouble() ?? 0,
+                customerAddress: orderData['delivery_address'] as String? ?? '',
+                customerLatitude: (orderData['delivery_latitude'] as num?)?.toDouble() ?? 0,
+                customerLongitude: (orderData['delivery_longitude'] as num?)?.toDouble() ?? 0,
+                distanceKm: (orderData['distance_km'] as num?)?.toDouble() ?? 0,
+                estimatedEarning: (orderData['delivery_fee'] as num?)?.toDouble() ?? 0,
+                specialInstructions: orderData['special_instructions'] as String? ?? '',
+                expiresAt: DateTime.now().add(const Duration(seconds: 30)),
+              );
+              state = state.copyWith(
+                incomingRequests: [...state.incomingRequests, request],
+              );
+              existingIds.add(orderId);
+            } catch (e) {
+              if (kDebugMode) debugPrint('[Delivery] poll parse error: $e');
+            }
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('[Delivery] poll error: $e');
+      }
+    });
+  }
+
+  void _stopDeliveryRequestPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
   }
 
   /// Listen for order_update events via WebSocket so the delivery partner UI
@@ -291,6 +385,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     _orderUpdatesSub?.cancel();
     _locationTimer?.cancel();
     _locationStreamSub?.cancel();
+    _expiryTimer?.cancel();
+    _pollTimer?.cancel();
     super.dispose();
   }
 
@@ -327,7 +423,10 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           clearError: true,
         );
 
-        if (partner.isOnline) _startLocationTracking();
+        if (partner.isOnline) {
+          _startLocationTracking();
+          _startDeliveryRequestPolling();
+        }
         _isLoadingGuard = false;
 
         // If another load was requested while we were fetching, run it now
@@ -426,27 +525,45 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     if (!newOnline) {
       state = state.copyWith(incomingRequests: []);
       _stopLocationTracking();
+      _stopDeliveryRequestPolling();
     } else {
       _startLocationTracking();
+      // Push location immediately so rider appears in Redis geo set right away
+      // instead of waiting up to 15 seconds for the periodic timer.
+      _pushLocationUpdate();
+      // Start polling as a fallback in case WebSocket is disconnected
+      _startDeliveryRequestPolling();
     }
 
     // Push to API with rollback on failure
     try {
+      // Include the rider's current GPS so the backend can immediately add
+      // them to the Redis geo set (no 15-second wait for UpdateLocation).
+      final body = <String, dynamic>{'is_online': newOnline};
+      if (newOnline) {
+        final pos = _location.lastPosition;
+        if (pos != null && pos.latitude != 0 && pos.longitude != 0) {
+          body['latitude'] = pos.latitude;
+          body['longitude'] = pos.longitude;
+        }
+      }
       final response = await _api.put(
         ApiConfig.deliveryStatus,
-        body: {'is_online': newOnline},
+        body: body,
       );
       if (!response.success) {
         // Rollback
         state = state.copyWith(
           partner: state.partner.copyWith(isOnline: !newOnline),
         );
+        if (newOnline) _stopDeliveryRequestPolling();
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[Delivery] toggleOnline error: $e');
       state = state.copyWith(
         partner: state.partner.copyWith(isOnline: !newOnline),
       );
+      if (newOnline) _stopDeliveryRequestPolling();
     }
   }
 

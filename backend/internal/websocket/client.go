@@ -37,15 +37,12 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
-			return true // Allow connections without Origin (e.g., mobile apps)
+			return true // Always allow connections without Origin — mobile apps don't send one
 		}
+		// For web clients, validate the Origin header against ALLOWED_ORIGINS
 		allowed := os.Getenv("ALLOWED_ORIGINS")
 		if allowed == "" || allowed == "*" {
-			// In debug/dev mode, allow all
-			if os.Getenv("GIN_MODE") != "release" {
-				return true
-			}
-			return false // Deny all in production if not configured
+			return true // No restrictions configured
 		}
 		for _, o := range strings.Split(allowed, ",") {
 			if strings.TrimSpace(o) == origin {
@@ -142,15 +139,17 @@ func ServeWs(hub *Hub, c *gin.Context) {
 	// Get user ID from context (set by auth middleware)
 	userID, exists := c.Get("userId")
 	if !exists {
+		log.Printf("[ws] ServeWs: no userId in context — returning 401")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Println(err)
+		log.Printf("[ws] ServeWs: upgrade failed for user %v: %v (Origin: %s)", userID, err, c.GetHeader("Origin"))
 		return
 	}
+	log.Printf("[ws] ServeWs: user %v connected from %s", userID, c.ClientIP())
 	client := &Client{
 		hub:    hub,
 		conn:   conn,

@@ -477,6 +477,31 @@ func main() {
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 
 	deliveryMatcher := workers.NewDeliveryMatcher(awService, geoService, redisClient, hub, 15*time.Second)
+
+	// ── Startup: Clear stale Redis delivery state ──
+	// The busy_riders and pending_riders SETS have no TTL. If the server crashed
+	// or a delivery was never properly completed, riders stay marked as busy/pending
+	// forever — the matcher permanently skips them. Clear everything on startup so
+	// all online riders get a fresh start.
+	if redisClient != nil {
+		cleanupCtx := context.Background()
+		redisClient.Del(cleanupCtx, "busy_riders")
+		redisClient.Del(cleanupCtx, "pending_riders")
+		// Also clear any stale per-order pending locks and per-rider pending keys
+		// These have TTLs but clearing them on startup avoids ghost locks from the
+		// previous server instance.
+		rdb := redisClient.GetRedis()
+		iter := rdb.Scan(cleanupCtx, 0, "pending_delivery:*", 100).Iterator()
+		for iter.Next(cleanupCtx) {
+			rdb.Del(cleanupCtx, iter.Val())
+		}
+		iter = rdb.Scan(cleanupCtx, 0, "pending_rider:*", 100).Iterator()
+		for iter.Next(cleanupCtx) {
+			rdb.Del(cleanupCtx, iter.Val())
+		}
+		log.Println("[startup] Cleared stale Redis delivery state (busy_riders, pending_riders, pending_delivery:*, pending_rider:*)")
+	}
+
 	go deliveryMatcher.Start(workerCtx)
 
 	// Wire instant matching: when UpdateStatus sets an order to "ready", the

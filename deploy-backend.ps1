@@ -77,6 +77,23 @@ if ($LASTEXITCODE -ne 0) {
 }
 Ok "API healthy (took ~$($retries * 2)s)"
 
+# ── Ensure nginx WebSocket path is correct (/api/v1/ws not /ws) ──
+Log "Checking nginx WebSocket location..."
+$nginxWsCheck = Invoke-Expression "$SSH 'grep -c ""location /api/v1/ws"" /etc/nginx/sites-enabled/chizze-api 2>/dev/null'" 2>$null
+if ($nginxWsCheck -eq "0" -or $LASTEXITCODE -ne 0) {
+    Warn "nginx missing /api/v1/ws location — fixing now..."
+    Invoke-Expression "$SSH 'sudo sed -i ""s|location /ws {|location /api/v1/ws {|g"" /etc/nginx/sites-enabled/chizze-api && sudo nginx -t && sudo nginx -s reload'"
+    if ($LASTEXITCODE -eq 0) { Ok "nginx WebSocket location fixed and reloaded" }
+    else { Warn "nginx fix failed — check manually: sudo nano /etc/nginx/sites-enabled/chizze-api" }
+} else {
+    Ok "nginx WebSocket location /api/v1/ws is correct"
+}
+
+# ── Clear stale Redis delivery state on every deploy ──
+Log "Clearing stale Redis delivery state..."
+Invoke-Expression "$SSH 'docker exec backend-redis-1 redis-cli DEL busy_riders pending_riders > /dev/null && docker exec backend-redis-1 redis-cli KEYS ""pending_rider:*"" | xargs -r docker exec -i backend-redis-1 redis-cli DEL > /dev/null && docker exec backend-redis-1 redis-cli KEYS ""pending_delivery:*"" | xargs -r docker exec -i backend-redis-1 redis-cli DEL > /dev/null && echo ok'" 2>$null
+Ok "Stale Redis delivery state cleared"
+
 # ── Verify key endpoints ──
 Log "Verifying endpoints..."
 $endpoints = @("/health", "/api/v1/restaurants")

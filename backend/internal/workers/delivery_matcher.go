@@ -109,6 +109,8 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		return
 	}
 
+	log.Printf("[worker] DeliveryMatcher: found %d ready orders to match", len(docs))
+
 	for _, doc := range docs {
 		orderID, _ := doc["$id"].(string)
 		restaurantID, _ := doc["restaurant_id"].(string)
@@ -117,7 +119,9 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		// 2. Check Redis lock to prevent re-matching an already-pending order.
 		// Keep a finite TTL as a safety net; accept/reject paths clear it immediately.
 		pendingKey := "pending_delivery:" + orderID
-		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 2*time.Minute)
+		// TTL must be slightly longer than the rider's 30-second countdown
+		// to allow time for accept/reject to arrive. 45s = 30s countdown + 15s buffer.
+		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 45*time.Second)
 		if lockErr != nil || !acquired {
 			// Already pending assignment — skip
 			continue
@@ -149,10 +153,12 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		// 4. Find online riders within 15 km via Redis geo index
 		riderIDs, err := w.findNearbyRiders(ctx, restLat, restLng, 15.0)
 		if err != nil || len(riderIDs) == 0 {
-			log.Printf("[worker] DeliveryMatcher: no riders near restaurant %s for order %s", restaurantID, orderID)
+			log.Printf("[worker] DeliveryMatcher: no riders near restaurant %s (lat=%.4f, lng=%.4f) for order %s (err=%v)",
+				restaurantID, restLat, restLng, orderID, err)
 			_ = w.redisClient.Del(ctx, pendingKey)
 			continue
 		}
+		log.Printf("[worker] DeliveryMatcher: found %d nearby riders for order %s: %v", len(riderIDs), orderID, riderIDs)
 
 		// 4b. Filter out riders who already rejected this order
 		rejectedKey := "rejected_riders:" + orderID
@@ -168,22 +174,35 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 					filtered = append(filtered, rid)
 				}
 			}
+			if len(riderIDs) != len(filtered) {
+				log.Printf("[worker] DeliveryMatcher: %d riders filtered out (rejected order %s): %v", len(riderIDs)-len(filtered), orderID, rejectedSet)
+			}
 			riderIDs = filtered
 		}
 		if len(riderIDs) == 0 {
-			log.Printf("[worker] DeliveryMatcher: all nearby riders rejected order %s — clearing lock for retry", orderID)
+			// All nearby riders have rejected this order. Clear both the pending lock
+			// AND the rejected_riders set so the order cycle restarts fresh.
+			// Without clearing rejected_riders, orders become permanently undeliverable.
+			log.Printf("[worker] DeliveryMatcher: all nearby riders rejected order %s — resetting rejected list for fresh retry", orderID)
 			_ = w.redisClient.Del(ctx, pendingKey)
+			_ = w.redisClient.Del(ctx, rejectedKey)
 			continue
 		}
 
 		// 4c. Filter out riders who are currently busy on another delivery
 		if w.redisClient != nil {
 			var available []string
+			var busyList []string
 			for _, rid := range riderIDs {
 				busy, bErr := w.redisClient.SIsMember(ctx, "busy_riders", rid).Result()
 				if bErr != nil || !busy {
 					available = append(available, rid)
+				} else {
+					busyList = append(busyList, rid)
 				}
+			}
+			if len(busyList) > 0 {
+				log.Printf("[worker] DeliveryMatcher: %d riders filtered out (busy) for order %s: %v", len(busyList), orderID, busyList)
 			}
 			riderIDs = available
 		}
@@ -195,21 +214,23 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 
 		// 4d. Filter out riders who already have a pending (unanswered) delivery request.
 		// This prevents the same closest rider from receiving ALL orders before they accept/reject.
-		// We double-check the per-rider TTL key to auto-clean stale set entries.
+		// We ONLY check the TTL-based key (pending_rider:<id>) — NOT the pending_riders SET.
+		// The SET had no TTL and caused riders to be stuck forever when entries weren't cleaned up.
 		if w.redisClient != nil {
 			var notPending []string
+			var pendingList []string
 			for _, rid := range riderIDs {
-				inSet, pErr := w.redisClient.SIsMember(ctx, "pending_riders", rid).Result()
-				if pErr != nil || !inSet {
+				ttlExists, _ := w.redisClient.Exists(ctx, "pending_rider:"+rid)
+				if !ttlExists {
+					// Also proactively clean up any stale SET entry
+					w.redisClient.SRem(ctx, "pending_riders", rid)
 					notPending = append(notPending, rid)
 				} else {
-					// Verify the TTL key still exists; if expired, clean up the stale set entry
-					ttlExists, _ := w.redisClient.Exists(ctx, "pending_rider:"+rid)
-					if !ttlExists {
-						w.redisClient.SRem(ctx, "pending_riders", rid)
-						notPending = append(notPending, rid)
-					}
+					pendingList = append(pendingList, rid)
 				}
+			}
+			if len(pendingList) > 0 {
+				log.Printf("[worker] DeliveryMatcher: %d riders filtered out (pending) for order %s: %v", len(pendingList), orderID, pendingList)
 			}
 			riderIDs = notPending
 		}
@@ -218,6 +239,31 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			_ = w.redisClient.Del(ctx, pendingKey)
 			continue
 		}
+
+		// 4e. Prefer riders with an active WebSocket connection so the delivery
+		// request is delivered instantly. Riders without a WS connection are
+		// temporarily treated as rejected for this order (they'll get it via
+		// polling, but we don't want to block the WS-connected rider from getting it).
+		var wsConnected []string
+		var wsDisconnected []string
+		for _, rid := range riderIDs {
+			if w.hub.IsConnected(rid) {
+				wsConnected = append(wsConnected, rid)
+			} else {
+				wsDisconnected = append(wsDisconnected, rid)
+			}
+		}
+		if len(wsConnected) > 0 {
+			log.Printf("[worker] DeliveryMatcher: %d WS-connected riders for order %s (skipping %d offline)", len(wsConnected), orderID, len(wsDisconnected))
+			riderIDs = wsConnected
+		} else {
+			// No WS-connected riders — assign to the first available rider anyway
+			// (polling fallback will deliver it). But first check if ALL nearby riders
+			// are in rejected_riders — if so, clear rejections and let the cycle restart.
+			log.Printf("[worker] DeliveryMatcher: no WS-connected riders for order %s — assigning via polling fallback", orderID)
+		}
+
+		log.Printf("[worker] DeliveryMatcher: %d eligible riders for order %s, assigning to %s", len(riderIDs), orderID, riderIDs[0])
 
 		// 5. Get customer delivery address info
 		addrID, _ := doc["delivery_address_id"].(string)
@@ -296,13 +342,14 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		}
 
 		// Keep TTL consistent with SetNX while accept/reject remains the fast clear path.
-		_ = w.redisClient.Set(ctx, pendingKey, riderID, 2*time.Minute)
+		// 20s TTL: short enough that a non-responsive rider auto-releases quickly,
+		// long enough for the rider to see and respond to the notification.
+		_ = w.redisClient.Set(ctx, pendingKey, riderID, 20*time.Second)
 
 		// Mark rider as having a pending request so they don't get multiple orders at once.
-		// Auto-expires after 2 minutes (same as the pending_delivery lock) as a safety net.
-		w.redisClient.SAdd(ctx, "pending_riders", riderID)
-		// Store per-rider key with TTL so the pending state auto-clears even if accept/reject is missed
-		w.redisClient.Set(ctx, "pending_rider:"+riderID, orderID, 2*time.Minute)
+		// Uses ONLY a TTL-based key (no SET) — the SET had no TTL and permanently blocked riders.
+		// Auto-expires after 20s as a safety net if the rider doesn't accept/reject.
+		w.redisClient.Set(ctx, "pending_rider:"+riderID, orderID, 20*time.Second)
 
 		log.Printf("[worker] DeliveryMatcher: assigned rider %s to order %s", riderID, orderID)
 

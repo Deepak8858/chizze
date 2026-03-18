@@ -4,6 +4,7 @@ import { LogOut, ChevronRight } from "lucide-react";
 import { useLiveStats } from "@/lib/sse";
 import { clearAuth, getUser } from "@/lib/auth";
 import { authApi } from "@/lib/api";
+import { account } from "@/lib/appwrite";
 import { cn } from "@/lib/utils";
 
 function LiveCounter({
@@ -100,6 +101,7 @@ export function Header() {
 
   const handleLogout = async () => {
     try { await authApi.logout(); } catch { /* ignore */ }
+    try { await account.deleteSession("current"); } catch { /* ignore */ }
     clearAuth();
     router.replace("/login");
   };

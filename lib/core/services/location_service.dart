@@ -30,6 +30,10 @@ class LocationData {
 /// Location service — wraps geolocator for GPS access
 class LocationService {
 
+  /// The most recent known position, cached from getCurrentPosition()
+  /// or getPositionStream(). Null until the first position is acquired.
+  LocationData? lastPosition;
+
   /// Check and request location permissions
   Future<bool> checkPermissions() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -65,13 +69,15 @@ class LocationService {
         ),
       );
 
-      return LocationData(
+      final data = LocationData(
         latitude: position.latitude,
         longitude: position.longitude,
         heading: position.heading,
         speed: position.speed,
         timestamp: position.timestamp,
       );
+      lastPosition = data;
+      return data;
     } catch (e) {
       if (kDebugMode) debugPrint('[Location] getCurrentPosition error: $e');
       return LocationData(
@@ -101,13 +107,17 @@ class LocationService {
         distanceFilter: 10, // update every 10 meters
       ),
     ).map(
-      (position) => LocationData(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        heading: position.heading,
-        speed: position.speed,
-        timestamp: position.timestamp,
-      ),
+      (position) {
+        final data = LocationData(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          heading: position.heading,
+          speed: position.speed,
+          timestamp: position.timestamp,
+        );
+        lastPosition = data;
+        return data;
+      },
     ).handleError((error, stackTrace) {
       // Swallow PermissionDeniedException and other geolocator errors
       // so they never reach PlatformDispatcher.onError as unhandled fatals.

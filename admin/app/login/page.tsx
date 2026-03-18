@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Phone, KeyRound, Loader2, ShieldCheck } from "lucide-react";
@@ -11,6 +11,11 @@ import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
   useRedirectIfAuthed();
+
+  // Clear any lingering backend Appwrite session on mount
+  useEffect(() => {
+    account.deleteSession("current").catch(() => {});
+  }, []);
 
   const router = useRouter();
   const [step, setStep] = useState<"phone" | "otp">("phone");
@@ -46,7 +51,18 @@ export default function LoginPage() {
     setLoading(true);
     try {
       // 1. Verify OTP with Appwrite → creates session
-      await account.createSession(userIdRef.current, otp);
+      try {
+        await account.createSession(userIdRef.current, otp);
+      } catch (err: unknown) {
+        // If there's an active session lingering, delete it and retry
+        const typedErr = err as { code?: number; type?: string };
+        if (typedErr?.code === 401 || typedErr?.type === "user_session_already_exists") {
+          await account.deleteSession("current").catch(() => {});
+          await account.createSession(userIdRef.current, otp);
+        } else {
+          throw err;
+        }
+      }
 
       // 2. Get Appwrite JWT from the session
       const { jwt } = await account.createJWT();

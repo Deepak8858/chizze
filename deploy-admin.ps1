@@ -75,16 +75,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 Ok "Build succeeded"
 
-# ── Restart PM2 ──
+# ── Restart/Start PM2 ──
 Log "Restarting PM2 process..."
-$pm2Status = Invoke-Expression "$SSH 'pm2 list 2>&1'" 2>$null
-if ($pm2Status -match "chizze-admin") {
-    Invoke-Expression "$SSH 'pm2 restart chizze-admin 2>&1'"
-    Ok "PM2 restarted (chizze-admin)"
-} else {
-    Invoke-Expression "$SSH 'cd $REMOTE && pm2 start npm --name chizze-admin -- start 2>&1'"
-    Ok "PM2 started new process (chizze-admin)"
-}
+Invoke-Expression "$SSH 'pm2 delete chizze-admin 2>/dev/null -s; cd $REMOTE && pm2 start node_modules/next/dist/bin/next --name chizze-admin -- start 2>&1'"
+Ok "PM2 restarted cleanly (chizze-admin)"
+
 
 # ── Health check ──
 Log "Waiting for admin panel..."
@@ -94,9 +89,9 @@ do {
     Start-Sleep -Seconds 2
     $retries++
     $code = Invoke-Expression "$SSH 'curl -s -o /dev/null -w ""%{http_code}"" http://localhost:3000 2>/dev/null'" 2>$null
-} while ($code -ne "200" -and $retries -lt $maxRetries)
+} while ($code -ne "200" -and $code -ne "307" -and $retries -lt $maxRetries)
 
-if ($code -ne "200") {
+if ($code -ne "200" -and $code -ne "307") {
     Warn "Health check returned $code. PM2 logs:"
     Invoke-Expression "$SSH 'pm2 logs chizze-admin --lines 20 --nostream 2>&1'"
     Fail "Admin deploy FAILED — panel not responding"
