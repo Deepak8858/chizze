@@ -228,8 +228,8 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 	ctx := context.Background()
 	h.redis.Del(ctx, "token_blacklist:"+appwriteUserID)
 
-	// Issue our JWT (valid for 7 days)
-	token, err := h.issueJWT(appwriteUserID, role, 7*24*time.Hour)
+	// Issue our JWT (valid for 90 days — users stay logged in until explicit logout)
+	token, err := h.issueJWT(appwriteUserID, role, 90*24*time.Hour)
 	if err != nil {
 		utils.InternalError(c, "Failed to generate token")
 		return
@@ -350,7 +350,7 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	ctx := context.Background()
 	h.redis.Del(ctx, "token_blacklist:"+appwriteUserID)
 
-	token, err := h.issueJWT(appwriteUserID, role, 7*24*time.Hour)
+	token, err := h.issueJWT(appwriteUserID, role, 90*24*time.Hour)
 	if err != nil {
 		utils.InternalError(c, "Failed to generate token")
 		return
@@ -392,8 +392,8 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	// Issue new token
-	token, err := h.issueJWT(userID, role, 7*24*time.Hour)
+	// Issue new token (90 days)
+	token, err := h.issueJWT(userID, role, 90*24*time.Hour)
 	if err != nil {
 		utils.InternalError(c, "Failed to refresh token")
 		return
@@ -421,9 +421,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	// Blacklist the user's tokens for the remainder of the JWT TTL (7 days)
+	// Blacklist the user's tokens for the remainder of the JWT TTL (90 days)
 	ctx := context.Background()
-	h.redis.Set(ctx, "token_blacklist:"+userID, "1", 7*24*time.Hour)
+	h.redis.Set(ctx, "token_blacklist:"+userID, "1", 90*24*time.Hour)
 
 	utils.Success(c, gin.H{"message": "Logged out successfully"})
 }
