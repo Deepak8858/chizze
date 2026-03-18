@@ -1,25 +1,28 @@
-version: "3.9"
-
 services:
   api:
     build: .
-    ports:
-      - "8080:8080"
+    network_mode: host
     env_file:
       - .env
     environment:
       - GIN_MODE=release
+      - GOMAXPROCS=2
+      - REDIS_URL=redis://127.0.0.1:6379
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 2G
           cpus: "2"
         reservations:
-          memory: 128M
+          memory: 256M
           cpus: "0.5"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -27,14 +30,24 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --maxclients 10000 --tcp-backlog 511 --tcp-keepalive 300 --timeout 300
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -43,8 +56,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 1G
           cpus: "1"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   redis_data:

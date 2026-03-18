@@ -1,0 +1,27 @@
+server {
+    listen 80;
+    server_name admin.devdeepak.me;
+
+    # Static assets caching
+    location /_next/static/ {
+        proxy_pass http://admin_panel;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        expires 365d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        limit_req zone=general burst=50 nodelay;
+
+        proxy_pass http://admin_panel;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30;
+        proxy_connect_timeout 5;
+    }
+}
