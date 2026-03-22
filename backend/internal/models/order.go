@@ -94,7 +94,7 @@ var ValidOrderTransitions = map[string][]string{
 	OrderStatusPlaced:         {OrderStatusConfirmed, OrderStatusCancelled},
 	OrderStatusConfirmed:      {OrderStatusPreparing, OrderStatusCancelled},
 	OrderStatusPreparing:      {OrderStatusReady, OrderStatusCancelled},
-	OrderStatusReady:          {OrderStatusPickedUp},
+	OrderStatusReady:          {OrderStatusPickedUp, OrderStatusCancelled}, // Bug Fix: allow restaurant to cancel ready orders
 	OrderStatusPickedUp:       {OrderStatusOutForDelivery, OrderStatusDelivered},
 	OrderStatusOutForDelivery: {OrderStatusDelivered},
 }

@@ -76,6 +76,17 @@ class PartnerState {
   List<PartnerOrder> get readyOrders =>
       orders.where((o) => o.order.status == OrderStatus.ready).toList();
 
+  /// Orders in transit — picked up by rider, en-route to customer.
+  /// Restaurant has no action but can see status. Previously these
+  /// orders disappeared from ALL tabs (Bug: "stuck at pickedUp").
+  List<PartnerOrder> get inTransitOrders => orders
+      .where(
+        (o) =>
+            o.order.status == OrderStatus.pickedUp ||
+            o.order.status == OrderStatus.outForDelivery,
+      )
+      .toList();
+
   List<PartnerOrder> get completedOrders => orders
       .where(
         (o) =>
@@ -200,14 +211,16 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     }
   }
 
-  /// Polling fallback: fetch orders every 15 seconds when Realtime is down
+  /// Polling fallback: fetch orders every 5s when there are in-transit orders
+  /// (pickedUp / outForDelivery) so delivered status shows immediately, or
+  /// every 8s otherwise. Previously 15s — too slow for delivered updates.
   void _startPollingFallback() {
     if (_pollingTimer?.isActive == true) return; // Already polling
-    if (kDebugMode) debugPrint('[PartnerNotifier] Starting polling fallback (15s interval)');
+    if (kDebugMode) debugPrint('[PartnerNotifier] Starting polling fallback');
     state = state.copyWith(
       connectionStatus: RealtimeConnectionStatus.polling,
     );
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _loadData(notifyNewOrders: true);
     });
   }

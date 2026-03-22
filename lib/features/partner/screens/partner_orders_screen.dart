@@ -42,7 +42,7 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
     final partnerState = ref.watch(partnerProvider);
 
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
@@ -81,6 +81,29 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
               ),
               Tab(text: 'Preparing (${partnerState.preparingOrders.length})'),
               Tab(text: 'Ready (${partnerState.readyOrders.length})'),
+              // "In Transit" tab — previously orders disappeared here (Bug Fix)
+              Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('In Transit'),
+                    if (partnerState.inTransitOrders.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${partnerState.inTransitOrders.length}',
+                          style: const TextStyle(fontSize: 10, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
               Tab(text: 'Completed (${partnerState.completedOrders.length})'),
             ],
           ),
@@ -106,6 +129,13 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
               partnerState.readyOrders,
               'None ready',
               'Orders ready for pickup will show here',
+            ),
+
+            // In Transit (pickedUp / outForDelivery)
+            _buildOrderList(
+              partnerState.inTransitOrders,
+              'No orders in transit',
+              'Orders picked up by riders will appear here',
             ),
 
             // Completed

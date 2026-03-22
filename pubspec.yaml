@@ -1,7 +1,7 @@
 name: chizze
 description: "Chizze — Premium food delivery app"
 publish_to: "none"
-version: 1.2.5+10
+version: 1.2.6+11
 
 environment:
   sdk: ^3.10.8
@@ -63,6 +63,7 @@ dependencies:
   image_picker: ^1.1.2
   flutter_local_notifications: ^18.0.1
   razorpay_flutter: ^1.4.1
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   sentry_dart_plugin: ^3.2.1
@@ -83,6 +84,8 @@ flutter:
     - assets/icons/
     - assets/animations/
     - assets/logo-new.png
+    - assets/faaah.mp3
+    - assets/mkb.mp3
 
 flutter_launcher_icons:
   android: "ic_launcher"

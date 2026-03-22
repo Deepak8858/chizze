@@ -121,7 +121,7 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		pendingKey := "pending_delivery:" + orderID
 		// TTL must be slightly longer than the rider's 30-second countdown
 		// to allow time for accept/reject to arrive. 45s = 30s countdown + 15s buffer.
-		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 45*time.Second)
+		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 12*time.Second)
 		if lockErr != nil || !acquired {
 			// Already pending assignment — skip
 			continue
@@ -342,14 +342,14 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		}
 
 		// Keep TTL consistent with SetNX while accept/reject remains the fast clear path.
-		// 20s TTL: short enough that a non-responsive rider auto-releases quickly,
-		// long enough for the rider to see and respond to the notification.
-		_ = w.redisClient.Set(ctx, pendingKey, riderID, 20*time.Second)
+		// 10s TTL: re-sends to same rider after 10s if they don't respond.
+		// The matcher runs every 8s so effective re-send window is 10-18s.
+		_ = w.redisClient.Set(ctx, pendingKey, riderID, 10*time.Second)
 
 		// Mark rider as having a pending request so they don't get multiple orders at once.
 		// Uses ONLY a TTL-based key (no SET) — the SET had no TTL and permanently blocked riders.
-		// Auto-expires after 20s as a safety net if the rider doesn't accept/reject.
-		w.redisClient.Set(ctx, "pending_rider:"+riderID, orderID, 20*time.Second)
+		// Auto-expires after 10s so same rider gets the order again if they didn't respond.
+		w.redisClient.Set(ctx, "pending_rider:"+riderID, orderID, 10*time.Second)
 
 		log.Printf("[worker] DeliveryMatcher: assigned rider %s to order %s", riderID, orderID)
 
@@ -406,6 +406,18 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			"estimated_earning":   estimatedEarning,
 			"special_instructions": doc["special_instructions"],
 			"expires_at":          expiresAt,
+		})
+
+		// Also persist a notification in Appwrite so the rider sees it even if WS is down.
+		// This covers the case where the app is backgrounded and WS is disconnected.
+		_, _ = w.awService.CreateNotification("unique()", map[string]interface{}{
+			"user_id":    riderID,
+			"title":      "New Delivery Request",
+			"body":       "Order from " + restName + " — ₹" + fmt.Sprintf("%.0f", estimatedEarning) + " earning",
+			"type":       "delivery_request",
+			"data":       fmt.Sprintf(`{"order_id":"%s"}`, orderID),
+			"is_read":    false,
+			"created_at": time.Now().UTC().Format(time.RFC3339),
 		})
 
 		// Note: do NOT notify customer here — the rider has not accepted yet.

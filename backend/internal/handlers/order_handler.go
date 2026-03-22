@@ -603,6 +603,21 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		return
 	}
 
+	// Clear Redis delivery state so the assigned rider doesn't stay in busy_riders
+	// forever (Bug Fix: CancelOrder never cleared busy_riders, causing permanent lockout)
+	if h.redis != nil {
+		if dpUserID, _ := order["delivery_partner_id"].(string); dpUserID != "" {
+			rCtx := context.Background()
+			h.redis.SRem(rCtx, "busy_riders", dpUserID)
+			h.redis.Del(rCtx, "pending_rider:"+dpUserID)
+		}
+		// Also clear order-level delivery locks
+		rCtx := context.Background()
+		h.redis.Del(rCtx, "pending_delivery:"+orderID)
+		h.redis.Del(rCtx, "rejected_riders:"+orderID)
+		h.redis.Del(rCtx, "delivery_lock:"+orderID)
+	}
+
 	// Broadcast cancellation via WebSocket
 	if h.broadcaster != nil {
 		h.broadcaster.BroadcastOrderUpdate(userID, orderID, models.OrderStatusCancelled, "Order cancelled by customer")
@@ -730,6 +745,29 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	if err != nil {
 		utils.InternalError(c, "Failed to update order status")
 		return
+	}
+
+	// Clear Redis delivery state when order is cancelled (by restaurant or delivery partner).
+	// Without this, the assigned rider stays in busy_riders forever.
+	if req.Status == models.OrderStatusCancelled && h.redis != nil {
+		if dpUserID, _ := order["delivery_partner_id"].(string); dpUserID != "" {
+			rCtx := context.Background()
+			h.redis.SRem(rCtx, "busy_riders", dpUserID)
+			h.redis.Del(rCtx, "pending_rider:"+dpUserID)
+			// Reset partner status so they can receive new orders
+			dpResult, dpErr := h.appwrite.GetDeliveryPartner(dpUserID)
+			if dpErr == nil && dpResult != nil && dpResult.Total > 0 {
+				dpDocID, _ := dpResult.Documents[0]["$id"].(string)
+				_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, map[string]interface{}{
+					"current_order_id": "",
+					"status":           "available",
+				})
+			}
+		}
+		rCtx := context.Background()
+		h.redis.Del(rCtx, "pending_delivery:"+orderID)
+		h.redis.Del(rCtx, "rejected_riders:"+orderID)
+		h.redis.Del(rCtx, "delivery_lock:"+orderID)
 	}
 
 	// Trigger delivery matching immediately AFTER persisting status="ready"

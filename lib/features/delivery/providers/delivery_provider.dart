@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -75,6 +76,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       false; // guards advanceStep / completeDelivery from double-taps
   double _lastHeading = 0.0;
   double _lastSpeed = 0.0;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   DeliveryNotifier(this._api, this._ws, this._location)
     : super(DeliveryState(partner: DeliveryPartner.empty)) {
@@ -111,6 +113,14 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
             );
             }
             return;
+          }
+
+          // Play mkb.mp3 sound for incoming delivery request
+          try {
+            _audioPlayer.stop();
+            _audioPlayer.play(AssetSource('mkb.mp3'));
+          } catch (e) {
+            if (kDebugMode) debugPrint('[Delivery] sound error: $e');
           }
 
           // Append to the queue so multiple orders are visible at once
@@ -197,6 +207,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
                 specialInstructions: orderData['special_instructions'] as String? ?? '',
                 expiresAt: DateTime.now().add(const Duration(seconds: 30)),
               );
+              // Play mkb.mp3 for polling-discovered orders too
+              try {
+                _audioPlayer.stop();
+                _audioPlayer.play(AssetSource('mkb.mp3'));
+              } catch (_) {}
               state = state.copyWith(
                 incomingRequests: [...state.incomingRequests, request],
               );
@@ -387,6 +402,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     _locationStreamSub?.cancel();
     _expiryTimer?.cancel();
     _pollTimer?.cancel();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -594,14 +610,32 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
           .toList(),
     );
 
-    // Push to API
+    // Push to API — MUST rollback if this fails to prevent ghost active deliveries
+    // where local state shows active delivery but backend has no delivery_partner_id set,
+    // causing all status updates (pickedUp/delivered) to fail with 403 and the order
+    // to be reassigned to another rider (Bug: "order lost mid-way").
     try {
-      await _api.put('${ApiConfig.deliveryOrders}/$orderId/accept');
-      // Reload dashboard to sync server state (e.g. active_order)
+      final r = await _api.put('${ApiConfig.deliveryOrders}/$orderId/accept');
+      if (!r.success) {
+        if (kDebugMode) debugPrint('[Delivery] acceptRequest API failed: ${r.error} — rolling back');
+        // Rollback: restore the request to incoming queue so rider can retry
+        state = state.copyWith(
+          clearDelivery: true,
+          partner: state.partner.copyWith(isOnDelivery: false),
+          incomingRequests: [request, ...state.incomingRequests],
+        );
+        return;
+      }
+      // Reload dashboard to sync server state (e.g. active_order, accepted_at)
       _loadData();
     } catch (e) {
-      // Accept already optimistic — don't rollback UI
-      if (kDebugMode) debugPrint('[Delivery] acceptRequest error: $e');
+      if (kDebugMode) debugPrint('[Delivery] acceptRequest error: $e — rolling back');
+      // Rollback on network error too
+      state = state.copyWith(
+        clearDelivery: true,
+        partner: state.partner.copyWith(isOnDelivery: false),
+        incomingRequests: [request, ...state.incomingRequests],
+      );
     }
   }
 

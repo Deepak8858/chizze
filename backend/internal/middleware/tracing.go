@@ -52,6 +52,12 @@ func InitTracing(ctx context.Context, serviceName, version string) (func(context
 			return nil, fmt.Errorf("create OTLP exporter: %w", err)
 		}
 		fmt.Printf("[tracing] OTLP exporter → %s\n", otlpEndpoint)
+	} else if os.Getenv("GIN_MODE") == "release" {
+		// Production without OTLP collector: use noop (no stdout spam)
+		// Previously this dumped 50-line JSON spans to docker logs on every request
+		fmt.Println("[tracing] Production mode — no OTLP endpoint set, tracing disabled")
+		// Return early with a noop shutdown — no exporter, no TracerProvider
+		return func(_ context.Context) error { return nil }, nil
 	} else {
 		// Dev: print spans to stdout
 		exporter, err = stdouttrace.New(stdouttrace.WithPrettyPrint())

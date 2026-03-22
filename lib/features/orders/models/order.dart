@@ -273,7 +273,7 @@ class Order {
       specialInstructions: specialInstructions,
       deliveryInstructions: deliveryInstructions,
       estimatedDeliveryMin: estimatedDeliveryMin,
-      placedAt: placedAt ?? placedAt,
+      placedAt: placedAt ?? this.placedAt, // Fix: was `placedAt ?? placedAt` (self-reference bug)
       confirmedAt: confirmedAt ?? this.confirmedAt,
       preparedAt: preparedAt ?? this.preparedAt,
       pickedUpAt: pickedUpAt ?? this.pickedUpAt,

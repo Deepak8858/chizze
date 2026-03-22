@@ -476,7 +476,9 @@ func main() {
 	// ─── Start Background Workers ───
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 
-	deliveryMatcher := workers.NewDeliveryMatcher(awService, geoService, redisClient, hub, 15*time.Second)
+	// 8s interval: with 10s pending_rider TTL, same rider gets the order
+	// re-sent within 10-18s if they don't respond (Bug Fix: was 15s + 20s = 35s)
+	deliveryMatcher := workers.NewDeliveryMatcher(awService, geoService, redisClient, hub, 8*time.Second)
 
 	// ── Startup: Clear stale Redis delivery state ──
 	// The busy_riders and pending_riders SETS have no TTL. If the server crashed

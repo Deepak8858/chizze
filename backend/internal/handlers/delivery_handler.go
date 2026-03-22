@@ -156,16 +156,31 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 		return
 	}
 
-	partnerResult, err := h.appwrite.GetDeliveryPartner(userID)
-	if err != nil || partnerResult.Total == 0 {
-		utils.NotFound(c, "Delivery partner not found")
-		return
+	// ── Cache partnerID in Redis to avoid Appwrite lookup every 15s ──
+	// Previously: GetDeliveryPartner (170ms) + ListDeliveryLocations (170ms) per call
+	// Now: Redis GET (1ms), only hits Appwrite on cache miss
+	var partnerID string
+	if h.redis != nil {
+		cacheKey := "dp_id:" + userID
+		cached, _ := h.redis.Get(context.Background(), cacheKey)
+		if cached != "" {
+			partnerID = cached
+		}
+	}
+	if partnerID == "" {
+		partnerResult, err := h.appwrite.GetDeliveryPartner(userID)
+		if err != nil || partnerResult.Total == 0 {
+			utils.NotFound(c, "Delivery partner not found")
+			return
+		}
+		partnerID, _ = partnerResult.Documents[0]["$id"].(string)
+		if h.redis != nil {
+			h.redis.Set(context.Background(), "dp_id:"+userID, partnerID, 10*time.Minute)
+		}
 	}
 
-	partnerID, _ := partnerResult.Documents[0]["$id"].(string)
-
 	// Update partner's current location
-	_, err = h.appwrite.UpdateDeliveryPartner(partnerID, map[string]interface{}{
+	_, err := h.appwrite.UpdateDeliveryPartner(partnerID, map[string]interface{}{
 		"current_latitude":  req.Latitude,
 		"current_longitude": req.Longitude,
 		"heading":           req.Heading,
@@ -174,6 +189,10 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 	})
 	if err != nil {
 		log.Printf("[delivery] UpdateLocation failed for partner %s (user %s): %v", partnerID, userID, err)
+		// Invalidate cache in case partnerID is stale
+		if h.redis != nil {
+			h.redis.Del(context.Background(), "dp_id:"+userID)
+		}
 		utils.InternalError(c, "Failed to update location")
 		return
 	}
@@ -191,7 +210,15 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 		}
 	}
 
-	// Also store in rider_locations for tracking (upsert: update existing or create new)
+	// ── Cache locationDocID in Redis to avoid Appwrite list+upsert every 15s ──
+	var locDocID string
+	if h.redis != nil {
+		locCacheKey := "loc_doc:" + userID
+		cached, _ := h.redis.Get(context.Background(), locCacheKey)
+		if cached != "" {
+			locDocID = cached
+		}
+	}
 	locData := map[string]interface{}{
 		"rider_id":  userID,
 		"latitude":  req.Latitude,
@@ -200,18 +227,37 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 		"speed":     req.Speed,
 		"is_online": true,
 	}
-	existingLocs, locErr := h.appwrite.ListDeliveryLocations([]string{
-		appwrite.QueryEqual("rider_id", userID),
-		appwrite.QueryLimit(1),
-	})
-	if locErr == nil && existingLocs != nil && existingLocs.Total > 0 {
-		locID, _ := existingLocs.Documents[0]["$id"].(string)
-		if _, err := h.appwrite.UpdateDeliveryLocation(locID, locData); err != nil {
-			log.Printf("[delivery] UpdateDeliveryLocation failed for rider %s (loc %s): %v", userID, locID, err)
+	if locDocID != "" {
+		// Cache hit — direct update, skip ListDeliveryLocations
+		if _, err := h.appwrite.UpdateDeliveryLocation(locDocID, locData); err != nil {
+			log.Printf("[delivery] UpdateDeliveryLocation failed for rider %s (loc %s): %v", userID, locDocID, err)
+			// Invalidate cache on error
+			if h.redis != nil {
+				h.redis.Del(context.Background(), "loc_doc:"+userID)
+			}
 		}
 	} else {
-		if _, err := h.appwrite.CreateDeliveryLocation("unique()", locData); err != nil {
-			log.Printf("[delivery] CreateDeliveryLocation failed for rider %s: %v", userID, err)
+		// Cache miss — list + upsert, then cache the doc ID
+		existingLocs, locErr := h.appwrite.ListDeliveryLocations([]string{
+			appwrite.QueryEqual("rider_id", userID),
+			appwrite.QueryLimit(1),
+		})
+		if locErr == nil && existingLocs != nil && existingLocs.Total > 0 {
+			locDocID, _ = existingLocs.Documents[0]["$id"].(string)
+			if _, err := h.appwrite.UpdateDeliveryLocation(locDocID, locData); err != nil {
+				log.Printf("[delivery] UpdateDeliveryLocation failed for rider %s (loc %s): %v", userID, locDocID, err)
+			}
+		} else {
+			doc, err := h.appwrite.CreateDeliveryLocation("unique()", locData)
+			if err != nil {
+				log.Printf("[delivery] CreateDeliveryLocation failed for rider %s: %v", userID, err)
+			} else if doc != nil {
+				locDocID, _ = doc["$id"].(string)
+			}
+		}
+		// Cache the doc ID for next time
+		if locDocID != "" && h.redis != nil {
+			h.redis.Set(context.Background(), "loc_doc:"+userID, locDocID, 10*time.Minute)
 		}
 	}
 
@@ -322,11 +368,13 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 		}
 	}
 
-	// Assign partner to order with name/phone for enrichment
+	// Assign partner to order with name/phone + accepted_at timestamp
+	// accepted_at is needed for trip duration calculation in earnings
 	updateData := map[string]interface{}{
 		"delivery_partner_id":    userID,
 		"delivery_partner_name":  partnerName,
 		"delivery_partner_phone": partnerPhone,
+		"accepted_at":            time.Now().Format(time.RFC3339),
 	}
 	_, err = h.appwrite.UpdateOrder(orderID, updateData)
 	if err != nil {
@@ -1342,9 +1390,21 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 		go h.matcherCallback()
 	}
 
-	// If the order was already assigned to this partner, unassign
+	// Only allow unassigning if the order is still in "ready" status (not yet in progress).
+	// If the order is already pickedUp or outForDelivery, the rider MUST complete it —
+	// unassigning mid-delivery causes the order to be re-matched to another rider (Bug Fix).
 	assignedPartner, _ := order["delivery_partner_id"].(string)
+	currentOrderStatus, _ := order["status"].(string)
+	inProgressStatuses := map[string]bool{
+		models.OrderStatusPickedUp:       true,
+		models.OrderStatusOutForDelivery: true,
+	}
 	if assignedPartner == userID {
+		if inProgressStatuses[currentOrderStatus] {
+			// Order is in progress — cannot reject/abandon mid-delivery
+			utils.BadRequest(c, "Cannot reject an order that is already in progress (status: "+currentOrderStatus+"). Please complete the delivery.")
+			return
+		}
 		_, err = h.appwrite.UpdateOrder(orderID, map[string]interface{}{
 			"delivery_partner_id": "",
 		})
@@ -1364,6 +1424,8 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 		if h.redis != nil {
 			rCtx := context.Background()
 			h.redis.SRem(rCtx, "busy_riders", userID)
+			h.redis.SRem(rCtx, "pending_riders", userID)
+			h.redis.Del(rCtx, "pending_rider:"+userID)
 		}
 	}
 
