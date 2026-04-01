@@ -8,7 +8,7 @@ import { formatDateTime } from "@/lib/utils";
 import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Dispute } from "@/types";
-import { MessageSquare, RefreshCw } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 
 const TABS = ["all", "open", "investigating", "resolved", "closed"];
 
@@ -22,6 +22,7 @@ export default function DisputesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-disputes", tab],
     queryFn: () => disputesApi.list({ status: tab === "all" ? undefined : tab, limit: 200 }) as Promise<{ data: Dispute[] }>,
+    retry: false,
   });
 
   const resolveMutation = useMutation({

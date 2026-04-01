@@ -6,26 +6,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
 import '../../../core/services/location_service.dart';
+import '../../../core/services/realtime_service.dart';
 import '../../../core/services/websocket_service.dart';
 import '../../orders/models/order.dart';
 import '../models/delivery_partner.dart';
 
-/// Delivery partner state
+/// Delivery partner state — supports up to 5 simultaneous active deliveries
 class DeliveryState {
   final DeliveryPartner partner;
   final DeliveryMetrics metrics;
   final List<DeliveryRequest> incomingRequests;
-  final ActiveDelivery? activeDelivery;
+  final List<ActiveDelivery> activeDeliveries;
   final bool isLoading;
-  final bool
-  isStepBusy; // true while advanceStep / completeDelivery is in-flight
+  final bool isStepBusy; // true while advanceStep / completeDelivery is in-flight
   final String? errorMessage;
 
   const DeliveryState({
     required this.partner,
     this.metrics = const DeliveryMetrics(),
     this.incomingRequests = const [],
-    this.activeDelivery,
+    this.activeDeliveries = const [],
     this.isLoading = false,
     this.isStepBusy = false,
     this.errorMessage,
@@ -35,37 +35,42 @@ class DeliveryState {
     DeliveryPartner? partner,
     DeliveryMetrics? metrics,
     List<DeliveryRequest>? incomingRequests,
-    ActiveDelivery? activeDelivery,
+    List<ActiveDelivery>? activeDeliveries,
     bool? isLoading,
     bool? isStepBusy,
     String? errorMessage,
-    bool clearDelivery = false,
     bool clearError = false,
   }) {
     return DeliveryState(
       partner: partner ?? this.partner,
       metrics: metrics ?? this.metrics,
       incomingRequests: incomingRequests ?? this.incomingRequests,
-      activeDelivery: clearDelivery
-          ? null
-          : (activeDelivery ?? this.activeDelivery),
+      activeDeliveries: activeDeliveries ?? this.activeDeliveries,
       isLoading: isLoading ?? this.isLoading,
       isStepBusy: isStepBusy ?? this.isStepBusy,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
 
-  bool get hasActiveDelivery => activeDelivery != null;
+  bool get hasActiveDelivery => activeDeliveries.isNotEmpty;
   bool get hasIncomingRequest => incomingRequests.isNotEmpty;
+  int get activeDeliveryCount => activeDeliveries.length;
+  /// True when rider can still accept more orders (max 5)
+  bool get canAcceptMoreOrders => activeDeliveries.length < 5;
+  /// Returns the first active delivery (backward compat)
+  ActiveDelivery? get activeDelivery =>
+      activeDeliveries.isNotEmpty ? activeDeliveries.first : null;
 }
 
-/// Delivery notifier — API-backed with WebSocket + location tracking
+/// Delivery notifier — API-backed with WebSocket + Appwrite Realtime + location tracking
 class DeliveryNotifier extends StateNotifier<DeliveryState> {
   final ApiClient _api;
   final WebSocketService _ws;
   final LocationService _location;
+  final RealtimeService _realtime;
   StreamSubscription? _wsSub;
   StreamSubscription? _orderUpdatesSub;
+  StreamSubscription? _realtimeSub; // Appwrite Realtime fallback for delivery_requests
   StreamSubscription? _locationStreamSub;
   Timer? _locationTimer;
   Timer? _expiryTimer; // auto-rejects expired delivery requests
@@ -77,13 +82,60 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   double _lastHeading = 0.0;
   double _lastSpeed = 0.0;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  String? _currentUserId; // cached for Realtime filtering
 
-  DeliveryNotifier(this._api, this._ws, this._location)
+  DeliveryNotifier(this._api, this._ws, this._location, this._realtime)
     : super(DeliveryState(partner: DeliveryPartner.empty)) {
     _loadData();
     _subscribeToWebSocket();
     _subscribeToOrderUpdates();
+    _subscribeToRealtimeDeliveryRequests();
     _startExpiryTimer();
+  }
+
+  /// Subscribe to Appwrite Realtime for delivery_requests collection.
+  /// This is the most reliable channel — works even when WS is disconnected.
+  /// When a delivery_requests document is created with rider_id == this rider,
+  /// it triggers the same flow as a WS delivery_request event.
+  void _subscribeToRealtimeDeliveryRequests() {
+    try {
+      final channel = RealtimeChannels.deliveryRequestsChannel();
+      _realtimeSub = _realtime.subscribe(channel).listen((event) {
+        if (!mounted || event.type != RealtimeEventType.create) return;
+        final data = event.data;
+
+        // Filter: only process requests for this rider
+        final riderId = data['rider_id'] as String? ?? '';
+        if (_currentUserId == null || riderId != _currentUserId) return;
+
+        // Ignore if already at max capacity (5 orders)
+        if (!state.canAcceptMoreOrders) return;
+
+        final orderId = data['order_id'] as String? ?? '';
+        if (orderId.isEmpty) return;
+        if (state.incomingRequests.any((r) => r.order.id == orderId)) return;
+
+        if (kDebugMode) debugPrint('[Delivery] Realtime delivery_request for order $orderId');
+
+        // Build a minimal DeliveryRequest from the Appwrite document data.
+        // The WS payload has full order details, the Realtime doc has less,
+        // so we trigger a full dashboard reload which will populate active_order.
+        // Also play sound immediately to alert the rider.
+        try {
+          _audioPlayer.stop();
+          _audioPlayer.play(AssetSource('mkb.mp3'));
+        } catch (_) {}
+
+        // Reload dashboard — this will pick up the pending delivery request
+        // and populate state.incomingRequests via polling
+        _loadData();
+
+        // Also force-start polling if not running
+        _startDeliveryRequestPolling();
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Delivery] Realtime subscribe error: $e');
+    }
   }
 
   /// Listen for new delivery request assignments via WebSocket (Go backend hub)
@@ -91,11 +143,11 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     try {
       _wsSub = _ws.deliveryRequests.listen((event) {
         try {
-          // Ignore incoming delivery requests if rider already has an active delivery.
-          if (state.hasActiveDelivery) {
+          // Ignore incoming delivery requests if rider is already at max capacity (5 orders).
+          if (!state.canAcceptMoreOrders) {
             if (kDebugMode) {
               debugPrint(
-              '[Delivery] Ignoring delivery_request — already on active delivery',
+              '[Delivery] Ignoring delivery_request — at max capacity (${state.activeDeliveryCount}/5)',
             );
             }
             return;
@@ -243,57 +295,61 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         final statusStr = event.status;
         if (orderId == null || statusStr == null) return;
 
-        // Only care about updates to our active delivery order
-        if (state.activeDelivery == null ||
-            state.activeDelivery!.request.order.id != orderId) {
-          return;
-        }
+        // Find the matching active delivery by order ID
+        final idx = state.activeDeliveries.indexWhere(
+          (d) => d.request.order.id == orderId,
+        );
+        if (idx == -1) return;
 
+        final delivery = state.activeDeliveries[idx];
         final newStatus = OrderStatus.tryFromString(statusStr);
         if (newStatus == null) return;
 
-        // If the order was cancelled or delivered externally, clear active delivery
+        // If cancelled or delivered externally, remove from active deliveries
         if (newStatus == OrderStatus.cancelled ||
             newStatus == OrderStatus.delivered) {
+          final updated = state.activeDeliveries
+              .where((d) => d.request.order.id != orderId)
+              .toList();
           state = state.copyWith(
-            clearDelivery: true,
-            partner: state.partner.copyWith(isOnDelivery: false),
+            activeDeliveries: updated,
+            partner: state.partner.copyWith(isOnDelivery: updated.isNotEmpty),
           );
-          _loadData(); // refresh dashboard
+          _loadData(); // refresh dashboard metrics
           return;
         }
 
-        // Otherwise update the order status inside active delivery
+        // Otherwise update the order status inside this specific active delivery
         final updatedOrder =
-            state.activeDelivery!.request.order.copyWith(status: newStatus);
+            delivery.request.order.copyWith(status: newStatus);
         final updatedRequest = DeliveryRequest(
-          id: state.activeDelivery!.request.id,
+          id: delivery.request.id,
           order: updatedOrder,
-          restaurantName: state.activeDelivery!.request.restaurantName,
-          restaurantCuisine: state.activeDelivery!.request.restaurantCuisine,
-          restaurantAddress: state.activeDelivery!.request.restaurantAddress,
-          restaurantPhone: state.activeDelivery!.request.restaurantPhone,
-          restaurantLatitude: state.activeDelivery!.request.restaurantLatitude,
-          restaurantLongitude: state.activeDelivery!.request.restaurantLongitude,
-          customerName: state.activeDelivery!.request.customerName,
-          customerPhone: state.activeDelivery!.request.customerPhone,
-          customerAddress: state.activeDelivery!.request.customerAddress,
-          customerLatitude: state.activeDelivery!.request.customerLatitude,
-          customerLongitude: state.activeDelivery!.request.customerLongitude,
-          pickupDistanceKm: state.activeDelivery!.request.pickupDistanceKm,
-          deliveryDistanceKm: state.activeDelivery!.request.deliveryDistanceKm,
-          distanceKm: state.activeDelivery!.request.distanceKm,
-          estimatedEarning: state.activeDelivery!.request.estimatedEarning,
-          specialInstructions: state.activeDelivery!.request.specialInstructions,
-          expiresAt: state.activeDelivery!.request.expiresAt,
+          restaurantName: delivery.request.restaurantName,
+          restaurantCuisine: delivery.request.restaurantCuisine,
+          restaurantAddress: delivery.request.restaurantAddress,
+          restaurantPhone: delivery.request.restaurantPhone,
+          restaurantLatitude: delivery.request.restaurantLatitude,
+          restaurantLongitude: delivery.request.restaurantLongitude,
+          customerName: delivery.request.customerName,
+          customerPhone: delivery.request.customerPhone,
+          customerAddress: delivery.request.customerAddress,
+          customerLatitude: delivery.request.customerLatitude,
+          customerLongitude: delivery.request.customerLongitude,
+          pickupDistanceKm: delivery.request.pickupDistanceKm,
+          deliveryDistanceKm: delivery.request.deliveryDistanceKm,
+          distanceKm: delivery.request.distanceKm,
+          estimatedEarning: delivery.request.estimatedEarning,
+          specialInstructions: delivery.request.specialInstructions,
+          expiresAt: delivery.request.expiresAt,
         );
-        state = state.copyWith(
-          activeDelivery: ActiveDelivery(
-            request: updatedRequest,
-            currentStep: state.activeDelivery!.currentStep,
-            acceptedAt: state.activeDelivery!.acceptedAt,
-          ),
+        final updatedDeliveries = List<ActiveDelivery>.from(state.activeDeliveries);
+        updatedDeliveries[idx] = ActiveDelivery(
+          request: updatedRequest,
+          currentStep: delivery.currentStep,
+          acceptedAt: delivery.acceptedAt,
         );
+        state = state.copyWith(activeDeliveries: updatedDeliveries);
       });
     } catch (e) {
       if (kDebugMode) debugPrint('[Delivery] WS order updates subscribe error: $e');
@@ -398,6 +454,7 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   void dispose() {
     _wsSub?.cancel();
     _orderUpdatesSub?.cancel();
+    _realtimeSub?.cancel();
     _locationTimer?.cancel();
     _locationStreamSub?.cancel();
     _expiryTimer?.cancel();
@@ -422,19 +479,35 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         final partner = DeliveryPartner.fromDashboard(data);
         final metrics = DeliveryMetrics.fromDashboard(data);
 
-        // Restore active delivery from the dashboard's active_order field.
+        // Cache the user ID for Realtime filtering
+        if (_currentUserId == null && data['user_id'] != null) {
+          _currentUserId = data['user_id'] as String?;
+        }
+
+        // Restore active deliveries from the dashboard.
+        // Priority: active_orders (multi-order array) > active_order (compat) > keep in-memory state.
         // This covers app restarts / cold starts where in-memory state is lost.
-        ActiveDelivery? restoredDelivery = state.activeDelivery;
-        if (restoredDelivery == null && data['active_order'] != null) {
-          restoredDelivery = _activeDeliveryFromOrder(
-            data['active_order'] as Map<String, dynamic>,
-          );
+        List<ActiveDelivery> restoredDeliveries = state.activeDeliveries;
+        if (restoredDeliveries.isEmpty) {
+          if (data['active_orders'] is List) {
+            final orders = data['active_orders'] as List<dynamic>;
+            restoredDeliveries = orders
+                .map((o) => _activeDeliveryFromOrder(o as Map<String, dynamic>))
+                .whereType<ActiveDelivery>()
+                .toList();
+          } else if (data['active_order'] != null) {
+            // Backward compat: single active_order from older backend
+            final d = _activeDeliveryFromOrder(
+              data['active_order'] as Map<String, dynamic>,
+            );
+            if (d != null) restoredDeliveries = [d];
+          }
         }
 
         state = state.copyWith(
           partner: partner,
           metrics: metrics,
-          activeDelivery: restoredDelivery,
+          activeDeliveries: restoredDeliveries,
           isLoading: false,
           clearError: true,
         );
@@ -583,8 +656,13 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     }
   }
 
-  /// Accept a specific delivery request by order ID
+  /// Accept a specific delivery request by order ID.
+  /// Appends to the activeDeliveries list (supports up to 5 simultaneous orders).
   Future<void> acceptRequest(String orderId) async {
+    if (!state.canAcceptMoreOrders) {
+      if (kDebugMode) debugPrint('[Delivery] acceptRequest: at max capacity (5 orders)');
+      return;
+    }
     final index = state.incomingRequests.indexWhere(
       (r) => r.order.id == orderId,
     );
@@ -595,51 +673,55 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       return;
     }
     final request = state.incomingRequests[index];
+    final delivery = ActiveDelivery(request: request, acceptedAt: DateTime.now());
 
-    final delivery = ActiveDelivery(
-      request: request,
-      acceptedAt: DateTime.now(),
-    );
-
+    // Optimistic update: append to active deliveries, remove from incoming
     state = state.copyWith(
-      activeDelivery: delivery,
+      activeDeliveries: [...state.activeDeliveries, delivery],
       partner: state.partner.copyWith(isOnDelivery: true),
-      // Remove the accepted request; keep any other queued requests
       incomingRequests: state.incomingRequests
           .where((r) => r.order.id != orderId)
           .toList(),
     );
 
-    // Push to API — MUST rollback if this fails to prevent ghost active deliveries
-    // where local state shows active delivery but backend has no delivery_partner_id set,
-    // causing all status updates (pickedUp/delivered) to fail with 403 and the order
-    // to be reassigned to another rider (Bug: "order lost mid-way").
+    // Push to API — MUST rollback if this fails to prevent ghost active deliveries.
     try {
       final r = await _api.put('${ApiConfig.deliveryOrders}/$orderId/accept');
       if (!r.success) {
         if (kDebugMode) debugPrint('[Delivery] acceptRequest API failed: ${r.error} — rolling back');
-        // Rollback: restore the request to incoming queue so rider can retry
+        // Rollback: remove from active, re-add to incoming queue
         state = state.copyWith(
-          clearDelivery: true,
-          partner: state.partner.copyWith(isOnDelivery: false),
+          activeDeliveries: state.activeDeliveries
+              .where((d) => d.request.order.id != orderId)
+              .toList(),
+          partner: state.partner.copyWith(
+            isOnDelivery: state.activeDeliveries
+                .where((d) => d.request.order.id != orderId)
+                .isNotEmpty,
+          ),
           incomingRequests: [request, ...state.incomingRequests],
         );
         return;
       }
-      // Reload dashboard to sync server state (e.g. active_order, accepted_at)
+      // Reload dashboard to sync server state (accepted_at, etc.)
       _loadData();
     } catch (e) {
       if (kDebugMode) debugPrint('[Delivery] acceptRequest error: $e — rolling back');
-      // Rollback on network error too
       state = state.copyWith(
-        clearDelivery: true,
-        partner: state.partner.copyWith(isOnDelivery: false),
+        activeDeliveries: state.activeDeliveries
+            .where((d) => d.request.order.id != orderId)
+            .toList(),
+        partner: state.partner.copyWith(
+          isOnDelivery: state.activeDeliveries
+              .where((d) => d.request.order.id != orderId)
+              .isNotEmpty,
+        ),
         incomingRequests: [request, ...state.incomingRequests],
       );
     }
   }
 
-  /// Reject/skip a specific delivery request — order re-enters the queue
+  /// Reject/skip a specific delivery request — order re-enters the matcher queue
   Future<void> rejectRequest(String orderId) async {
     final previousRequests = state.incomingRequests;
     state = state.copyWith(
@@ -657,82 +739,99 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     }
   }
 
-  /// Move to next delivery step
-  Future<void> advanceStep() async {
-    if (state.activeDelivery == null || _isStepBusy) return;
-    final next = state.activeDelivery!.nextStep;
-    if (next != null) {
-      final previousStep = state.activeDelivery!.currentStep;
-      _isStepBusy = true;
-      state = state.copyWith(isStepBusy: true);
+  /// Move to next delivery step for a specific order.
+  Future<void> advanceStep(String orderId) async {
+    final idx = state.activeDeliveries.indexWhere(
+      (d) => d.request.order.id == orderId,
+    );
+    if (idx == -1 || _isStepBusy) return;
 
-      // Optimistic update — advance immediately for snappy UX
-      state = state.copyWith(
-        activeDelivery: state.activeDelivery!.copyWith(currentStep: next),
-      );
+    final delivery = state.activeDeliveries[idx];
+    final next = delivery.nextStep;
+    if (next == null) return;
 
-      // Map step to order status and push to API
-      final orderId = state.activeDelivery!.request.order.id;
-      String? apiStatus;
-      switch (next) {
-        case DeliveryStep.pickUp:
-          apiStatus = 'pickedUp';
-        case DeliveryStep.goToCustomer:
-          apiStatus = 'outForDelivery';
-        default:
-          break;
-      }
-      if (apiStatus != null) {
-        try {
-          final r = await _api.put(
-            '${ApiConfig.deliveryOrders}/$orderId/status',
-            body: {'status': apiStatus},
+    final previousStep = delivery.currentStep;
+    _isStepBusy = true;
+    state = state.copyWith(isStepBusy: true);
+
+    // Optimistic update — advance immediately for snappy UX
+    final optimisticDeliveries = List<ActiveDelivery>.from(state.activeDeliveries);
+    optimisticDeliveries[idx] = delivery.copyWith(currentStep: next);
+    state = state.copyWith(activeDeliveries: optimisticDeliveries);
+
+    // Map step to API status
+    String? apiStatus;
+    switch (next) {
+      case DeliveryStep.pickUp:
+        apiStatus = 'pickedUp';
+      case DeliveryStep.goToCustomer:
+        apiStatus = 'outForDelivery';
+      default:
+        break;
+    }
+    if (apiStatus != null) {
+      try {
+        final r = await _api.put(
+          '${ApiConfig.deliveryOrders}/$orderId/status',
+          body: {'status': apiStatus},
+        );
+        if (!r.success) {
+          if (kDebugMode) debugPrint('[Delivery] advanceStep failed: ${r.error}');
+          // Revert this specific delivery's step
+          final revertIdx = state.activeDeliveries.indexWhere(
+            (d) => d.request.order.id == orderId,
           );
-          if (!r.success) {
-            if (kDebugMode) debugPrint('[Delivery] advanceStep failed: ${r.error}');
-            // Revert step on API failure to keep state consistent
-            if (state.activeDelivery != null) {
-              state = state.copyWith(
-                activeDelivery: state.activeDelivery!.copyWith(
-                  currentStep: previousStep,
-                ),
-              );
-            }
-          }
-        } catch (e) {
-          if (kDebugMode) debugPrint('[Delivery] advanceStep error: $e');
-          // Revert step on error to keep state consistent
-          if (state.activeDelivery != null) {
-            state = state.copyWith(
-              activeDelivery: state.activeDelivery!.copyWith(
-                currentStep: previousStep,
-              ),
-            );
+          if (mounted && revertIdx != -1) {
+            final reverted = List<ActiveDelivery>.from(state.activeDeliveries);
+            reverted[revertIdx] = reverted[revertIdx].copyWith(currentStep: previousStep);
+            state = state.copyWith(activeDeliveries: reverted);
           }
         }
+      } catch (e) {
+        if (kDebugMode) debugPrint('[Delivery] advanceStep error: $e');
+        final revertIdx = state.activeDeliveries.indexWhere(
+          (d) => d.request.order.id == orderId,
+        );
+        if (mounted && revertIdx != -1) {
+          final reverted = List<ActiveDelivery>.from(state.activeDeliveries);
+          reverted[revertIdx] = reverted[revertIdx].copyWith(currentStep: previousStep);
+          state = state.copyWith(activeDeliveries: reverted);
+        }
       }
-      _isStepBusy = false;
-      state = state.copyWith(isStepBusy: false);
     }
+    _isStepBusy = false;
+    state = state.copyWith(isStepBusy: false);
   }
 
-  /// Complete delivery
-  Future<void> completeDelivery() async {
+  /// Complete a specific delivery by order ID.
+  Future<void> completeDelivery(String orderId) async {
     if (_isStepBusy) return;
     _isStepBusy = true;
     state = state.copyWith(isStepBusy: true);
 
-    final activeDelivery = state.activeDelivery;
-    final orderId = activeDelivery?.request.order.id;
-    final earning = activeDelivery?.request.estimatedEarning ?? 0;
-    final distance = activeDelivery?.request.distanceKm ?? 0;
+    final idx = state.activeDeliveries.indexWhere(
+      (d) => d.request.order.id == orderId,
+    );
+    if (idx == -1) {
+      _isStepBusy = false;
+      state = state.copyWith(isStepBusy: false);
+      return;
+    }
+
+    final delivery = state.activeDeliveries[idx];
+    final earning = delivery.request.estimatedEarning;
+    final distance = delivery.request.distanceKm;
+    final previousDeliveries = List<ActiveDelivery>.from(state.activeDeliveries);
     final previousPartner = state.partner;
     final previousMetrics = state.metrics;
 
-    // Optimistic update — clear delivery and bump metrics immediately
+    // Optimistic: remove this delivery and bump metrics
+    final updatedDeliveries = state.activeDeliveries
+        .where((d) => d.request.order.id != orderId)
+        .toList();
     state = state.copyWith(
-      clearDelivery: true,
-      partner: state.partner.copyWith(isOnDelivery: false),
+      activeDeliveries: updatedDeliveries,
+      partner: state.partner.copyWith(isOnDelivery: updatedDeliveries.isNotEmpty),
       metrics: state.metrics.copyWith(
         todayEarnings: state.metrics.todayEarnings + earning,
         todayDeliveries: state.metrics.todayDeliveries + 1,
@@ -742,32 +841,17 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       ),
     );
 
-    // Push delivered status to API — await so we can rollback on failure
-    if (orderId != null) {
-      try {
-        final r = await _api.put(
-          '${ApiConfig.deliveryOrders}/$orderId/status',
-          body: {'status': 'delivered'},
-        );
-        if (!r.success) {
-          if (kDebugMode) debugPrint('[Delivery] complete failed: ${r.error}');
-          // Rollback — restore the active delivery and metrics
-          state = state.copyWith(
-            activeDelivery: activeDelivery,
-            partner: previousPartner,
-            metrics: previousMetrics,
-            isStepBusy: false,
-          );
-          _isStepBusy = false;
-          return;
-        }
-        // Reload dashboard to sync metrics and clear active_order
-        _loadData();
-      } catch (e) {
-        if (kDebugMode) debugPrint('[Delivery] complete error: $e');
-        // Rollback — restore the active delivery and metrics
+    // Push delivered status to API
+    try {
+      final r = await _api.put(
+        '${ApiConfig.deliveryOrders}/$orderId/status',
+        body: {'status': 'delivered'},
+      );
+      if (!r.success) {
+        if (kDebugMode) debugPrint('[Delivery] completeDelivery failed: ${r.error}');
+        // Rollback
         state = state.copyWith(
-          activeDelivery: activeDelivery,
+          activeDeliveries: previousDeliveries,
           partner: previousPartner,
           metrics: previousMetrics,
           isStepBusy: false,
@@ -775,15 +859,25 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         _isStepBusy = false;
         return;
       }
+      // Reload dashboard to sync metrics
+      _loadData();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Delivery] completeDelivery error: $e');
+      state = state.copyWith(
+        activeDeliveries: previousDeliveries,
+        partner: previousPartner,
+        metrics: previousMetrics,
+        isStepBusy: false,
+      );
+      _isStepBusy = false;
+      return;
     }
     _isStepBusy = false;
     state = state.copyWith(isStepBusy: false);
   }
 
-  /// Report an issue with current delivery
-  Future<void> reportIssue(String reason, String details) async {
-    if (state.activeDelivery == null) return;
-    final orderId = state.activeDelivery!.request.order.id;
+  /// Report an issue with a specific delivery order
+  Future<void> reportIssue(String orderId, String reason, String details) async {
     _api
         .post(
           '${ApiConfig.deliveryOrders}/$orderId/report',
@@ -865,6 +959,7 @@ final deliveryProvider = StateNotifierProvider<DeliveryNotifier, DeliveryState>(
     final api = ref.watch(apiClientProvider);
     final ws = ref.watch(webSocketServiceProvider);
     final location = ref.watch(locationServiceProvider);
-    return DeliveryNotifier(api, ws, location);
+    final realtime = ref.watch(realtimeServiceProvider);
+    return DeliveryNotifier(api, ws, location, realtime);
   },
 );

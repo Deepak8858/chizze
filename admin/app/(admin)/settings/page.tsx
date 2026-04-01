@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { settingsApi } from "@/lib/api";
 import { toast } from "sonner";
 import { Save, Settings } from "lucide-react";
@@ -66,13 +66,19 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 export default function SettingsPage() {
-  const { data, isLoading } = useQuery({
+  const qc = useQueryClient();
+  const { data, isLoading, isError } = useQuery<{ data: SettingsData }>({
     queryKey: ["platform-settings"],
     queryFn: () => settingsApi.get() as Promise<{ data: SettingsData }>,
+    retry: 1,
   });
 
-  const [form, setForm] = useState<SettingsData | null>(null);
-  useEffect(() => { if (data?.data) setForm(data.data); }, [data]);
+  const [form, setForm] = useState<SettingsData | null>(data?.data ?? null);
+  // Sync form when remote data arrives (only once on first load)
+  useEffect(() => {
+    if (data?.data && !form) setForm(data.data);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   const saveMutation = useMutation({
     mutationFn: (body: SettingsData) => settingsApi.update(body),
@@ -82,11 +88,25 @@ export default function SettingsPage() {
 
   const set = (k: keyof SettingsData, v: unknown) => setForm(f => f ? { ...f, [k]: v } : f);
 
-  if (isLoading || !form) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <div className="skeleton h-8 w-40 rounded-lg" />
         {[...Array(4)].map((_, i) => <div key={i} className="skeleton h-48 rounded-xl" />)}
+      </div>
+    );
+  }
+
+  if (isError || !form) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <p className="text-text-muted text-sm">Failed to load platform settings.</p>
+        <button
+          onClick={() => qc.invalidateQueries({ queryKey: ["platform-settings"] })}
+          className="px-4 py-2 rounded-lg bg-brand-500/10 text-brand-400 text-sm hover:bg-brand-500/20 transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }

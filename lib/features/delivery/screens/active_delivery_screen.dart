@@ -11,9 +11,12 @@ import '../../../shared/widgets/delivery_map.dart';
 import '../models/delivery_partner.dart';
 import '../providers/delivery_provider.dart';
 
-/// Active delivery — step-by-step flow with order info
+/// Active delivery — step-by-step flow with order info.
+/// [orderId] selects a specific delivery when multiple are active.
+/// Falls back to the first active delivery when not provided.
 class ActiveDeliveryScreen extends ConsumerStatefulWidget {
-  const ActiveDeliveryScreen({super.key});
+  final String? orderId;
+  const ActiveDeliveryScreen({super.key, this.orderId});
 
   @override
   ConsumerState<ActiveDeliveryScreen> createState() =>
@@ -63,9 +66,20 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   @override
   Widget build(BuildContext context) {
     final dState = ref.watch(deliveryProvider);
-    final delivery = dState.activeDelivery;
+    // Find the delivery for this orderId, or fall back to the first active one
+    ActiveDelivery? delivery;
+    if (widget.orderId != null) {
+      final matches = dState.activeDeliveries
+          .where((d) => d.request.order.id == widget.orderId);
+      delivery = matches.isNotEmpty ? matches.first : dState.activeDelivery;
+    } else {
+      delivery = dState.activeDelivery;
+    }
+    // Effective orderId for API calls
+    final effectiveOrderId =
+        delivery?.request.order.id ?? widget.orderId ?? '';
 
-    if (delivery == null) {
+    if (delivery == null || effectiveOrderId.isEmpty) {
       return Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(title: const Text('Active Delivery')),
@@ -116,7 +130,18 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(request.order.orderNumber),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(request.order.orderNumber, style: const TextStyle(fontSize: 16)),
+            if (dState.activeDeliveryCount > 1)
+              Text(
+                '${dState.activeDeliveryCount} orders active',
+                style: const TextStyle(fontSize: 11, color: Colors.white70),
+              ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.phone_rounded),
@@ -188,7 +213,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           ),
 
           // ─── Bottom Action ───
-          _buildBottomAction(context, ref, delivery),
+          _buildBottomAction(context, ref, delivery, effectiveOrderId),
         ],
       ),
     );
@@ -473,6 +498,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     BuildContext context,
     WidgetRef ref,
     ActiveDelivery delivery,
+    String orderId,
   ) {
     final nextStep = delivery.nextStep;
     final isLastStep = nextStep == null;
@@ -492,14 +518,20 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           isLoading: isBusy,
           onPressed: () async {
             if (isLastStep) {
-              await ref.read(deliveryProvider.notifier).completeDelivery();
-              // Only show success dialog if delivery actually completed
-              if (context.mounted &&
-                  !ref.read(deliveryProvider).hasActiveDelivery) {
-                _showDeliveryComplete(context);
+              await ref.read(deliveryProvider.notifier).completeDelivery(orderId);
+              if (context.mounted) {
+                // Check if this specific delivery was completed
+                final stillActive = ref
+                    .read(deliveryProvider)
+                    .activeDeliveries
+                    .any((d) => d.request.order.id == orderId);
+                if (!stillActive) {
+                  final hasMore = ref.read(deliveryProvider).hasActiveDelivery;
+                  _showDeliveryComplete(context, hasMoreDeliveries: hasMore);
+                }
               }
             } else {
-              await ref.read(deliveryProvider.notifier).advanceStep();
+              await ref.read(deliveryProvider.notifier).advanceStep(orderId);
             }
           },
         ),
@@ -507,7 +539,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     );
   }
 
-  void _showDeliveryComplete(BuildContext context) {
+  void _showDeliveryComplete(BuildContext context, {bool hasMoreDeliveries = false}) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -531,9 +563,13 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              context.go('/delivery/dashboard');
+              if (hasMoreDeliveries) {
+                context.go('/delivery/active');
+              } else {
+                context.go('/delivery/dashboard');
+              }
             },
-            child: const Text('Back to Dashboard'),
+            child: Text(hasMoreDeliveries ? 'Other Deliveries' : 'Back to Dashboard'),
           ),
         ],
       ),

@@ -88,7 +88,7 @@ class WebSocketService {
   Timer? _reconnectTimer;
   Timer? _heartbeatTimer;
   int _reconnectAttempts = 0;
-  static const _maxReconnectDelay = Duration(seconds: 30);
+  static const _maxReconnectDelay = Duration(seconds: 5); // Delivery app must reconnect fast
 
   // State
   WsConnectionState _state = WsConnectionState.disconnected;
@@ -252,10 +252,12 @@ class WebSocketService {
     _reconnectTimer = Timer(delay, connect);
   }
 
-  /// Send periodic pings to keep the connection alive (server expects pongs)
+  /// Send periodic pings to keep the connection alive.
+  /// 10s interval: detects dropped connections 2.5x faster than 25s.
+  /// Riders miss orders when WS silently dies between heartbeats.
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       send({'type': 'ping'});
     });
   }

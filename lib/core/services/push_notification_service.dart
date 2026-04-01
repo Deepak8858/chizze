@@ -65,9 +65,19 @@ class PushNotificationService {
       FirebaseMessaging.onBackgroundMessage(
           firebaseMessagingBackgroundHandler);
 
-      // Foreground messages → show local notification
+      // Foreground messages → show local notification + handle delivery_request
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        if (kDebugMode) debugPrint('[Push] Foreground message: ${message.messageId}');
+        if (kDebugMode) debugPrint('[Push] Foreground message: ${message.messageId} type=${message.data["type"]}');
+        final msgType = message.data['type'] as String? ?? '';
+
+        // Delivery request FCM — app is foreground, play sound + show in-app UI
+        // The DeliveryNotifier's Appwrite Realtime subscription will handle
+        // showing the actual request card. Here we just play the alert sound.
+        if (msgType == 'delivery_request') {
+          _onDeliveryRequestPush(message.data);
+          return;
+        }
+
         final notification = message.notification;
         if (notification != null) {
           showLocalNotification(
@@ -81,7 +91,12 @@ class PushNotificationService {
       // Handle notification taps (app was in background)
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         if (kDebugMode) debugPrint('[Push] Notification opened: ${message.data}');
-        _handleNotificationRoute(message.data['route']);
+        final msgType = message.data['type'] as String? ?? '';
+        if (msgType == 'delivery_request') {
+          _onDeliveryRequestPush(message.data);
+        } else {
+          _handleNotificationRoute(message.data['route']);
+        }
       });
 
       // Check if app was launched from a notification
@@ -122,6 +137,19 @@ class PushNotificationService {
         _handleNotificationRoute(response.payload);
       },
     );
+  }
+
+  /// Handle an incoming delivery_request FCM push.
+  /// Called both in foreground (onMessage) and on notification tap (onMessageOpenedApp).
+  void _onDeliveryRequestPush(Map<String, dynamic> data) {
+    final orderId = data['order_id'] as String? ?? '';
+    if (kDebugMode) debugPrint('[Push] delivery_request FCM: orderId=$orderId');
+
+    // Navigate to delivery dashboard so the rider sees the request
+    final context = rootNavigatorKey.currentContext;
+    if (context != null) {
+      GoRouter.of(context).go('/delivery');
+    }
   }
 
   /// Navigate to the route encoded in a notification payload.

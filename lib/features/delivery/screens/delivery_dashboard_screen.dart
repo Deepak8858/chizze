@@ -49,12 +49,20 @@ class _DeliveryDashboardScreenState
                 _buildWeeklyGoal(metrics),
                 const SizedBox(height: AppSpacing.xxl),
 
-                // ─── Incoming Request / Active Delivery ───
-                if (dState.hasActiveDelivery) ...[
-                  _buildActiveDeliveryBanner(dState),
+                // ─── Active Deliveries (one banner per active order) ───
+                for (final delivery in dState.activeDeliveries) ...[
+                  _buildActiveDeliveryBanner(delivery),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+
+                // ─── Max capacity notice ───
+                if (!dState.canAcceptMoreOrders) ...[
+                  _buildMaxOrdersReached(),
                   const SizedBox(height: AppSpacing.xl),
                 ],
-                if (!dState.hasActiveDelivery) ...[
+
+                // ─── Incoming Requests (shown when < 5 active orders) ───
+                if (dState.canAcceptMoreOrders) ...[
                   if (dState.hasIncomingRequest) ...[
                     for (int i = 0;
                         i < dState.incomingRequests.length;
@@ -63,7 +71,7 @@ class _DeliveryDashboardScreenState
                       if (i < dState.incomingRequests.length - 1)
                         const SizedBox(height: AppSpacing.md),
                     ],
-                  ] else
+                  ] else if (!dState.hasActiveDelivery)
                     _buildWaitingForOrders(),
                 ],
 
@@ -454,7 +462,8 @@ class _DeliveryDashboardScreenState
                     ref
                         .read(deliveryProvider.notifier)
                         .acceptRequest(request.order.id);
-                    context.go('/delivery/active');
+                    // Navigate to this specific order's active delivery screen
+                    context.go('/delivery/active?order=${request.order.id}');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.success,
@@ -474,10 +483,12 @@ class _DeliveryDashboardScreenState
     ).animate(delay: 300.ms).fadeIn().slideY(begin: 0.05);
   }
 
-  Widget _buildActiveDeliveryBanner(DeliveryState dState) {
-    final step = dState.activeDelivery!.currentStep;
+  Widget _buildActiveDeliveryBanner(ActiveDelivery delivery) {
+    final step = delivery.currentStep;
+    final orderId = delivery.request.order.id;
+    final orderNumber = delivery.request.order.orderNumber;
     return GestureDetector(
-      onTap: () => context.go('/delivery/active'),
+      onTap: () => context.go('/delivery/active?order=$orderId'),
       child: GlassCard(
         child: Row(
           children: [
@@ -498,16 +509,20 @@ class _DeliveryDashboardScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Active Delivery',
+                    orderNumber.isNotEmpty
+                        ? 'Order $orderNumber'
+                        : 'Active Delivery',
                     style: AppTypography.body1.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   Text(
-                    step.label,
+                    '${step.label} • ${delivery.request.restaurantName}',
                     style: AppTypography.caption.copyWith(
                       color: AppColors.primary,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -524,6 +539,32 @@ class _DeliveryDashboardScreenState
       delay: 1000.ms,
       duration: 1500.ms,
       color: AppColors.primary.withValues(alpha: 0.1),
+    );
+  }
+
+  Widget _buildMaxOrdersReached() {
+    return GlassCard(
+      child: Row(
+        children: [
+          const Text('🚫', style: TextStyle(fontSize: 24)),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Maximum Orders Reached',
+                  style: AppTypography.body1.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  'Complete a delivery to accept new orders (5/5)',
+                  style: AppTypography.caption,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/chizze/backend/internal/websocket"
 	"github.com/chizze/backend/internal/workers"
 	"github.com/chizze/backend/pkg/appwrite"
+	"github.com/chizze/backend/pkg/fcm"
 	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/gin-gonic/gin"
 
@@ -476,9 +477,17 @@ func main() {
 	// ─── Start Background Workers ───
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 
+	// FCM client for push notifications when WS is down (riders backgrounded)
+	fcmClient := fcm.NewClient(cfg.FCMServerKey)
+	if fcmClient != nil {
+		log.Printf("[startup] FCM push notifications enabled")
+	} else {
+		log.Printf("[startup] FCM disabled (set FCM_SERVER_KEY to enable push to backgrounded riders)")
+	}
+
 	// 8s interval: with 10s pending_rider TTL, same rider gets the order
 	// re-sent within 10-18s if they don't respond (Bug Fix: was 15s + 20s = 35s)
-	deliveryMatcher := workers.NewDeliveryMatcher(awService, geoService, redisClient, hub, 8*time.Second)
+	deliveryMatcher := workers.NewDeliveryMatcher(awService, geoService, redisClient, hub, 8*time.Second, fcmClient)
 
 	// ── Startup: Clear stale Redis delivery state ──
 	// The busy_riders and pending_riders SETS have no TTL. If the server crashed

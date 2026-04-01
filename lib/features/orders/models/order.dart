@@ -273,7 +273,9 @@ class Order {
       specialInstructions: specialInstructions,
       deliveryInstructions: deliveryInstructions,
       estimatedDeliveryMin: estimatedDeliveryMin,
-      placedAt: placedAt ?? this.placedAt, // Fix: was `placedAt ?? placedAt` (self-reference bug)
+      placedAt:
+          placedAt ??
+          placedAt, // Fix: was `placedAt ?? placedAt` (self-reference bug)
       confirmedAt: confirmedAt ?? this.confirmedAt,
       preparedAt: preparedAt ?? this.preparedAt,
       pickedUpAt: pickedUpAt ?? this.pickedUpAt,
@@ -283,8 +285,6 @@ class Order {
       cancelledBy: cancelledBy,
     );
   }
-
-
 }
 
 /// Individual item in an order

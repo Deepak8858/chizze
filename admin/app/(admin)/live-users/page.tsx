@@ -12,14 +12,13 @@ export default function LiveUsersPage() {
   const { riders } = useRiderLocations();
   const [history, setHistory] = useState<SparkPoint[]>([]);
 
-  // Keep last 24 data points for sparklines
   useEffect(() => {
     setHistory((prev) => {
       const point: SparkPoint = {
         time: new Date().toISOString(),
-        customers: stats.connected_by_role.customer,
-        partners: stats.connected_by_role.restaurant_owner,
-        riders: stats.connected_by_role.delivery_partner,
+        customers: stats.connected_by_role?.customer || 0,
+        partners: stats.connected_by_role?.restaurant_owner || 0,
+        riders: stats.connected_by_role?.delivery_partner || 0,
       };
       const next = [...prev, point];
       return next.slice(-24);
@@ -27,9 +26,9 @@ export default function LiveUsersPage() {
   }, [stats]);
 
   const totalSessions =
-    stats.connected_by_role.customer +
-    stats.connected_by_role.restaurant_owner +
-    stats.connected_by_role.delivery_partner;
+    (stats.connected_by_role?.customer || 0) +
+    (stats.connected_by_role?.restaurant_owner || 0) +
+    (stats.connected_by_role?.delivery_partner || 0);
 
   return (
     <div className="space-y-6">
@@ -48,9 +47,9 @@ export default function LiveUsersPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Total Sessions", value: totalSessions, icon: Users, color: "text-white" },
-          { label: "Customers", value: stats.connected_by_role.customer, icon: ShoppingCart, color: "text-info" },
-          { label: "Restaurant Partners", value: stats.connected_by_role.restaurant_owner, icon: UtensilsCrossed, color: "text-brand-400" },
-          { label: "Delivery Partners", value: stats.connected_by_role.delivery_partner, icon: Bike, color: "text-success" },
+          { label: "Customers", value: stats.connected_by_role?.customer || 0, icon: ShoppingCart, color: "text-info" },
+          { label: "Restaurant Partners", value: stats.connected_by_role?.restaurant_owner || 0, icon: UtensilsCrossed, color: "text-brand-400" },
+          { label: "Delivery Partners", value: stats.connected_by_role?.delivery_partner || 0, icon: Bike, color: "text-success" },
         ].map((item) => (
           <div key={item.label} className="card flex flex-col gap-2">
             <div className="flex items-center justify-between">

@@ -98,7 +98,10 @@ func (h *DeliveryHandler) ToggleOnline(c *gin.Context) {
 			h.redis.SRem(geoCtx, "busy_riders", userID)
 			h.redis.SRem(geoCtx, "pending_riders", userID)
 			h.redis.Del(geoCtx, "pending_rider:"+userID)
-			log.Printf("[delivery] ToggleOnline: cleared stale busy/pending state for rider %s", userID)
+			// Also clear multi-order count state from previous sessions
+			h.redis.Del(geoCtx, "rider_order_count:"+userID)
+			h.redis.Del(geoCtx, "rider_active_orders:"+userID)
+			log.Printf("[delivery] ToggleOnline: cleared stale busy/pending/order-count state for rider %s", userID)
 
 			// Use location from request body if provided, otherwise fall back to stored
 			lat := req.Latitude
@@ -368,38 +371,46 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 		}
 	}
 
-	// Assign partner to order with name/phone + accepted_at timestamp
-	// accepted_at is needed for trip duration calculation in earnings
+	// Assign partner to order with name/phone
+	// NOTE: accepted_at is added once the attribute is created in the Appwrite schema
 	updateData := map[string]interface{}{
 		"delivery_partner_id":    userID,
 		"delivery_partner_name":  partnerName,
 		"delivery_partner_phone": partnerPhone,
-		"accepted_at":            time.Now().Format(time.RFC3339),
 	}
 	_, err = h.appwrite.UpdateOrder(orderID, updateData)
 	if err != nil {
+		log.Printf("[delivery] AcceptOrder: UpdateOrder failed for order %s rider %s: %v", orderID, userID, err)
 		utils.InternalError(c, "Failed to accept order")
 		return
 	}
 
-	// Mark rider as busy so matcher won't assign them another order
+	// Mark rider as actively on delivery in Appwrite (uses valid schema field)
 	partnerDocID, _ := partnerResult.Documents[0]["$id"].(string)
 	_, _ = h.appwrite.UpdateDeliveryPartner(partnerDocID, map[string]interface{}{
-		"current_order_id": orderID,
-		"status":           "on_delivery",
+		"is_on_delivery": true,
 	})
 
-	// Clear the pending_delivery key so matcher doesn't re-broadcast this order
+	// Update Redis state for multi-order tracking (up to 5 simultaneous orders)
 	if h.redis != nil {
 		ctx := context.Background()
 		h.redis.Del(ctx, "pending_delivery:"+orderID)
-		// Clean up rejected riders set since order is now accepted
 		h.redis.Del(ctx, "rejected_riders:"+orderID)
-		// Track rider as busy for fast matcher filtering
-		h.redis.SAdd(ctx, "busy_riders", userID)
-		// Remove from pending set since rider has now accepted
+		// Remove from pending state so rider can receive new delivery requests
 		h.redis.SRem(ctx, "pending_riders", userID)
 		h.redis.Del(ctx, "pending_rider:"+userID)
+		// Increment active order count and track this specific order
+		count, _ := h.redis.Incr(ctx, "rider_order_count:"+userID)
+		h.redis.Expire(ctx, "rider_order_count:"+userID, 24*time.Hour)
+		h.redis.SAdd(ctx, "rider_active_orders:"+userID, orderID)
+		h.redis.Expire(ctx, "rider_active_orders:"+userID, 24*time.Hour)
+		// Only block from new orders when at max capacity (5 simultaneous orders)
+		if count >= 5 {
+			h.redis.SAdd(ctx, "busy_riders", userID)
+			log.Printf("[delivery] AcceptOrder: rider %s at max capacity (%d orders) — added to busy_riders", userID, count)
+		} else {
+			log.Printf("[delivery] AcceptOrder: rider %s accepted order %s (active orders: %d/5)", userID, orderID, count)
+		}
 	}
 
 	// Notify customer that a delivery partner accepted their order
@@ -713,7 +724,8 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 	todayEarnings := 0.0
 	todayDeliveries := 0
 	todayDistanceKm := 0.0
-	activeDeliveryOrder := map[string]interface{}(nil)
+	// Multi-order: collect ALL active orders (ready / pickedUp / outForDelivery)
+	var activeDeliveryOrders []map[string]interface{}
 
 	for _, order := range orderResult.Documents {
 		status, _ := order["status"].(string)
@@ -723,14 +735,9 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 			// Delivery fee + tip = partner earnings
 			todayEarnings += getFloat(order, "delivery_fee") + getFloat(order, "tip")
 			todayDistanceKm += getFloat(order, "distance_km")
-		case models.OrderStatusPickedUp, models.OrderStatusOutForDelivery:
-			// Currently delivering this order
-			activeDeliveryOrder = order
-		case models.OrderStatusReady:
-			// Order accepted but not yet picked up — still the active delivery
-			if activeDeliveryOrder == nil {
-				activeDeliveryOrder = order
-			}
+		case models.OrderStatusPickedUp, models.OrderStatusOutForDelivery, models.OrderStatusReady:
+			// Active delivery — may have up to 5 simultaneous
+			activeDeliveryOrders = append(activeDeliveryOrders, order)
 		}
 	}
 
@@ -808,70 +815,78 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 		"current_longitude":       curLng,
 		"hours_online_today":      hoursOnlineToday,
 		"tips_today":              tipsToday,
-		"is_on_delivery":          activeDeliveryOrder != nil,
+		"is_on_delivery":          len(activeDeliveryOrders) > 0,
+		"active_order_count":      len(activeDeliveryOrders),
 	}
 
-	if activeDeliveryOrder != nil {
-		// Map delivery_* fields to customer_* so frontend gets correct coordinates.
-		// Order stores delivery_latitude/longitude/address but frontend expects customer_*.
-		if _, ok := activeDeliveryOrder["customer_latitude"]; !ok {
-			activeDeliveryOrder["customer_latitude"] = activeDeliveryOrder["delivery_latitude"]
-		}
-		if _, ok := activeDeliveryOrder["customer_longitude"]; !ok {
-			activeDeliveryOrder["customer_longitude"] = activeDeliveryOrder["delivery_longitude"]
-		}
-		if _, ok := activeDeliveryOrder["customer_address"]; !ok {
-			activeDeliveryOrder["customer_address"] = activeDeliveryOrder["delivery_address"]
-		}
+	if len(activeDeliveryOrders) > 0 {
+		// Enrich each active order and collect into the response
+		for _, ao := range activeDeliveryOrders {
+			// Map delivery_* fields to customer_* so frontend gets correct coordinates.
+			// Orders store delivery_latitude/longitude/address; frontend expects customer_*.
+			if _, ok := ao["customer_latitude"]; !ok {
+				ao["customer_latitude"] = ao["delivery_latitude"]
+			}
+			if _, ok := ao["customer_longitude"]; !ok {
+				ao["customer_longitude"] = ao["delivery_longitude"]
+			}
+			if _, ok := ao["customer_address"]; !ok {
+				ao["customer_address"] = ao["delivery_address"]
+			}
 
-		// Enrich active order with customer name/phone and delivery partner details
-		if custID, _ := activeDeliveryOrder["customer_id"].(string); custID != "" {
-			if _, exists := activeDeliveryOrder["customer_name"]; !exists || activeDeliveryOrder["customer_name"] == nil {
-				if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
-					if name, _ := user["name"].(string); name != "" {
-						activeDeliveryOrder["customer_name"] = name
-					}
-					if phone, _ := user["phone"].(string); phone != "" {
-						activeDeliveryOrder["customer_phone"] = phone
+			// Enrich with customer name/phone
+			if custID, _ := ao["customer_id"].(string); custID != "" {
+				if _, exists := ao["customer_name"]; !exists || ao["customer_name"] == nil {
+					if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
+						if name, _ := user["name"].(string); name != "" {
+							ao["customer_name"] = name
+						}
+						if phone, _ := user["phone"].(string); phone != "" {
+							ao["customer_phone"] = phone
+						}
 					}
 				}
 			}
-		}
-		// Enrich with restaurant phone (fall back to owner's phone)
-		if restID, _ := activeDeliveryOrder["restaurant_id"].(string); restID != "" {
-			if _, exists := activeDeliveryOrder["restaurant_phone"]; !exists || activeDeliveryOrder["restaurant_phone"] == nil {
-				if rest, restErr := h.appwrite.GetRestaurant(restID); restErr == nil && rest != nil {
-					if phone, _ := rest["phone"].(string); phone != "" {
-						activeDeliveryOrder["restaurant_phone"] = phone
-					} else if ownerID, _ := rest["owner_id"].(string); ownerID != "" {
-						if owner, oErr := h.appwrite.GetUser(ownerID); oErr == nil && owner != nil {
-							if oPhone, _ := owner["phone"].(string); oPhone != "" {
-								activeDeliveryOrder["restaurant_phone"] = oPhone
+			// Enrich with restaurant phone (fall back to owner's phone)
+			if restID, _ := ao["restaurant_id"].(string); restID != "" {
+				if _, exists := ao["restaurant_phone"]; !exists || ao["restaurant_phone"] == nil {
+					if rest, restErr := h.appwrite.GetRestaurant(restID); restErr == nil && rest != nil {
+						if phone, _ := rest["phone"].(string); phone != "" {
+							ao["restaurant_phone"] = phone
+						} else if ownerID, _ := rest["owner_id"].(string); ownerID != "" {
+							if owner, oErr := h.appwrite.GetUser(ownerID); oErr == nil && owner != nil {
+								if oPhone, _ := owner["phone"].(string); oPhone != "" {
+									ao["restaurant_phone"] = oPhone
+								}
+							}
+						}
+						if addr, _ := rest["address"].(string); addr != "" {
+							if _, addrExists := ao["restaurant_address"]; !addrExists || ao["restaurant_address"] == nil {
+								ao["restaurant_address"] = addr
 							}
 						}
 					}
-					if addr, _ := rest["address"].(string); addr != "" {
-						if _, addrExists := activeDeliveryOrder["restaurant_address"]; !addrExists || activeDeliveryOrder["restaurant_address"] == nil {
-							activeDeliveryOrder["restaurant_address"] = addr
-						}
+				}
+			}
+			// Enrich with delivery partner details
+			if dpID, _ := ao["delivery_partner_id"].(string); dpID != "" {
+				existingDPName, _ := ao["delivery_partner_name"].(string)
+				existingDPPhone, _ := ao["delivery_partner_phone"].(string)
+				if existingDPName == "" || existingDPPhone == "" {
+					dpName, dpPhone := h.resolveDeliveryPartnerDetails(dpID)
+					if dpName != "" {
+						ao["delivery_partner_name"] = dpName
+					}
+					if dpPhone != "" {
+						ao["delivery_partner_phone"] = dpPhone
 					}
 				}
 			}
 		}
-		if dpID, _ := activeDeliveryOrder["delivery_partner_id"].(string); dpID != "" {
-			existingDPName, _ := activeDeliveryOrder["delivery_partner_name"].(string)
-			existingDPPhone, _ := activeDeliveryOrder["delivery_partner_phone"].(string)
-			if existingDPName == "" || existingDPPhone == "" {
-				dpName, dpPhone := h.resolveDeliveryPartnerDetails(dpID)
-				if dpName != "" {
-					activeDeliveryOrder["delivery_partner_name"] = dpName
-				}
-				if dpPhone != "" {
-					activeDeliveryOrder["delivery_partner_phone"] = dpPhone
-				}
-			}
-		}
-		resp["active_order"] = activeDeliveryOrder
+		// Return all active orders as an array (multi-order support)
+		resp["active_orders"] = activeDeliveryOrders
+		// Backward-compat: single active_order field for older clients
+		resp["active_order"] = activeDeliveryOrders[0]
 	}
 
 	utils.Success(c, resp)
@@ -1194,15 +1209,8 @@ func (h *DeliveryHandler) UpdateProfile(c *gin.Context) {
 	if req.BankAccountID != "" {
 		updateData["bank_account_id"] = req.BankAccountID
 	}
-	if req.BankAccountHolder != "" {
-		updateData["bank_account_holder"] = req.BankAccountHolder
-	}
-	if req.IFSC != "" {
-		updateData["ifsc"] = req.IFSC
-	}
-	if req.UpiID != "" {
-		updateData["upi_id"] = req.UpiID
-	}
+	// Note: bank_account_holder, ifsc, upi_id are not in delivery_partners schema.
+	// They are stored in a separate bank_accounts collection via bank_account_id.
 
 	if len(updateData) == 0 {
 		utils.BadRequest(c, "No fields to update")
@@ -1412,20 +1420,30 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 			utils.InternalError(c, "Failed to reject order")
 			return
 		}
-		// Reset rider's status since they were previously marked as on_delivery
+		// Clear on_delivery flag in Appwrite when rejecting the order
 		partnerResult, _ := h.appwrite.GetDeliveryPartner(userID)
 		if partnerResult != nil && partnerResult.Total > 0 {
 			dpDocID, _ := partnerResult.Documents[0]["$id"].(string)
 			_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, map[string]interface{}{
-				"current_order_id": "",
-				"status":           "available",
+				"is_on_delivery": false,
 			})
 		}
 		if h.redis != nil {
 			rCtx := context.Background()
-			h.redis.SRem(rCtx, "busy_riders", userID)
 			h.redis.SRem(rCtx, "pending_riders", userID)
 			h.redis.Del(rCtx, "pending_rider:"+userID)
+			// Decrement active order count since this order is being unassigned
+			count, _ := h.redis.Decr(rCtx, "rider_order_count:"+userID)
+			h.redis.SRem(rCtx, "rider_active_orders:"+userID, orderID)
+			if count < 0 {
+				h.redis.Set(rCtx, "rider_order_count:"+userID, 0, 24*time.Hour)
+				count = 0
+			}
+			// Remove from busy only if now below max capacity
+			if count < 5 {
+				h.redis.SRem(rCtx, "busy_riders", userID)
+			}
+			log.Printf("[delivery] RejectOrder: rider %s unassigned from order %s (active orders now: %d)", userID, orderID, count)
 		}
 	}
 

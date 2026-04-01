@@ -31,6 +31,9 @@ type Config struct {
 	// JWT
 	JWTSecret string
 
+	// FCM Push Notifications
+	FCMServerKey string
+
 	// CORS
 	AllowedOrigins string
 
@@ -66,6 +69,7 @@ func Load() *Config {
 		RazorpayKeyID:        getEnv("RAZORPAY_KEY_ID", ""),
 		RazorpayKeySecret:    getEnv("RAZORPAY_KEY_SECRET", ""),
 		RazorpayWebhookSecret: getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
+		FCMServerKey:       getEnv("FCM_SERVER_KEY", ""),
 		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
 		JWTSecret:          getEnv("JWT_SECRET", "chizze-dev-secret"),
 		AllowedOrigins:     getEnv("ALLOWED_ORIGINS", "*"),

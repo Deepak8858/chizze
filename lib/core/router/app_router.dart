@@ -400,8 +400,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/delivery/active',
-            pageBuilder: (context, state) =>
-                const NoTransitionPage(child: ActiveDeliveryScreen()),
+            pageBuilder: (context, state) {
+              final orderId = state.uri.queryParameters['order'];
+              return NoTransitionPage(
+                child: ActiveDeliveryScreen(orderId: orderId),
+              );
+            },
           ),
           GoRoute(
             path: '/delivery/earnings',

@@ -1,16 +1,17 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { flagsApi } from "@/lib/api";
-import { formatDateTime } from "@/lib/utils";
 import { toast } from "sonner";
+
 import type { FeatureFlag } from "@/types";
-import { Flag, ToggleLeft, ToggleRight } from "lucide-react";
+import { ToggleLeft, ToggleRight } from "lucide-react";
 
 export default function FlagsPage() {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["feature-flags"],
     queryFn: () => flagsApi.list() as Promise<{ data: FeatureFlag[] }>,
+    retry: false,
   });
 
   const toggleMutation = useMutation({
@@ -28,13 +29,27 @@ export default function FlagsPage() {
 
       {isLoading ? (
         <div className="space-y-3">{[...Array(6)].map((_, i) => <div key={i} className="skeleton h-16 rounded-xl" />)}</div>
+      ) : isError ? (
+        <div className="flex flex-col items-center justify-center h-48 gap-3 card">
+          <p className="text-text-muted text-sm">Failed to load feature flags.</p>
+          <button
+            onClick={() => qc.invalidateQueries({ queryKey: ["feature-flags"] })}
+            className="px-4 py-2 rounded-lg bg-brand-500/10 text-brand-400 text-sm hover:bg-brand-500/20 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      ) : !data?.data?.length ? (
+        <div className="flex flex-col items-center justify-center h-48 gap-3 card">
+          <p className="text-text-muted text-sm">No feature flags configured.</p>
+        </div>
       ) : (
         <div className="space-y-2">
           {data?.data?.map(flag => {
             const isEnabled = flag.type === "boolean" ? flag.value === true : !!flag.value;
             return (
               <div key={flag.key} className="card px-5 py-4 flex items-center gap-4">
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isEnabled ? "bg-status-success" : "bg-status-error"}`} />
+                <div className={`w-2 h-2 rounded-full shrink-0 ${isEnabled ? "bg-status-success" : "bg-status-error"}`} />
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-medium text-sm">{flag.key}</p>
                   <p className="text-text-muted text-xs truncate">{flag.description}</p>

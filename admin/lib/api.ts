@@ -35,11 +35,10 @@ api.interceptors.response.use(
 
 // ─── Response unwrapper ───────────────────────────────────────────────────────────────────────────────
 // Backend wraps all responses in { success: bool, data: T, meta?: ... }
+// We return the full envelope so pages can access .data and .meta correctly.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function unwrap<T>(body: any): T {
-  if (body && typeof body === "object" && "success" in body && "data" in body) {
-    return body.data as T;
-  }
+  // Return full envelope as-is so callers can access body.data / body.meta
   return body as T;
 }
 

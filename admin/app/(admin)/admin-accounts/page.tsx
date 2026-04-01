@@ -19,9 +19,10 @@ export default function AdminAccountsPage() {
   const qc = useQueryClient();
   const me = getUser();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<{ data: Admin[] }>({
     queryKey: ["admin-accounts"],
     queryFn: () => adminsApi.list() as Promise<{ data: Admin[] }>,
+    retry: false,
   });
 
   const createMutation = useMutation({

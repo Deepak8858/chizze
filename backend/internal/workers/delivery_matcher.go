@@ -10,6 +10,7 @@ import (
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/internal/websocket"
 	"github.com/chizze/backend/pkg/appwrite"
+	"github.com/chizze/backend/pkg/fcm"
 	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/redis/go-redis/v9"
 )
@@ -22,6 +23,7 @@ type DeliveryMatcher struct {
 	redisClient *redispkg.Client
 	hub         *websocket.Hub
 	broadcaster *websocket.EventBroadcaster
+	fcmClient   *fcm.Client // nil if FCM_SERVER_KEY not set
 	interval    time.Duration
 }
 
@@ -31,13 +33,19 @@ func NewDeliveryMatcher(
 	redisClient *redispkg.Client,
 	hub *websocket.Hub,
 	interval time.Duration,
+	fcmClient ...*fcm.Client,
 ) *DeliveryMatcher {
+	var fc *fcm.Client
+	if len(fcmClient) > 0 {
+		fc = fcmClient[0]
+	}
 	return &DeliveryMatcher{
 		awService:   awService,
 		geoService:  geoService,
 		redisClient: redisClient,
 		hub:         hub,
 		broadcaster: websocket.NewEventBroadcaster(hub),
+		fcmClient:   fc,
 		interval:    interval,
 	}
 }
@@ -419,6 +427,29 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			"is_read":    false,
 			"created_at": time.Now().UTC().Format(time.RFC3339),
 		})
+
+		// If the WS send failed (rider app backgrounded), send FCM push to wake the app.
+		// FCM ensures the rider is notified even when the phone screen is locked.
+		if !w.hub.IsConnected(riderID) && w.fcmClient != nil {
+			go func(rid, oid, rName string, earning float64) {
+				// Get rider's FCM token from users collection
+				user, err := w.awService.GetUser(rid)
+				if err == nil && user != nil {
+					if token, _ := user["fcm_token"].(string); token != "" {
+						fcmErr := w.fcmClient.SendDeliveryRequest(context.Background(), token, fcm.DeliveryRequestPayload{
+							OrderID:          oid,
+							RestaurantName:   rName,
+							EstimatedEarning: earning,
+						})
+						if fcmErr != nil {
+							log.Printf("[worker] FCM send failed for rider %s: %v", rid, fcmErr)
+						} else {
+							log.Printf("[worker] FCM push sent to rider %s for order %s", rid, oid)
+						}
+					}
+				}
+			}(riderID, orderID, restName, estimatedEarning)
+		}
 
 		// Note: do NOT notify customer here — the rider has not accepted yet.
 		// Customer will be notified when the rider actually accepts (in AcceptOrder handler).

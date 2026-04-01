@@ -18,7 +18,17 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Set Mapbox access token before any MapWidget is created (fixes FLUTTER-B)
-  MapboxOptions.setAccessToken(MapConfig.accessToken);
+  // Guard against empty token in release builds where dart-define was omitted —
+  // without this guard, an empty token throws PlatformException and the app
+  // silently crashes on native splash ("stuck on logo").
+  if (MapConfig.accessToken.isNotEmpty) {
+    try {
+      MapboxOptions.setAccessToken(MapConfig.accessToken);
+    } catch (e) {
+      // Non-fatal: maps will be blank but app continues
+      debugPrint('[Mapbox] Failed to set access token: $e');
+    }
+  }
 
   // Initialize Firebase (non-fatal if config not present)
   try {

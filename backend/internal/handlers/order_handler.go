@@ -747,21 +747,33 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
-	// Clear Redis delivery state when order is cancelled (by restaurant or delivery partner).
+	// Clear Redis delivery state when order is cancelled.
 	// Without this, the assigned rider stays in busy_riders forever.
 	if req.Status == models.OrderStatusCancelled && h.redis != nil {
 		if dpUserID, _ := order["delivery_partner_id"].(string); dpUserID != "" {
 			rCtx := context.Background()
-			h.redis.SRem(rCtx, "busy_riders", dpUserID)
 			h.redis.Del(rCtx, "pending_rider:"+dpUserID)
-			// Reset partner status so they can receive new orders
-			dpResult, dpErr := h.appwrite.GetDeliveryPartner(dpUserID)
-			if dpErr == nil && dpResult != nil && dpResult.Total > 0 {
-				dpDocID, _ := dpResult.Documents[0]["$id"].(string)
-				_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, map[string]interface{}{
-					"current_order_id": "",
-					"status":           "available",
-				})
+			// Decrement active order count (multi-order support)
+			count, _ := h.redis.Decr(rCtx, "rider_order_count:"+dpUserID)
+			h.redis.SRem(rCtx, "rider_active_orders:"+dpUserID, orderID)
+			if count < 0 {
+				h.redis.Set(rCtx, "rider_order_count:"+dpUserID, 0, 24*time.Hour)
+				count = 0
+			}
+			// Remove from busy only when below max capacity
+			if count < 5 {
+				h.redis.SRem(rCtx, "busy_riders", dpUserID)
+			}
+			// Only clear is_on_delivery if this is the rider's last active order
+			// (check Redis count which was decremented above)
+			if count == 0 {
+				dpResult, dpErr := h.appwrite.GetDeliveryPartner(dpUserID)
+				if dpErr == nil && dpResult != nil && dpResult.Total > 0 {
+					dpDocID, _ := dpResult.Documents[0]["$id"].(string)
+					_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, map[string]interface{}{
+						"is_on_delivery": false,
+					})
+				}
 			}
 		}
 		rCtx := context.Background()
@@ -789,17 +801,40 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 				deliveryFee := getFloat(order, "delivery_fee")
 				tip := getFloat(order, "tip")
 				orderEarning := deliveryFee + tip
-				_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, map[string]interface{}{
+				updateFields := map[string]interface{}{
 					"total_deliveries": int(currentDeliveries) + 1,
 					"total_earnings":   currentEarnings + orderEarning,
-					"current_order_id": "",
-					"status":           "available",
-				})
+				}
+				// Only clear is_on_delivery when this is the last active order
+				// (determined by Redis count checked after Decr below)
+				_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, updateFields)
 			}
-			// Remove rider from busy set so matcher can assign new orders
+			// Update Redis for multi-order support
+			var deliveredOrderCount int64
 			if h.redis != nil {
 				rCtx := context.Background()
-				h.redis.SRem(rCtx, "busy_riders", dpUserID)
+				// Decrement active order count
+				count, _ := h.redis.Decr(rCtx, "rider_order_count:"+dpUserID)
+				h.redis.SRem(rCtx, "rider_active_orders:"+dpUserID, orderID)
+				if count < 0 {
+					h.redis.Set(rCtx, "rider_order_count:"+dpUserID, 0, 24*time.Hour)
+					count = 0
+				}
+				deliveredOrderCount = count
+				// Remove from busy set only when below max capacity
+				if count < 5 {
+					h.redis.SRem(rCtx, "busy_riders", dpUserID)
+				}
+			}
+			// Clear is_on_delivery in Appwrite when all orders are done
+			if deliveredOrderCount == 0 {
+				dpResult2, dpErr2 := h.appwrite.GetDeliveryPartner(dpUserID)
+				if dpErr2 == nil && dpResult2 != nil && dpResult2.Total > 0 {
+					dpDocID2, _ := dpResult2.Documents[0]["$id"].(string)
+					_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID2, map[string]interface{}{
+						"is_on_delivery": false,
+					})
+				}
 			}
 		}
 		// Immediately trigger matcher so the now-available rider gets the
