@@ -21,8 +21,8 @@ type Config struct {
 	AppwriteDatabaseID string
 
 	// Razorpay
-	RazorpayKeyID        string
-	RazorpayKeySecret    string
+	RazorpayKeyID         string
+	RazorpayKeySecret     string
 	RazorpayWebhookSecret string
 
 	// Redis
@@ -43,6 +43,10 @@ type Config struct {
 	// Performance
 	RequestTimeout time.Duration
 	MaxConnections int
+
+	// Android App Links
+	AndroidAppPackage             string
+	AndroidAssetLinksFingerprints []string
 }
 
 // IsProduction returns true if running in release mode
@@ -61,21 +65,26 @@ func Load() *Config {
 	maxConns, _ := strconv.Atoi(getEnv("MAX_CONNECTIONS", "200"))
 
 	cfg := &Config{
-		Port:               getEnv("PORT", "8080"),
-		AppwriteEndpoint:   getEnv("APPWRITE_ENDPOINT", "https://sgp.cloud.appwrite.io/v1"),
-		AppwriteProjectID:    getEnv("APPWRITE_PROJECT_ID", ""),
-		AppwriteAPIKey:       getEnv("APPWRITE_API_KEY", ""),
-		AppwriteDatabaseID:   getEnv("APPWRITE_DATABASE_ID", "chizze_db"),
-		RazorpayKeyID:        getEnv("RAZORPAY_KEY_ID", ""),
-		RazorpayKeySecret:    getEnv("RAZORPAY_KEY_SECRET", ""),
+		Port:                  getEnv("PORT", "8080"),
+		AppwriteEndpoint:      getEnv("APPWRITE_ENDPOINT", "https://sgp.cloud.appwrite.io/v1"),
+		AppwriteProjectID:     getEnv("APPWRITE_PROJECT_ID", ""),
+		AppwriteAPIKey:        getEnv("APPWRITE_API_KEY", ""),
+		AppwriteDatabaseID:    getEnv("APPWRITE_DATABASE_ID", "chizze_db"),
+		RazorpayKeyID:         getEnv("RAZORPAY_KEY_ID", ""),
+		RazorpayKeySecret:     getEnv("RAZORPAY_KEY_SECRET", ""),
 		RazorpayWebhookSecret: getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
-		FCMServerKey:       getEnv("FCM_SERVER_KEY", ""),
-		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
-		JWTSecret:          getEnv("JWT_SECRET", "chizze-dev-secret"),
-		AllowedOrigins:     getEnv("ALLOWED_ORIGINS", "*"),
-		GinMode:            getEnv("GIN_MODE", "debug"),
-		RequestTimeout:     time.Duration(timeout) * time.Second,
-		MaxConnections:     maxConns,
+		FCMServerKey:          getEnv("FCM_SERVER_KEY", ""),
+		RedisURL:              getEnv("REDIS_URL", "redis://localhost:6379"),
+		JWTSecret:             getEnv("JWT_SECRET", "chizze-dev-secret"),
+		AllowedOrigins:        getEnv("ALLOWED_ORIGINS", "*"),
+		GinMode:               getEnv("GIN_MODE", "debug"),
+		RequestTimeout:        time.Duration(timeout) * time.Second,
+		MaxConnections:        maxConns,
+		AndroidAppPackage:     getEnv("ANDROID_APP_PACKAGE", "com.chizze.app"),
+		AndroidAssetLinksFingerprints: parseCSV(getEnv(
+			"ANDROID_ASSETLINKS_SHA256_FINGERPRINTS",
+			"EE:38:5E:00:9F:8B:C1:99:EB:BC:4C:7C:4E:5A:D4:BA:5D:C2:DC:17:E9:64:5A:E8:C7:02:6A:DA:81:CF:F3:EB",
+		)),
 	}
 
 	// Validate required keys
@@ -95,6 +104,13 @@ func Load() *Config {
 	}
 
 	// Validate Razorpay credentials — empty secret causes 401 on every payment attempt
+	if cfg.RazorpayKeyID == "" {
+		if cfg.IsProduction() {
+			log.Fatal("FATAL: RAZORPAY_KEY_ID not set — client checkout cannot start")
+		}
+		log.Println("WARNING: RAZORPAY_KEY_ID not set — Razorpay checkout will fail")
+	}
+
 	if cfg.RazorpayKeySecret == "" {
 		if cfg.IsProduction() {
 			log.Fatal("FATAL: RAZORPAY_KEY_SECRET not set — all payments will fail with 401")
@@ -109,6 +125,10 @@ func Load() *Config {
 		log.Println("WARNING: RAZORPAY_WEBHOOK_SECRET not set — webhook signatures cannot be verified in production")
 	}
 
+	if len(cfg.AndroidAssetLinksFingerprints) == 0 {
+		log.Println("WARNING: ANDROID_ASSETLINKS_SHA256_FINGERPRINTS is empty — App Links verification will fail")
+	}
+
 	return cfg
 }
 
@@ -117,4 +137,24 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func parseCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+
+	return result
 }

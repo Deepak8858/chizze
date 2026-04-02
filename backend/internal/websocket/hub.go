@@ -13,6 +13,12 @@ type Hub struct {
 	// Index: userID → set of clients for O(1) targeted sends.
 	userClients map[string]map[*Client]bool
 
+	// userRoles stores the role for each connected userID (unique user, not per socket).
+	userRoles map[string]string
+
+	// roleCounts tracks unique connected users by role.
+	roleCounts map[string]int
+
 	// Inbound messages from the clients.
 	broadcast chan []byte
 
@@ -35,8 +41,34 @@ func NewHub() *Hub {
 		unregister:  make(chan *Client),
 		clients:     make(map[*Client]bool),
 		userClients: make(map[string]map[*Client]bool),
+		userRoles:   make(map[string]string),
+		roleCounts:  make(map[string]int),
 		stop:        make(chan struct{}),
 	}
+}
+
+// removeClientLocked removes a client and cleans role presence when the last
+// socket for a user disconnects. Caller must hold h.mu.
+func (h *Hub) removeClientLocked(client *Client) {
+	if _, ok := h.clients[client]; !ok {
+		return
+	}
+
+	delete(h.clients, client)
+	if uc := h.userClients[client.UserID]; uc != nil {
+		delete(uc, client)
+		if len(uc) == 0 {
+			delete(h.userClients, client.UserID)
+			role := h.userRoles[client.UserID]
+			if role != "" && h.roleCounts[role] > 0 {
+				h.roleCounts[role]--
+			}
+			delete(h.userRoles, client.UserID)
+		}
+	}
+
+	close(client.send)
+	log.Printf("Client unregistered: %s", client.UserID)
 }
 
 func (h *Hub) Run() {
@@ -49,35 +81,30 @@ func (h *Hub) Run() {
 			h.clients[client] = true
 			if h.userClients[client.UserID] == nil {
 				h.userClients[client.UserID] = make(map[*Client]bool)
+				role := client.Role
+				if role == "" {
+					role = "unknown"
+				}
+				h.userRoles[client.UserID] = role
+				h.roleCounts[role]++
 			}
 			h.userClients[client.UserID][client] = true
 			h.mu.Unlock()
 			log.Printf("Client registered: %s", client.UserID)
 		case client := <-h.unregister:
 			h.mu.Lock()
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				if uc := h.userClients[client.UserID]; uc != nil {
-					delete(uc, client)
-					if len(uc) == 0 {
-						delete(h.userClients, client.UserID)
-					}
-				}
-				close(client.send)
-				log.Printf("Client unregistered: %s", client.UserID)
-			}
+			h.removeClientLocked(client)
 			h.mu.Unlock()
 		case message := <-h.broadcast:
-			h.mu.RLock()
+			h.mu.Lock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
-					close(client.send)
-					delete(h.clients, client)
+					h.removeClientLocked(client)
 				}
 			}
-			h.mu.RUnlock()
+			h.mu.Unlock()
 		}
 	}
 }
@@ -101,8 +128,8 @@ func (h *Hub) IsConnected(userID string) bool {
 
 // SendToUser sends a message to a specific user (O(1) lookup via userClients index)
 func (h *Hub) SendToUser(userID string, message []byte) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	clients := h.userClients[userID]
 	if len(clients) == 0 {
 		log.Printf("[ws] SendToUser: NO active WebSocket connections for user %s — message dropped", userID)
@@ -114,11 +141,25 @@ func (h *Hub) SendToUser(userID string, message []byte) {
 		case client.send <- message:
 			sent++
 		default:
-			close(client.send)
-			delete(h.clients, client)
-			delete(h.userClients[userID], client)
+			h.removeClientLocked(client)
 			log.Printf("[ws] SendToUser: dropped slow client for user %s", userID)
 		}
 	}
 	log.Printf("[ws] SendToUser: delivered message to %d/%d connections for user %s", sent, len(clients), userID)
+}
+
+// PresenceSummary returns unique connected user counts and role breakdown.
+func (h *Hub) PresenceSummary() (int, map[string]int) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	byRole := map[string]int{
+		"customer":         h.roleCounts["customer"],
+		"restaurant_owner": h.roleCounts["restaurant_owner"],
+		"delivery_partner": h.roleCounts["delivery_partner"],
+		"admin":            h.roleCounts["admin"],
+		"super_admin":      h.roleCounts["super_admin"],
+	}
+
+	return len(h.userClients), byRole
 }

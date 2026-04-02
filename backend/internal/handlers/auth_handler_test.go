@@ -55,6 +55,62 @@ func TestExchange_NewUser(t *testing.T) {
 	}
 }
 
+func TestExchange_NewRestaurantSignupBlockedBySettings(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	te.FakeAW.SeedDocument("settings", "platform_settings", map[string]interface{}{
+		"allow_restaurant_partner_signup": false,
+		"allow_delivery_partner_signup":   true,
+	})
+
+	te.FakeAW.RegisterJWT("rest-block-jwt", map[string]interface{}{
+		"$id":   "rest_block_user",
+		"phone": "+919876543210",
+		"name":  "Blocked Owner",
+	})
+
+	rec := te.Request("POST", "/api/v1/auth/exchange", map[string]interface{}{
+		"jwt":  "rest-block-jwt",
+		"role": "restaurant_owner",
+	})
+
+	if rec.Code != 403 {
+		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "disabled") {
+		t.Errorf("expected disabled message, got: %s", rec.Body.String())
+	}
+}
+
+func TestExchange_NewDeliverySignupBlockedBySettings(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	te.FakeAW.SeedDocument("settings", "platform_settings", map[string]interface{}{
+		"allow_restaurant_partner_signup": true,
+		"allow_delivery_partner_signup":   false,
+	})
+
+	te.FakeAW.RegisterJWT("dp-block-jwt", map[string]interface{}{
+		"$id":   "dp_block_user",
+		"phone": "+919876543211",
+		"name":  "Blocked Rider",
+	})
+
+	rec := te.Request("POST", "/api/v1/auth/exchange", map[string]interface{}{
+		"jwt":  "dp-block-jwt",
+		"role": "delivery_partner",
+	})
+
+	if rec.Code != 403 {
+		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "disabled") {
+		t.Errorf("expected disabled message, got: %s", rec.Body.String())
+	}
+}
+
 func TestExchange_ExistingUser(t *testing.T) {
 	te := testutil.NewTestEnv(t)
 	defer te.Close()
@@ -671,12 +727,12 @@ func TestOnboard_RestaurantOwnerCreatesRestaurant(t *testing.T) {
 	})
 
 	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
-		"name":              "Owner Name",
-		"restaurant_name":   "My Restaurant",
+		"name":               "Owner Name",
+		"restaurant_name":    "My Restaurant",
 		"restaurant_address": "123 Main St",
-		"city":              "Bangalore",
-		"latitude":          12.97,
-		"longitude":         77.59,
+		"city":               "Bangalore",
+		"latitude":           12.97,
+		"longitude":          77.59,
 	}, "rest_owner_1", "restaurant_owner")
 
 	if rec.Code != 200 {

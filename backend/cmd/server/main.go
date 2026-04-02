@@ -108,6 +108,7 @@ func main() {
 	goldHandler := handlers.NewGoldHandler(awService)
 	referralHandler := handlers.NewReferralHandler(awService)
 	scheduledOrderHandler := handlers.NewScheduledOrderHandler(awService)
+	adminHandler := handlers.NewAdminHandler(awService, redisClient, hub)
 
 	// ─── Create Router ───
 	r := gin.New()
@@ -170,6 +171,27 @@ func main() {
 			"checks":          checks,
 			"circuit_breaker": awClient.BreakerState().String(),
 		})
+	})
+
+	// Android App Links verification endpoints.
+	// Keep this on the API domain so Play Console can validate autoVerify hosts.
+	assetLinksPayload := []gin.H{
+		{
+			"relation": []string{"delegate_permission/common.handle_all_urls"},
+			"target": gin.H{
+				"namespace":                "android_app",
+				"package_name":             cfg.AndroidAppPackage,
+				"sha256_cert_fingerprints": cfg.AndroidAssetLinksFingerprints,
+			},
+		},
+	}
+	r.GET("/.well-known/assetlinks.json", func(c *gin.Context) {
+		c.Header("Cache-Control", "public, max-age=300")
+		c.JSON(http.StatusOK, assetLinksPayload)
+	})
+	r.GET("/assetlinks.json", func(c *gin.Context) {
+		c.Header("Cache-Control", "public, max-age=300")
+		c.JSON(http.StatusOK, assetLinksPayload)
 	})
 
 	// ─── Swagger UI (dev only) ───
@@ -257,6 +279,10 @@ func main() {
 			notifs.PUT("/read-all", notifHandler.MarkAllRead)
 		}
 
+		// App content & settings
+		authenticated.GET("/content/banners", adminHandler.ListAppBanners)
+		authenticated.GET("/settings", adminHandler.GetSettings)
+
 		// Favorites
 		users.GET("/me/favorites", favoriteHandler.List)
 		users.POST("/me/favorites", favoriteHandler.Add)
@@ -341,7 +367,6 @@ func main() {
 	}
 
 	// ─── Admin Routes (admin / super_admin only) ───
-	adminHandler := handlers.NewAdminHandler(awService, redisClient)
 	admin := v1.Group("/admin")
 	admin.Use(middleware.Auth(cfg, redisClient))
 	admin.Use(middleware.RequireRole("admin", "super_admin"))
@@ -461,6 +486,7 @@ func main() {
 
 		// Content
 		admin.GET("/content/banners", adminHandler.ListBanners)
+		admin.POST("/content/banners/upload", adminHandler.UploadBannerImage)
 		admin.POST("/content/banners", adminHandler.CreateBanner)
 		admin.PUT("/content/banners/:id", adminHandler.UpdateBanner)
 		admin.DELETE("/content/banners/:id", adminHandler.DeleteBanner)

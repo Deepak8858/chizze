@@ -146,8 +146,11 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   NotificationType _parseType(String? type) {
     switch (type) {
       case 'order_update':
+      case 'order':
         return NotificationType.order;
       case 'promo':
+      case 'promotional':
+      case 'offer':
         return NotificationType.promo;
       default:
         return NotificationType.system;
@@ -166,10 +169,11 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
         .map((n) => n.id == id ? n.copyWith(isRead: true) : n)
         .toList();
     _api.put('${ApiConfig.notifications}/$id/read').then((r) {
-          if (!r.success)
+          if (!r.success) {
             if (kDebugMode) {
               debugPrint('[Notifications] markRead failed: ${r.error}');
             }
+          }
     }).catchError((e) {
           if (kDebugMode) debugPrint('[Notifications] markRead error: $e');
     });
@@ -178,7 +182,11 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   void markAllRead() {
     state = state.map((n) => n.copyWith(isRead: true)).toList();
     _api.put('${ApiConfig.notifications}/read-all').then((r) {
-      if (!r.success) if (kDebugMode) debugPrint('[Notifications] markAllRead failed: ${r.error}');
+          if (!r.success) {
+            if (kDebugMode) {
+              debugPrint('[Notifications] markAllRead failed: ${r.error}');
+            }
+          }
     }).catchError((e) {
           if (kDebugMode) debugPrint('[Notifications] markAllRead error: $e');
     });

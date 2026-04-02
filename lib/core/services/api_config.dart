@@ -38,6 +38,10 @@ class ApiConfig {
   // Notifications
   static const String notifications = '/notifications';
 
+  // Platform content/settings (app-facing)
+  static const String contentBanners = '/content/banners';
+  static const String platformSettings = '/settings';
+
   // Favorites
   static const String favorites = '/users/me/favorites';
 

@@ -175,12 +175,26 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         razorpayKeyId = data['razorpay_key_id'] ?? RazorpayConfig.keyId;
         amountPaise = data['amount'] ?? amountPaise;
         state = state.copyWith(razorpayOrderId: razorpayOrderId);
+      } else {
+        state = state.copyWith(
+          isProcessing: false,
+          error: response.error ?? 'Failed to create payment order',
+        );
+        return;
       }
 
       if (razorpayOrderId.isEmpty) {
         state = state.copyWith(
           isProcessing: false,
           error: 'Failed to create payment order',
+        );
+        return;
+      }
+
+      if (razorpayKeyId.isEmpty) {
+        state = state.copyWith(
+          isProcessing: false,
+          error: 'Payment is unavailable right now. Please try again soon.',
         );
         return;
       }

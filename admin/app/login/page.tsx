@@ -9,6 +9,20 @@ import { saveAuth, useRedirectIfAuthed } from "@/lib/auth";
 import type { AdminUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
+type ApiEnvelope<T> = { data?: T } & T;
+
+function unwrapEnvelope<T extends object>(payload: ApiEnvelope<T>): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    payload.data
+  ) {
+    return payload.data as T;
+  }
+  return payload as T;
+}
+
 export default function LoginPage() {
   useRedirectIfAuthed();
 
@@ -68,7 +82,13 @@ export default function LoginPage() {
       const { jwt } = await account.createJWT();
 
       // 3. Exchange Appwrite JWT for Chizze API token
-      const res = await authApi.exchange(jwt);
+      const exchangeRes = (await authApi.exchange(jwt)) as ApiEnvelope<{
+        token: string;
+        user_id: string;
+        role: string;
+        is_new: boolean;
+      }>;
+      const res = unwrapEnvelope(exchangeRes);
 
       // 4. Check admin role
       const role = res.role;
@@ -84,7 +104,13 @@ export default function LoginPage() {
       localStorage.setItem("chizze_admin_token", res.token);
       let user: AdminUser = { id: res.user_id, name: "", phone: `+91${phone}`, role };
       try {
-        const profile = await authApi.me();
+        const profileRes = (await authApi.me()) as ApiEnvelope<{
+          $id: string;
+          name: string;
+          phone: string;
+          role: string;
+        }>;
+        const profile = unwrapEnvelope(profileRes);
         user = { id: profile.$id || res.user_id, name: profile.name || "", phone: profile.phone || `+91${phone}`, role: profile.role || role };
       } catch { /* profile fetch is best-effort */ }
 
@@ -101,18 +127,22 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-bg-base flex items-center justify-center p-4">
       {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-brand-500/5 via-transparent to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-br from-brand-500/5 via-transparent to-transparent pointer-events-none" />
 
       <div className="w-full max-w-sm relative">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-2">
-            <span className="text-brand-500 font-extrabold text-4xl tracking-tight">chizze</span>
+            <span className="text-brand-500 font-extrabold text-4xl tracking-tight">
+              chizze
+            </span>
             <span className="text-xs font-semibold bg-brand-500/20 text-brand-400 px-2 py-1 rounded uppercase tracking-widest self-end mb-1">
               admin
             </span>
           </div>
-          <p className="text-text-muted text-sm">Sign in to your admin account</p>
+          <p className="text-text-muted text-sm">
+            Sign in to your admin account
+          </p>
         </div>
 
         {/* Card */}
@@ -136,9 +166,11 @@ export default function LoginPage() {
           {step === "phone" ? (
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-text-secondary mb-1.5 block">Phone number</label>
+                <label className="text-xs text-text-secondary mb-1.5 block">
+                  Phone number
+                </label>
                 <div className="flex items-center gap-2 h-10 bg-bg-elevated border border-white/10 rounded-lg px-3 focus-within:border-brand-500 transition-colors">
-                  <Phone size={14} className="text-text-muted flex-shrink-0" />
+                  <Phone size={14} className="text-text-muted shrink-0" />
                   <div className="text-text-muted text-sm">+91</div>
                   <div className="w-px h-4 bg-white/10" />
                   <input
@@ -146,7 +178,9 @@ export default function LoginPage() {
                     maxLength={10}
                     placeholder="98765 43210"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+                    onChange={(e) =>
+                      setPhone(e.target.value.replace(/\D/g, ""))
+                    }
                     onKeyDown={(e) => e.key === "Enter" && handleSendOtp()}
                     className="flex-1 bg-transparent text-white placeholder-text-muted text-sm outline-none"
                   />
@@ -158,7 +192,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className={cn(
                   "w-full h-10 bg-brand-500 hover:bg-brand-600 text-bg-base font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2",
-                  loading && "opacity-60 cursor-not-allowed"
+                  loading && "opacity-60 cursor-not-allowed",
                 )}
               >
                 {loading && <Loader2 size={14} className="animate-spin" />}
@@ -168,9 +202,11 @@ export default function LoginPage() {
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-text-secondary mb-1.5 block">6-digit OTP</label>
+                <label className="text-xs text-text-secondary mb-1.5 block">
+                  6-digit OTP
+                </label>
                 <div className="flex items-center gap-2 h-10 bg-bg-elevated border border-white/10 rounded-lg px-3 focus-within:border-brand-500 transition-colors">
-                  <KeyRound size={14} className="text-text-muted flex-shrink-0" />
+                  <KeyRound size={14} className="text-text-muted shrink-0" />
                   <input
                     type="text"
                     maxLength={6}
@@ -189,7 +225,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className={cn(
                   "w-full h-10 bg-brand-500 hover:bg-brand-600 text-bg-base font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2",
-                  loading && "opacity-60 cursor-not-allowed"
+                  loading && "opacity-60 cursor-not-allowed",
                 )}
               >
                 {loading && <Loader2 size={14} className="animate-spin" />}
@@ -197,7 +233,10 @@ export default function LoginPage() {
               </button>
 
               <button
-                onClick={() => { setStep("phone"); setOtp(""); }}
+                onClick={() => {
+                  setStep("phone");
+                  setOtp("");
+                }}
                 className="w-full text-center text-xs text-text-muted hover:text-white transition-colors"
               >
                 ← Change phone number

@@ -8,6 +8,8 @@ import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/shimmer_loader.dart';
 import '../providers/restaurant_provider.dart';
 import '../models/restaurant.dart';
+import '../models/promo_banner.dart';
+import '../providers/promo_banner_provider.dart';
 import '../../favorites/providers/favorites_provider.dart';
 import '../../coupons/providers/coupons_provider.dart';
 import '../../profile/providers/user_profile_provider.dart';
@@ -28,6 +30,7 @@ class HomeScreen extends ConsumerWidget {
         : (authState.user?.name ?? 'Foodie');
     final restaurantState = ref.watch(restaurantProvider);
     final restaurants = restaurantState.restaurants;
+    final promoState = ref.watch(promoBannerProvider);
 
     // Get delivery address: prefer default saved address, fall back to profile address
     final addresses = ref.watch(addressProvider);
@@ -78,7 +81,7 @@ class HomeScreen extends ConsumerWidget {
                   horizontal: AppSpacing.xl,
                   vertical: AppSpacing.sm,
                 ),
-                child: _buildPromoBanner(),
+                child: _buildPromoBanner(context, promoState.primaryBanner),
               ),
             ),
 
@@ -278,40 +281,110 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPromoBanner() {
-    return Container(
-      height: 140,
-      decoration: BoxDecoration(
-        gradient: AppColors.primaryGradient,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildPromoBanner(BuildContext context, PromoBanner? banner) {
+    final title = (banner?.title.trim().isNotEmpty ?? false)
+        ? banner!.title
+        : '50% OFF';
+    final subtitle = (banner?.deeplink.trim().isNotEmpty ?? false)
+        ? 'Tap to explore this offer'
+        : 'on your first order!\nUse code: CHIZZE50';
+
+    return Semantics(
+      button: true,
+      label: title,
+      child: GestureDetector(
+        onTap: () => _onPromoBannerTap(context, banner),
+        child: Container(
+          height: 140,
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                Text('50% OFF', style: AppTypography.h1.copyWith(fontSize: 28)),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'on your first order!\nUse code: CHIZZE50',
-                  style: AppTypography.body2.copyWith(
-                    color: Colors.white.withValues(alpha: 0.9),
+                if (banner != null && banner.imageUrl.trim().isNotEmpty)
+                  Image.network(
+                    banner.imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const SizedBox.shrink(),
+                  ),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.55),
+                        Colors.black.withValues(alpha: 0.1),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.h1.copyWith(fontSize: 28),
+                            ),
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              subtitle,
+                              style: AppTypography.body2.copyWith(
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.local_offer_rounded,
+                        size: 48,
+                        color: Colors.white24,
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(
-            Icons.local_offer_rounded,
-            size: 48,
-            color: Colors.white24,
-          ),
-        ],
+        ),
       ),
     ).animate(delay: 300.ms).fadeIn().slideY(begin: 0.1);
+  }
+
+  void _onPromoBannerTap(BuildContext context, PromoBanner? banner) {
+    final raw = banner?.deeplink.trim() ?? '';
+    if (raw.isEmpty) {
+      context.push('/coupons');
+      return;
+    }
+
+    if (raw.startsWith('/')) {
+      context.push(raw);
+      return;
+    }
+
+    final uri = Uri.tryParse(raw);
+    if (uri != null && uri.path.isNotEmpty) {
+      final path = uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path;
+      context.push(path);
+      return;
+    }
+
+    context.push('/coupons');
   }
 
   Widget _buildOffersCarousel(BuildContext context, WidgetRef ref) {
@@ -532,7 +605,7 @@ class HomeScreen extends ConsumerWidget {
                         width: double.infinity,
                         height: 160,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Center(
+                        errorBuilder: (context, error, stackTrace) => Center(
                           child: Text(emoji, style: const TextStyle(fontSize: 48)),
                         ),
                       ),

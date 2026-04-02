@@ -220,6 +220,13 @@ export const analyticsApi = {
 export const contentApi = {
   banners: () => GET("/admin/content/banners"),
   getBanners: () => GET("/admin/content/banners"),
+  uploadBannerImage: (formData: FormData) =>
+    api
+      .post("/admin/content/banners/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 60_000,
+      })
+      .then((res) => res.data),
   createBanner: (body: Record<string, unknown>) =>
     POST("/admin/content/banners", body),
   updateBanner: (id: string, body: Record<string, unknown>) =>

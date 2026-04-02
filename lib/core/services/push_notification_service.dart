@@ -56,7 +56,7 @@ class PushNotificationService {
       final settings = await messaging.requestPermission(
         alert: true,
         badge: true,
-        sound: true,
+        sound: false,
         provisional: false,
       );
       if (kDebugMode) debugPrint('[Push] Permission status: ${settings.authorizationStatus}');
@@ -124,7 +124,7 @@ class PushNotificationService {
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestSoundPermission: false,
     );
     const settings = InitializationSettings(
       android: androidSettings,
@@ -239,17 +239,18 @@ class PushNotificationService {
     String? payload,
   }) async {
     const androidDetails = AndroidNotificationDetails(
-      'chizze_main',
+      'chizze_main_silent',
       'Chizze Notifications',
       channelDescription: 'Order updates, offers & more',
       importance: Importance.high,
       priority: Priority.high,
       showWhen: true,
+      playSound: false,
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
-      presentSound: true,
+      presentSound: false,
     );
     const details = NotificationDetails(
       android: androidDetails,

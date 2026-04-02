@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -13,7 +12,6 @@ class OrderNotificationService {
 
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
-  final AudioPlayer _audioPlayer = AudioPlayer();
   bool _initialized = false;
   Timer? _alertTimer;
 
@@ -45,27 +43,19 @@ class OrderNotificationService {
     required String itemsSummary,
     required double amount,
   }) async {
-    // Play faaah.mp3 sound for new order
-    try {
-      await _audioPlayer.stop();
-      await _audioPlayer.play(AssetSource('faaah.mp3'));
-    } catch (e) {
-      if (kDebugMode) debugPrint('[OrderNotificationService] sound error: $e');
-    }
-
     // Haptic feedback — heavy impact
     await HapticFeedback.heavyImpact();
 
-    // Show local notification with sound
+    // Show local notification without sound
     if (_initialized) {
       try {
         final androidDetails = AndroidNotificationDetails(
-          'partner_new_orders',
+          'partner_new_orders_silent',
           'New Orders',
           channelDescription: 'Alerts for new incoming orders',
           importance: Importance.high,
           priority: Priority.high,
-          playSound: true,
+          playSound: false,
           enableVibration: true,
           vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
           category: AndroidNotificationCategory.alarm,
@@ -74,7 +64,7 @@ class OrderNotificationService {
         const iosDetails = DarwinNotificationDetails(
           presentAlert: true,
           presentBadge: true,
-          presentSound: true,
+          presentSound: false,
           interruptionLevel: InterruptionLevel.timeSensitive,
         );
         final details = NotificationDetails(
@@ -100,10 +90,6 @@ class OrderNotificationService {
   void startRepeatedAlert() {
     stopRepeatedAlert();
     _alertTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      try {
-        _audioPlayer.stop();
-        _audioPlayer.play(AssetSource('faaah.mp3'));
-      } catch (_) {}
       HapticFeedback.heavyImpact();
     });
   }
@@ -121,6 +107,5 @@ class OrderNotificationService {
 
   void dispose() {
     stopRepeatedAlert();
-    _audioPlayer.dispose();
   }
 }

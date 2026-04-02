@@ -222,6 +222,10 @@ func (s *AppwriteService) CreateNotification(id string, data map[string]interfac
 	return s.client.CreateDocument(models.CollectionNotifications, id, data)
 }
 
+func (s *AppwriteService) UploadFile(bucketID, filename, contentType string, data []byte) (map[string]interface{}, error) {
+	return s.client.UploadFile(bucketID, filename, contentType, data)
+}
+
 // ─── Menu Categories ───
 
 func (s *AppwriteService) ListMenuCategories(restaurantID string) (*appwrite.DocumentList, error) {

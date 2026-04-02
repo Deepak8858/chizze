@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
@@ -62,7 +63,8 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 
 	// Order must be delivered
 	status, _ := order["status"].(string)
-	if status != models.OrderStatusDelivered {
+	normalizedStatus := strings.ToLower(strings.TrimSpace(status))
+	if normalizedStatus != strings.ToLower(models.OrderStatusDelivered) && normalizedStatus != "completed" {
 		utils.BadRequest(c, "You can only review delivered orders")
 		return
 	}
@@ -126,7 +128,7 @@ func (h *ReviewHandler) updateRestaurantRating(restaurantID string) {
 	if count > 0 {
 		avgRating := totalRating / float64(count)
 		_, _ = h.appwrite.UpdateRestaurant(restaurantID, map[string]interface{}{
-			"rating":       avgRating,
+			"rating":        avgRating,
 			"total_reviews": count,
 		})
 	}

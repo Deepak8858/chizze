@@ -39,7 +39,8 @@ class CacheEntry {
 /// Hive-backed offline cache service with configurable TTL per endpoint
 class CacheService {
   static const String _boxName = 'api_cache';
-  late Box<Map> _box;
+  Box<Map>? _box;
+  bool _isReady = false;
 
   /// Default TTL per endpoint pattern (in milliseconds)
   static final Map<String, int> _ttlMap = {
@@ -58,9 +59,24 @@ class CacheService {
 
   /// Initialize Hive and open cache box
   Future<void> init() async {
-    await Hive.initFlutter();
-    _box = await Hive.openBox<Map>(_boxName);
-    if (kDebugMode) debugPrint('[Cache] Initialized with ${_box.length} cached entries');
+    try {
+      await Hive.initFlutter().timeout(const Duration(seconds: 5));
+      _box = await Hive.openBox<Map>(
+        _boxName,
+      ).timeout(const Duration(seconds: 5));
+      _isReady = true;
+      if (kDebugMode) {
+        debugPrint(
+          '[Cache] Initialized with ${_box?.length ?? 0} cached entries',
+        );
+      }
+    } catch (e) {
+      _isReady = false;
+      _box = null;
+      if (kDebugMode) {
+        debugPrint('[Cache] Initialization failed, running without cache: $e');
+      }
+    }
   }
 
   /// Get TTL for an endpoint
@@ -90,6 +106,7 @@ class CacheService {
     int statusCode,
     String responseBody,
   ) async {
+    if (!_isReady || _box == null) return;
     final key = _buildKey(path, queryParams);
     final entry = CacheEntry(
       data: responseBody,
@@ -97,18 +114,19 @@ class CacheService {
       timestamp: DateTime.now().millisecondsSinceEpoch,
       ttlMs: _getTtl(path),
     );
-    await _box.put(key, entry.toMap());
+    await _box!.put(key, entry.toMap());
   }
 
   /// Get cached response (returns null if missing or expired)
   CacheEntry? get(String path, Map<String, dynamic>? queryParams) {
+    if (!_isReady || _box == null) return null;
     final key = _buildKey(path, queryParams);
-    final raw = _box.get(key);
+    final raw = _box!.get(key);
     if (raw == null) return null;
 
     final entry = CacheEntry.fromMap(raw);
     if (entry.isExpired) {
-      _box.delete(key);
+      _box!.delete(key);
       return null;
     }
     return entry;
@@ -116,24 +134,27 @@ class CacheService {
 
   /// Get cached response even if expired (for offline fallback)
   CacheEntry? getStale(String path, Map<String, dynamic>? queryParams) {
+    if (!_isReady || _box == null) return null;
     final key = _buildKey(path, queryParams);
-    final raw = _box.get(key);
+    final raw = _box!.get(key);
     if (raw == null) return null;
     return CacheEntry.fromMap(raw);
   }
 
   /// Clear all cached data
   Future<void> clearAll() async {
-    await _box.clear();
+    if (!_isReady || _box == null) return;
+    await _box!.clear();
     if (kDebugMode) debugPrint('[Cache] All entries cleared');
   }
 
   /// Clear expired entries
   Future<int> pruneExpired() async {
+    if (!_isReady || _box == null) return 0;
     int pruned = 0;
     final keysToDelete = <dynamic>[];
-    for (final key in _box.keys) {
-      final raw = _box.get(key);
+    for (final key in _box!.keys) {
+      final raw = _box!.get(key);
       if (raw != null) {
         final entry = CacheEntry.fromMap(raw);
         if (entry.isExpired) {
@@ -142,7 +163,7 @@ class CacheService {
         }
       }
     }
-    await _box.deleteAll(keysToDelete);
+    await _box!.deleteAll(keysToDelete);
     if (pruned > 0) if (kDebugMode) debugPrint('[Cache] Pruned $pruned expired entries');
     return pruned;
   }

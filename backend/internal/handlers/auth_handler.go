@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/chizze/backend/internal/config"
 	"github.com/chizze/backend/internal/middleware"
+	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/pkg/appwrite"
 	redispkg "github.com/chizze/backend/pkg/redis"
@@ -56,6 +59,47 @@ func roleDisplayName(role string) string {
 	default:
 		return role
 	}
+}
+
+func boolFromSetting(value interface{}, defaultValue bool) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err == nil {
+			return parsed
+		}
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	}
+	return defaultValue
+}
+
+func (h *AuthHandler) isPartnerSignupAllowed(role string) bool {
+	if role != "restaurant_owner" && role != "delivery_partner" {
+		return true
+	}
+
+	settings, err := h.appwrite.ListDocuments(models.CollectionSettings, []string{
+		appwrite.QueryLimit(1),
+	})
+	if err != nil || settings == nil || len(settings.Documents) == 0 {
+		// Safe default: allow signup when settings are unavailable.
+		return true
+	}
+
+	doc := settings.Documents[0]
+	if role == "restaurant_owner" {
+		return boolFromSetting(doc["allow_restaurant_partner_signup"], true)
+	}
+	return boolFromSetting(doc["allow_delivery_partner_signup"], true)
+}
+
+func partnerSignupDisabledMessage(role string) string {
+	return "New " + roleDisplayName(role) + " signups are currently disabled by admin"
 }
 
 // Exchange validates an Appwrite client JWT and issues a Chizze API JWT
@@ -173,6 +217,10 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 
 			if req.Role != "" {
 				role = req.Role
+			}
+			if !h.isPartnerSignupAllowed(role) {
+				utils.Error(c, 403, partnerSignupDisabledMessage(role))
+				return
 			}
 
 			userData := map[string]interface{}{
@@ -598,6 +646,10 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 
 		// Check if restaurant already exists for this owner
 		existing, _ := h.appwrite.GetRestaurantByOwner(userID)
+		if !h.isPartnerSignupAllowed(role) && (existing == nil || existing.Total == 0) {
+			utils.Error(c, 403, partnerSignupDisabledMessage(role))
+			return
+		}
 		if existing != nil && existing.Total > 0 {
 			// Update existing restaurant
 			restID, _ := existing.Documents[0]["$id"].(string)
@@ -653,6 +705,10 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 
 		// Check if delivery partner profile exists
 		existing, _ := h.appwrite.GetDeliveryPartner(userID)
+		if !h.isPartnerSignupAllowed(role) && (existing == nil || existing.Total == 0) {
+			utils.Error(c, 403, partnerSignupDisabledMessage(role))
+			return
+		}
 		if existing != nil && existing.Total > 0 {
 			// Update existing profile
 			partnerID, _ := existing.Documents[0]["$id"].(string)

@@ -66,6 +66,9 @@ type Client struct {
 
 	// User ID associated with this connection
 	UserID string
+
+	// Role associated with this connection (customer/restaurant_owner/delivery_partner/admin)
+	Role string
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -143,6 +146,8 @@ func ServeWs(hub *Hub, c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
+	role, _ := c.Get("role")
+	roleStr, _ := role.(string)
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -155,6 +160,7 @@ func ServeWs(hub *Hub, c *gin.Context) {
 		conn:   conn,
 		send:   make(chan []byte, 256),
 		UserID: userID.(string),
+		Role:   roleStr,
 	}
 	client.hub.register <- client
 

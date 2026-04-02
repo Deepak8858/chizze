@@ -2,13 +2,19 @@ package handlers
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"math"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
+	"github.com/chizze/backend/internal/websocket"
 	"github.com/chizze/backend/pkg/appwrite"
 	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/chizze/backend/pkg/utils"
@@ -20,11 +26,16 @@ import (
 type AdminHandler struct {
 	appwrite *services.AppwriteService
 	redis    *redispkg.Client
+	hub      *websocket.Hub
 }
 
 // NewAdminHandler creates an admin handler
-func NewAdminHandler(aw *services.AppwriteService, redis *redispkg.Client) *AdminHandler {
-	return &AdminHandler{appwrite: aw, redis: redis}
+func NewAdminHandler(aw *services.AppwriteService, redis *redispkg.Client, hub ...*websocket.Hub) *AdminHandler {
+	h := &AdminHandler{appwrite: aw, redis: redis}
+	if len(hub) > 0 {
+		h.hub = hub[0]
+	}
+	return h
 }
 
 // helper: safely list documents; returns empty list on error (e.g. collection doesn't exist)
@@ -34,6 +45,430 @@ func (h *AdminHandler) safeList(collection string, queries []string) ([]map[stri
 		return []map[string]interface{}{}, 0
 	}
 	return result.Documents, result.Total
+}
+
+func defaultPlatformSettings() gin.H {
+	return gin.H{
+		"platform_name":                   "Chizze",
+		"platform_fee_percentage":         15.0,
+		"commission_rate":                 15.0,
+		"min_order_amount":                99.0,
+		"min_order_value":                 99.0,
+		"max_delivery_radius_km":          10.0,
+		"delivery_radius":                 10.0,
+		"otp_expiry_minutes":              5,
+		"razorpay_live_mode":              false,
+		"maintenance_mode":                false,
+		"gold_subscription_monthly_price": 199.0,
+		"gold_subscription_yearly_price":  1999.0,
+		"referral_reward_amount":          50.0,
+		"referral_min_orders":             1,
+		"free_delivery_above_amount":      299.0,
+		"support_email":                   "supportchizze@gmail.com",
+		"support_phone":                   "7376389133",
+		"allow_restaurant_partner_signup": true,
+		"allow_delivery_partner_signup":   true,
+	}
+}
+
+func (h *AdminHandler) listUserIDsByRoles(roles ...string) ([]string, error) {
+	const pageSize = 100
+	offset := 0
+	ids := make([]string, 0)
+	seen := make(map[string]struct{})
+	allowedRoles := make(map[string]struct{}, len(roles))
+	for _, role := range roles {
+		normalized := strings.ToLower(strings.TrimSpace(role))
+		if normalized != "" {
+			allowedRoles[normalized] = struct{}{}
+		}
+	}
+
+	for {
+		result, err := h.appwrite.ListUsers([]string{appwrite.QueryLimit(pageSize), appwrite.QueryOffset(offset)})
+		if err != nil {
+			return nil, err
+		}
+		if result == nil || len(result.Documents) == 0 {
+			break
+		}
+
+		for _, doc := range result.Documents {
+			id, _ := doc["$id"].(string)
+			if id == "" {
+				continue
+			}
+
+			if len(allowedRoles) > 0 {
+				role := strings.ToLower(strings.TrimSpace(stringFromAny(doc["role"], "")))
+				if _, ok := allowedRoles[role]; !ok {
+					continue
+				}
+			}
+
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+
+		if len(result.Documents) < pageSize {
+			break
+		}
+		offset += len(result.Documents)
+	}
+
+	return ids, nil
+}
+
+func (h *AdminHandler) livePresenceByRole() (int, map[string]int) {
+	counts := map[string]int{
+		"customer":         0,
+		"restaurant_owner": 0,
+		"delivery_partner": 0,
+	}
+
+	if h.hub == nil {
+		return 0, counts
+	}
+
+	connectedUsers, byRole := h.hub.PresenceSummary()
+	counts["customer"] = byRole["customer"]
+	counts["restaurant_owner"] = byRole["restaurant_owner"]
+	counts["delivery_partner"] = byRole["delivery_partner"]
+
+	appUsers := counts["customer"] + counts["restaurant_owner"] + counts["delivery_partner"]
+	if appUsers == 0 {
+		appUsers = connectedUsers
+	}
+
+	return appUsers, counts
+}
+
+func boolFromAny(value interface{}, defaultValue bool) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err == nil {
+			return parsed
+		}
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	}
+	return defaultValue
+}
+
+func intFromAny(value interface{}, defaultValue int) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(v))
+		if err == nil {
+			return parsed
+		}
+	}
+	return defaultValue
+}
+
+func floatFromAny(value interface{}, defaultValue float64) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int32:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		if err == nil {
+			return parsed
+		}
+	}
+	return defaultValue
+}
+
+func stringFromAny(value interface{}, defaultValue string) string {
+	if s, ok := value.(string); ok {
+		trimmed := strings.TrimSpace(s)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return defaultValue
+}
+
+func parseBannerTime(value interface{}) (time.Time, bool) {
+	s, ok := value.(string)
+	if !ok || strings.TrimSpace(s) == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{time.RFC3339, "2006-01-02", "2006-01-02 15:04:05"}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, s); err == nil {
+			return parsed.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func bannerSegmentAllowed(segment, role string, isGoldMember, isNewUser bool) bool {
+	s := strings.ToLower(strings.TrimSpace(segment))
+	switch s {
+	case "", "all":
+		return true
+	case "customers":
+		return role == "customer"
+	case "gold_members":
+		return role == "customer" && isGoldMember
+	case "new_users":
+		return role == "customer" && isNewUser
+	case "all_riders", "delivery_partners", "riders":
+		return role == "delivery_partner"
+	case "all_restaurants", "restaurants", "restaurant_owners":
+		return role == "restaurant_owner"
+	default:
+		// Keep unknown segments visible to avoid accidental content loss.
+		return true
+	}
+}
+
+func floatAliasFromMap(values map[string]interface{}, primary, legacy string, defaultValue float64) (float64, bool) {
+	if v, ok := values[primary]; ok {
+		return floatFromAny(v, defaultValue), true
+	}
+	if v, ok := values[legacy]; ok {
+		return floatFromAny(v, defaultValue), true
+	}
+	return defaultValue, false
+}
+
+func normalizedSettingsResponse(doc map[string]interface{}) gin.H {
+	defaults := defaultPlatformSettings()
+	res := gin.H{}
+
+	for k, v := range doc {
+		res[k] = v
+	}
+
+	platformName := stringFromAny(doc["platform_name"], stringFromAny(defaults["platform_name"], "Chizze"))
+	supportEmail := stringFromAny(doc["support_email"], stringFromAny(defaults["support_email"], "supportchizze@gmail.com"))
+	supportPhone := stringFromAny(doc["support_phone"], stringFromAny(defaults["support_phone"], "7376389133"))
+	if supportEmail == "support@chizze.app" {
+		supportEmail = "supportchizze@gmail.com"
+	}
+	if supportPhone == "+919876543210" {
+		supportPhone = "7376389133"
+	}
+
+	fee, _ := floatAliasFromMap(doc, "platform_fee_percentage", "commission_rate", floatFromAny(defaults["platform_fee_percentage"], 15))
+	minOrder, _ := floatAliasFromMap(doc, "min_order_amount", "min_order_value", floatFromAny(defaults["min_order_amount"], 99))
+	maxRadius, _ := floatAliasFromMap(doc, "max_delivery_radius_km", "delivery_radius", floatFromAny(defaults["max_delivery_radius_km"], 10))
+
+	res["platform_name"] = platformName
+	res["support_email"] = supportEmail
+	res["support_phone"] = supportPhone
+
+	res["platform_fee_percentage"] = fee
+	res["commission_rate"] = fee
+	res["min_order_amount"] = minOrder
+	res["min_order_value"] = minOrder
+	res["max_delivery_radius_km"] = maxRadius
+	res["delivery_radius"] = maxRadius
+
+	res["otp_expiry_minutes"] = intFromAny(doc["otp_expiry_minutes"], intFromAny(defaults["otp_expiry_minutes"], 5))
+	res["gold_subscription_monthly_price"] = floatFromAny(doc["gold_subscription_monthly_price"], floatFromAny(defaults["gold_subscription_monthly_price"], 199))
+	res["gold_subscription_yearly_price"] = floatFromAny(doc["gold_subscription_yearly_price"], floatFromAny(defaults["gold_subscription_yearly_price"], 1999))
+	res["referral_reward_amount"] = floatFromAny(doc["referral_reward_amount"], floatFromAny(defaults["referral_reward_amount"], 50))
+	res["referral_min_orders"] = intFromAny(doc["referral_min_orders"], intFromAny(defaults["referral_min_orders"], 1))
+	res["free_delivery_above_amount"] = floatFromAny(doc["free_delivery_above_amount"], floatFromAny(defaults["free_delivery_above_amount"], 299))
+
+	res["razorpay_live_mode"] = boolFromAny(doc["razorpay_live_mode"], boolFromAny(defaults["razorpay_live_mode"], false))
+	res["maintenance_mode"] = boolFromAny(doc["maintenance_mode"], boolFromAny(defaults["maintenance_mode"], false))
+	res["allow_restaurant_partner_signup"] = boolFromAny(doc["allow_restaurant_partner_signup"], boolFromAny(defaults["allow_restaurant_partner_signup"], true))
+	res["allow_delivery_partner_signup"] = boolFromAny(doc["allow_delivery_partner_signup"], boolFromAny(defaults["allow_delivery_partner_signup"], true))
+
+	return res
+}
+
+func normalizeSettingsWritePayload(body map[string]interface{}) map[string]interface{} {
+	payload := map[string]interface{}{}
+	if len(body) == 0 {
+		return payload
+	}
+
+	if v, ok := body["platform_name"]; ok {
+		payload["platform_name"] = stringFromAny(v, "Chizze")
+	}
+	if v, ok := body["support_email"]; ok {
+		payload["support_email"] = stringFromAny(v, "supportchizze@gmail.com")
+	}
+	if v, ok := body["support_phone"]; ok {
+		payload["support_phone"] = stringFromAny(v, "7376389133")
+	}
+
+	if fee, ok := floatAliasFromMap(body, "platform_fee_percentage", "commission_rate", 15); ok {
+		payload["platform_fee_percentage"] = fee
+		payload["commission_rate"] = fee
+	}
+	if minOrder, ok := floatAliasFromMap(body, "min_order_amount", "min_order_value", 99); ok {
+		payload["min_order_amount"] = minOrder
+		payload["min_order_value"] = minOrder
+	}
+	if maxRadius, ok := floatAliasFromMap(body, "max_delivery_radius_km", "delivery_radius", 10); ok {
+		payload["max_delivery_radius_km"] = maxRadius
+		payload["delivery_radius"] = maxRadius
+	}
+
+	if v, ok := body["otp_expiry_minutes"]; ok {
+		payload["otp_expiry_minutes"] = intFromAny(v, 5)
+	}
+	if v, ok := body["gold_subscription_monthly_price"]; ok {
+		payload["gold_subscription_monthly_price"] = floatFromAny(v, 199)
+	}
+	if v, ok := body["gold_subscription_yearly_price"]; ok {
+		payload["gold_subscription_yearly_price"] = floatFromAny(v, 1999)
+	}
+	if v, ok := body["referral_reward_amount"]; ok {
+		payload["referral_reward_amount"] = floatFromAny(v, 50)
+	}
+	if v, ok := body["referral_min_orders"]; ok {
+		payload["referral_min_orders"] = intFromAny(v, 1)
+	}
+	if v, ok := body["free_delivery_above_amount"]; ok {
+		payload["free_delivery_above_amount"] = floatFromAny(v, 299)
+	}
+
+	if v, ok := body["razorpay_live_mode"]; ok {
+		payload["razorpay_live_mode"] = boolFromAny(v, false)
+	}
+	if v, ok := body["maintenance_mode"]; ok {
+		payload["maintenance_mode"] = boolFromAny(v, false)
+	}
+	if v, ok := body["allow_restaurant_partner_signup"]; ok {
+		payload["allow_restaurant_partner_signup"] = boolFromAny(v, true)
+	}
+	if v, ok := body["allow_delivery_partner_signup"]; ok {
+		payload["allow_delivery_partner_signup"] = boolFromAny(v, true)
+	}
+
+	return payload
+}
+
+func withIntegerNumericSettings(payload map[string]interface{}) map[string]interface{} {
+	if len(payload) == 0 {
+		return payload
+	}
+
+	converted := map[string]interface{}{}
+	for k, v := range payload {
+		converted[k] = v
+	}
+
+	integerLikeKeys := []string{
+		"platform_fee_percentage",
+		"commission_rate",
+		"min_order_amount",
+		"min_order_value",
+		"max_delivery_radius_km",
+		"delivery_radius",
+		"otp_expiry_minutes",
+		"gold_subscription_monthly_price",
+		"gold_subscription_yearly_price",
+		"referral_reward_amount",
+		"referral_min_orders",
+		"free_delivery_above_amount",
+	}
+
+	for _, key := range integerLikeKeys {
+		value, exists := converted[key]
+		if !exists {
+			continue
+		}
+
+		switch n := value.(type) {
+		case float64:
+			if math.Trunc(n) == n {
+				converted[key] = int(n)
+			}
+		case float32:
+			nv := float64(n)
+			if math.Trunc(nv) == nv {
+				converted[key] = int(nv)
+			}
+		case string:
+			if parsed, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+				converted[key] = parsed
+			}
+		}
+	}
+
+	return converted
+}
+
+func filterPayloadByExistingKeys(payload map[string]interface{}, existing map[string]interface{}) map[string]interface{} {
+	if len(existing) == 0 {
+		return payload
+	}
+	filtered := map[string]interface{}{}
+	for k, v := range payload {
+		if _, ok := existing[k]; ok {
+			filtered[k] = v
+		}
+	}
+	return filtered
+}
+
+func legacySettingsPayload(values map[string]interface{}) map[string]interface{} {
+	legacy := map[string]interface{}{}
+
+	if v, ok := values["platform_name"]; ok {
+		legacy["platform_name"] = v
+	}
+	if v, ok := values["commission_rate"]; ok {
+		legacy["commission_rate"] = v
+	} else if v, ok := values["platform_fee_percentage"]; ok {
+		legacy["commission_rate"] = v
+	}
+	if v, ok := values["min_order_value"]; ok {
+		legacy["min_order_value"] = v
+	} else if v, ok := values["min_order_amount"]; ok {
+		legacy["min_order_value"] = v
+	}
+	if v, ok := values["delivery_radius"]; ok {
+		legacy["delivery_radius"] = v
+	} else if v, ok := values["max_delivery_radius_km"]; ok {
+		legacy["delivery_radius"] = v
+	}
+	if v, ok := values["support_email"]; ok {
+		legacy["support_email"] = v
+	}
+	if v, ok := values["support_phone"]; ok {
+		legacy["support_phone"] = v
+	}
+	if v, ok := values["maintenance_mode"]; ok {
+		legacy["maintenance_mode"] = v
+	}
+	if v, ok := values["razorpay_live_mode"]; ok {
+		legacy["razorpay_live_mode"] = v
+	}
+
+	return legacy
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -53,10 +488,18 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 	totalRestaurants := 0
 	totalOrders := 0
 	totalPartners := 0
-	if users != nil { totalUsers = users.Total }
-	if restaurants != nil { totalRestaurants = restaurants.Total }
-	if allOrders != nil { totalOrders = allOrders.Total }
-	if partners != nil { totalPartners = partners.Total }
+	if users != nil {
+		totalUsers = users.Total
+	}
+	if restaurants != nil {
+		totalRestaurants = restaurants.Total
+	}
+	if allOrders != nil {
+		totalOrders = allOrders.Total
+	}
+	if partners != nil {
+		totalPartners = partners.Total
+	}
 
 	// --- Today boundaries ---
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Format(time.RFC3339)
@@ -83,26 +526,34 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 		appwrite.QueryLimit(1),
 	})
 	newUsersTodayCount := 0
-	if newUsersRes != nil { newUsersTodayCount = newUsersRes.Total }
+	if newUsersRes != nil {
+		newUsersTodayCount = newUsersRes.Total
+	}
 
 	onlineRest, _ := h.appwrite.ListRestaurants([]string{
 		appwrite.QueryEqual("is_online", true), appwrite.QueryLimit(1),
 	})
 	onlineRestCount := 0
-	if onlineRest != nil { onlineRestCount = onlineRest.Total }
+	if onlineRest != nil {
+		onlineRestCount = onlineRest.Total
+	}
 
 	onlineRiders, _ := h.appwrite.ListDeliveryPartners([]string{
 		appwrite.QueryEqual("is_online", true), appwrite.QueryLimit(1),
 	})
 	onlineRidersCount := 0
-	if onlineRiders != nil { onlineRidersCount = onlineRiders.Total }
+	if onlineRiders != nil {
+		onlineRidersCount = onlineRiders.Total
+	}
 
 	activeOrders, _ := h.appwrite.ListOrders([]string{
 		appwrite.QueryNotEqual("status", "delivered", "cancelled"),
 		appwrite.QueryLimit(1),
 	})
 	totalActive := 0
-	if activeOrders != nil { totalActive = activeOrders.Total }
+	if activeOrders != nil {
+		totalActive = activeOrders.Total
+	}
 
 	// --- 30-day revenue chart ---
 	thirtyDaysAgo := now.AddDate(0, 0, -30).Format(time.RFC3339)
@@ -243,13 +694,18 @@ func (h *AdminHandler) Analytics(c *gin.Context) {
 	}
 
 	utils.Success(c, gin.H{
-		"period":          period,
-		"total_orders":    totalOrders,
-		"delivered":       delivered,
-		"cancelled":       cancelled,
-		"revenue":         revenue,
-		"avg_order_value": func() float64 { if delivered > 0 { return revenue / float64(delivered) }; return 0 }(),
-		"revenue_chart":   revenueChart,
+		"period":       period,
+		"total_orders": totalOrders,
+		"delivered":    delivered,
+		"cancelled":    cancelled,
+		"revenue":      revenue,
+		"avg_order_value": func() float64 {
+			if delivered > 0 {
+				return revenue / float64(delivered)
+			}
+			return 0
+		}(),
+		"revenue_chart": revenueChart,
 	})
 }
 
@@ -973,33 +1429,142 @@ func (h *AdminHandler) ReferralStats(c *gin.Context) {
 
 func (h *AdminHandler) BroadcastNotification(c *gin.Context) {
 	var body struct {
-		Title    string `json:"title" binding:"required"`
-		Body     string `json:"body" binding:"required"`
-		Type     string `json:"type"`
-		TargetID string `json:"target_id"`
+		Title      string `json:"title" binding:"required"`
+		Body       string `json:"body" binding:"required"`
+		Type       string `json:"type"`
+		TargetType string `json:"target_type"`
+		TargetID   string `json:"target_id"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		utils.BadRequest(c, "Title and body are required")
 		return
 	}
+
 	nType := body.Type
 	if nType == "" {
 		nType = "system"
 	}
-	id := fmt.Sprintf("notif_%s", uuid.New().String()[:8])
-	doc, err := h.appwrite.CreateNotification(id, map[string]interface{}{
-		"user_id":    body.TargetID, // empty = broadcast
-		"type":       nType,
-		"title":      body.Title,
-		"body":       body.Body,
-		"is_read":    false,
-		"created_at": time.Now().Format(time.RFC3339),
-	})
+
+	targetType := strings.TrimSpace(body.TargetType)
+	if targetType == "" {
+		targetType = "all_users"
+	}
+
+	var (
+		targetUserIDs []string
+		err           error
+	)
+
+	switch targetType {
+	case "all_users":
+		targetUserIDs, err = h.listUserIDsByRoles("customer", "restaurant_owner", "delivery_partner")
+	case "all_riders":
+		targetUserIDs, err = h.listUserIDsByRoles("delivery_partner")
+	case "all_restaurants":
+		targetUserIDs, err = h.listUserIDsByRoles("restaurant_owner")
+	case "all_customers":
+		targetUserIDs, err = h.listUserIDsByRoles("customer")
+	case "specific_user":
+		targetID := strings.TrimSpace(body.TargetID)
+		if targetID == "" {
+			utils.BadRequest(c, "target_id is required for specific_user")
+			return
+		}
+		targetUserIDs = []string{targetID}
+	default:
+		utils.BadRequest(c, "Unsupported target_type")
+		return
+	}
 	if err != nil {
+		log.Printf("BroadcastNotification list targets failed: %v", err)
+		utils.InternalError(c, "Failed to resolve recipients")
+		return
+	}
+
+	if len(targetUserIDs) == 0 {
+		utils.Success(c, gin.H{
+			"message":     "No recipients matched the selected target",
+			"target_type": targetType,
+			"recipients":  0,
+		})
+		return
+	}
+
+	var (
+		firstDoc    map[string]interface{}
+		delivered   int
+		broadcaster *websocket.EventBroadcaster
+	)
+	if h.hub != nil {
+		broadcaster = websocket.NewEventBroadcaster(h.hub)
+	}
+
+	workerCount := 20
+	if len(targetUserIDs) < workerCount {
+		workerCount = len(targetUserIDs)
+	}
+
+	jobs := make(chan string, workerCount)
+	var (
+		mu sync.Mutex
+		wg sync.WaitGroup
+	)
+
+	sendToUser := func(userID string) {
+		id := fmt.Sprintf("notif_%s", uuid.New().String()[:8])
+		doc, createErr := h.appwrite.CreateNotification(id, map[string]interface{}{
+			"user_id":    userID,
+			"type":       nType,
+			"title":      body.Title,
+			"body":       body.Body,
+			"is_read":    false,
+			"created_at": time.Now().UTC().Format(time.RFC3339),
+		})
+		if createErr != nil {
+			log.Printf("BroadcastNotification create failed for user %s: %v", userID, createErr)
+			return
+		}
+
+		if broadcaster != nil {
+			broadcaster.BroadcastNotification(userID, body.Title, body.Body, nType)
+		}
+
+		mu.Lock()
+		delivered++
+		if firstDoc == nil {
+			firstDoc = doc
+		}
+		mu.Unlock()
+	}
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for userID := range jobs {
+				sendToUser(userID)
+			}
+		}()
+	}
+
+	for _, userID := range targetUserIDs {
+		jobs <- userID
+	}
+	close(jobs)
+	wg.Wait()
+
+	if delivered == 0 {
 		utils.InternalError(c, "Failed to send notification")
 		return
 	}
-	utils.Created(c, doc)
+
+	utils.Success(c, gin.H{
+		"message":      "Notification sent",
+		"target_type":  targetType,
+		"requested":    len(targetUserIDs),
+		"delivered":    delivered,
+		"notification": firstDoc,
+	})
 }
 
 func (h *AdminHandler) NotificationHistory(c *gin.Context) {
@@ -1148,7 +1713,9 @@ func (h *AdminHandler) DeleteAdmin(c *gin.Context) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 func (h *AdminHandler) LiveSessions(c *gin.Context) {
-	// Return online users from delivery partners
+	connectedUsers, roleCounts := h.livePresenceByRole()
+
+	// Return online riders from delivery partner records
 	online, _ := h.appwrite.ListDeliveryPartners([]string{
 		appwrite.QueryEqual("is_online", true),
 		appwrite.QueryLimit(100),
@@ -1157,8 +1724,11 @@ func (h *AdminHandler) LiveSessions(c *gin.Context) {
 	if online != nil {
 		riders = online.Total
 	}
+
 	utils.Success(c, gin.H{
-		"online_riders": riders,
+		"online_riders":     riders,
+		"connected_users":   connectedUsers,
+		"connected_by_role": roleCounts,
 	})
 }
 
@@ -1184,33 +1754,108 @@ func (h *AdminHandler) LiveStats(c *gin.Context) {
 		ridersCount = online.Total
 	}
 
+	connectedUsers, roleCounts := h.livePresenceByRole()
+	if roleCounts["delivery_partner"] == 0 && ridersCount > 0 {
+		// Fallback when riders are online but no active WebSocket presence was detected.
+		roleCounts["delivery_partner"] = ridersCount
+		if connectedUsers < ridersCount {
+			connectedUsers = ridersCount
+		}
+	}
+
 	utils.Success(c, gin.H{
-		"active_orders":    activeCount,
-		"online_riders":    ridersCount,
-		"connected_users":  0,
+		"active_orders":     activeCount,
+		"online_riders":     ridersCount,
+		"connected_users":   connectedUsers,
 		"orders_per_minute": 0,
-		"connected_by_role": gin.H{
-			"customer":         0,
-			"restaurant_owner": 0,
-			"delivery_partner": ridersCount,
-		},
+		"connected_by_role": roleCounts,
 	})
 }
 
 func (h *AdminHandler) LiveRiders(c *gin.Context) {
-	result, err := h.appwrite.ListDeliveryLocations([]string{
+	partners, err := h.appwrite.ListDeliveryPartners([]string{
 		appwrite.QueryEqual("is_online", true),
 		appwrite.QueryLimit(500),
 	})
 	if err != nil {
-		utils.InternalError(c, "Failed to get rider locations")
+		utils.InternalError(c, "Failed to get online riders")
 		return
 	}
-	docs := []map[string]interface{}{}
-	if result != nil {
-		docs = result.Documents
+
+	locResult, _ := h.appwrite.ListDeliveryLocations([]string{
+		appwrite.QueryEqual("is_online", true),
+		appwrite.QueryLimit(500),
+	})
+
+	locByRider := make(map[string]map[string]interface{})
+	if locResult != nil {
+		for _, loc := range locResult.Documents {
+			riderID, _ := loc["rider_id"].(string)
+			if riderID != "" {
+				locByRider[riderID] = loc
+			}
+		}
 	}
-	utils.Success(c, docs)
+
+	riders := make([]map[string]interface{}, 0)
+	if partners != nil {
+		for _, p := range partners.Documents {
+			riderID, _ := p["user_id"].(string)
+			if riderID == "" {
+				continue
+			}
+
+			user, _ := h.appwrite.GetUser(riderID)
+			name, _ := user["name"].(string)
+			phone, _ := user["phone"].(string)
+			if name == "" {
+				name = "Rider"
+			}
+
+			vehicleType, _ := p["vehicle_type"].(string)
+			isOnDelivery, _ := p["is_on_delivery"].(bool)
+			currentOrderID, _ := p["current_order_id"].(string)
+
+			lat, _ := p["current_latitude"].(float64)
+			lng, _ := p["current_longitude"].(float64)
+			heading, _ := p["heading"].(float64)
+			lastUpdate := time.Now().UTC().Format(time.RFC3339)
+
+			if lu, ok := p["last_location_at"].(string); ok && lu != "" {
+				lastUpdate = lu
+			}
+
+			if loc := locByRider[riderID]; loc != nil {
+				if v, ok := loc["latitude"].(float64); ok {
+					lat = v
+				}
+				if v, ok := loc["longitude"].(float64); ok {
+					lng = v
+				}
+				if v, ok := loc["heading"].(float64); ok {
+					heading = v
+				}
+				if lu, ok := loc["$updatedAt"].(string); ok && lu != "" {
+					lastUpdate = lu
+				}
+			}
+
+			riders = append(riders, gin.H{
+				"rider_id":         riderID,
+				"name":             name,
+				"phone":            phone,
+				"vehicle_type":     vehicleType,
+				"latitude":         lat,
+				"longitude":        lng,
+				"heading":          heading,
+				"is_on_delivery":   isOnDelivery,
+				"current_order_id": currentOrderID,
+				"last_update":      lastUpdate,
+			})
+		}
+	}
+
+	utils.Success(c, riders)
 }
 
 func (h *AdminHandler) LiveOrders(c *gin.Context) {
@@ -1429,9 +2074,118 @@ func (h *AdminHandler) ReplySupportIssue(c *gin.Context) {
 
 // --- Content / Banners ---
 
+func (h *AdminHandler) UploadBannerImage(c *gin.Context) {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		utils.BadRequest(c, "Image file is required")
+		return
+	}
+
+	bucketID := strings.TrimSpace(c.PostForm("bucket_id"))
+	if bucketID == "" {
+		bucketID = "promo-banners"
+	}
+
+	if fileHeader.Size <= 0 {
+		utils.BadRequest(c, "Uploaded file is empty")
+		return
+	}
+	if fileHeader.Size > 10*1024*1024 {
+		utils.BadRequest(c, "Image size must be 10MB or less")
+		return
+	}
+
+	contentType := strings.ToLower(strings.TrimSpace(fileHeader.Header.Get("Content-Type")))
+	if !strings.HasPrefix(contentType, "image/") {
+		utils.BadRequest(c, "Only image files are allowed")
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		utils.InternalError(c, "Failed to read uploaded image")
+		return
+	}
+	defer file.Close()
+
+	bytesData, err := io.ReadAll(file)
+	if err != nil {
+		utils.InternalError(c, "Failed to process uploaded image")
+		return
+	}
+
+	uploaded, err := h.appwrite.UploadFile(bucketID, fileHeader.Filename, contentType, bytesData)
+	if err != nil {
+		log.Printf("UploadBannerImage error: %v", err)
+		utils.InternalError(c, "Failed to upload banner image")
+		return
+	}
+
+	fileID, _ := uploaded["$id"].(string)
+	imageURL, _ := uploaded["view_url"].(string)
+	utils.Success(c, gin.H{
+		"bucket_id": bucketID,
+		"file_id":   fileID,
+		"image_url": imageURL,
+	})
+}
+
 func (h *AdminHandler) ListBanners(c *gin.Context) {
 	docs, _ := h.safeList(models.CollectionBanners, []string{appwrite.QueryLimit(500)})
 	utils.Success(c, docs)
+}
+
+// ListAppBanners returns active banners relevant to the authenticated app user.
+func (h *AdminHandler) ListAppBanners(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	role := middleware.GetUserRole(c)
+
+	isGoldMember := false
+	isNewUser := false
+	if user, err := h.appwrite.GetUser(userID); err == nil && user != nil {
+		isGoldMember = boolFromAny(user["is_gold_member"], false)
+		if createdAt, ok := parseBannerTime(user["$createdAt"]); ok {
+			isNewUser = time.Since(createdAt) <= 30*24*time.Hour
+		}
+	}
+
+	docs, _ := h.safeList(models.CollectionBanners, []string{appwrite.QueryLimit(500)})
+	now := time.Now().UTC()
+	filtered := make([]map[string]interface{}, 0)
+
+	for _, doc := range docs {
+		if !boolFromAny(doc["is_active"], true) {
+			continue
+		}
+
+		segment := stringFromAny(doc["target_segment"], "all")
+		if !bannerSegmentAllowed(segment, role, isGoldMember, isNewUser) {
+			continue
+		}
+
+		if from, ok := parseBannerTime(doc["valid_from"]); ok && now.Before(from) {
+			continue
+		}
+		if until, ok := parseBannerTime(doc["valid_until"]); ok && now.After(until) {
+			continue
+		}
+
+		filtered = append(filtered, doc)
+	}
+
+	sort.SliceStable(filtered, func(i, j int) bool {
+		leftOrder := intFromAny(filtered[i]["sort_order"], 9999)
+		rightOrder := intFromAny(filtered[j]["sort_order"], 9999)
+		if leftOrder != rightOrder {
+			return leftOrder < rightOrder
+		}
+
+		leftCreated, _ := parseBannerTime(filtered[i]["created_at"])
+		rightCreated, _ := parseBannerTime(filtered[j]["created_at"])
+		return leftCreated.After(rightCreated)
+	})
+
+	utils.Success(c, filtered)
 }
 
 func (h *AdminHandler) CreateBanner(c *gin.Context) {
@@ -1485,17 +2239,9 @@ func (h *AdminHandler) ListContentCategories(c *gin.Context) {
 func (h *AdminHandler) GetSettings(c *gin.Context) {
 	docs, _ := h.safeList(models.CollectionSettings, []string{appwrite.QueryLimit(1)})
 	if len(docs) > 0 {
-		utils.Success(c, docs[0])
+		utils.Success(c, normalizedSettingsResponse(docs[0]))
 	} else {
-		// Return defaults
-		utils.Success(c, gin.H{
-			"platform_name":    "Chizze",
-			"commission_rate":  15.0,
-			"delivery_radius":  10.0,
-			"min_order_value":  99.0,
-			"support_email":    "support@chizze.app",
-			"support_phone":    "+919876543210",
-		})
+		utils.Success(c, normalizedSettingsResponse(map[string]interface{}{}))
 	}
 }
 
@@ -1505,25 +2251,83 @@ func (h *AdminHandler) UpdateSettings(c *gin.Context) {
 		utils.BadRequest(c, "Invalid request body")
 		return
 	}
+
+	normalizedBody := normalizeSettingsWritePayload(body)
+	if len(normalizedBody) == 0 {
+		utils.BadRequest(c, "No valid settings fields provided")
+		return
+	}
+
 	// Try to update existing settings doc, or create one
 	docs, _ := h.safeList(models.CollectionSettings, []string{appwrite.QueryLimit(1)})
 	if len(docs) > 0 {
 		id, _ := docs[0]["$id"].(string)
-		doc, err := h.appwrite.UpdateDocument(models.CollectionSettings, id, body)
-		if err != nil {
-			utils.InternalError(c, "Failed to update settings")
-			return
+		if strings.TrimSpace(id) == "" {
+			id = "platform_settings"
 		}
-		utils.Success(c, doc)
+		doc, err := h.appwrite.UpdateDocument(models.CollectionSettings, id, normalizedBody)
+		if err != nil {
+			fallbackBodies := []map[string]interface{}{
+				filterPayloadByExistingKeys(normalizedBody, docs[0]),
+				withIntegerNumericSettings(normalizedBody),
+				withIntegerNumericSettings(filterPayloadByExistingKeys(normalizedBody, docs[0])),
+				legacySettingsPayload(withIntegerNumericSettings(normalizedBody)),
+				filterPayloadByExistingKeys(legacySettingsPayload(withIntegerNumericSettings(normalizedBody)), docs[0]),
+			}
+
+			for _, candidate := range fallbackBodies {
+				if len(candidate) == 0 {
+					continue
+				}
+				doc, err = h.appwrite.UpdateDocument(models.CollectionSettings, id, candidate)
+				if err == nil {
+					break
+				}
+			}
+
+			if err != nil {
+				log.Printf("UpdateSettings error: %v", err)
+				utils.InternalError(c, "Failed to update settings")
+				return
+			}
+		}
+		utils.Success(c, normalizedSettingsResponse(doc))
 	} else {
 		id := "platform_settings"
-		doc, err := h.appwrite.CreateDocument(models.CollectionSettings, id, body)
+
+		createData := normalizeSettingsWritePayload(map[string]interface{}(defaultPlatformSettings()))
+		for k, v := range normalizedBody {
+			createData[k] = v
+		}
+
+		var (
+			doc map[string]interface{}
+			err error
+		)
+
+		createCandidates := []map[string]interface{}{
+			createData,
+			withIntegerNumericSettings(createData),
+			legacySettingsPayload(createData),
+			withIntegerNumericSettings(legacySettingsPayload(createData)),
+		}
+
+		for _, candidate := range createCandidates {
+			if len(candidate) == 0 {
+				continue
+			}
+			doc, err = h.appwrite.CreateDocument(models.CollectionSettings, id, candidate)
+			if err == nil {
+				break
+			}
+		}
+
 		if err != nil {
 			log.Printf("CreateSettings error (collection may not exist): %v", err)
 			utils.InternalError(c, "Failed to save settings")
 			return
 		}
-		utils.Success(c, doc)
+		utils.Success(c, normalizedSettingsResponse(doc))
 	}
 }
 
