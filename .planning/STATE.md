@@ -42,17 +42,17 @@ Velocity:
 
 By Phase:
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1 | 2 | 90 min | 45 min |
+| Phase | Plans | Total  | Avg/Plan |
+| ----- | ----- | ------ | -------- |
+| 1     | 2     | 90 min | 45 min   |
 
 Recent Trend:
 
 - Last 5 plans: 01-01 (35 min), 01-02 (55 min)
 - Trend: Stable
 
-| Phase 01 P01 | 35 min | 2 tasks | 3 files |
-| Phase 01 P02 | 55 min | 3 tasks | 7 files |
+- Phase 01 P01: 35 min, 2 tasks, 3 files
+- Phase 01 P02: 55 min, 3 tasks, 7 files
 
 ## Accumulated Context
 
