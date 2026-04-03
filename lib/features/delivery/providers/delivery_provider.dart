@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -81,7 +80,6 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
       false; // guards advanceStep / completeDelivery from double-taps
   double _lastHeading = 0.0;
   double _lastSpeed = 0.0;
-  final AudioPlayer _audioPlayer = AudioPlayer();
   String? _currentUserId; // cached for Realtime filtering
 
   DeliveryNotifier(this._api, this._ws, this._location, this._realtime)
@@ -120,11 +118,6 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         // Build a minimal DeliveryRequest from the Appwrite document data.
         // The WS payload has full order details, the Realtime doc has less,
         // so we trigger a full dashboard reload which will populate active_order.
-        // Also play sound immediately to alert the rider.
-        try {
-          _audioPlayer.stop();
-          _audioPlayer.play(AssetSource('mkb.mp3'));
-        } catch (_) {}
 
         // Reload dashboard — this will pick up the pending delivery request
         // and populate state.incomingRequests via polling
@@ -165,14 +158,6 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
             );
             }
             return;
-          }
-
-          // Play mkb.mp3 sound for incoming delivery request
-          try {
-            _audioPlayer.stop();
-            _audioPlayer.play(AssetSource('mkb.mp3'));
-          } catch (e) {
-            if (kDebugMode) debugPrint('[Delivery] sound error: $e');
           }
 
           // Append to the queue so multiple orders are visible at once
@@ -259,11 +244,6 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
                 specialInstructions: orderData['special_instructions'] as String? ?? '',
                 expiresAt: DateTime.now().add(const Duration(seconds: 30)),
               );
-              // Play mkb.mp3 for polling-discovered orders too
-              try {
-                _audioPlayer.stop();
-                _audioPlayer.play(AssetSource('mkb.mp3'));
-              } catch (_) {}
               state = state.copyWith(
                 incomingRequests: [...state.incomingRequests, request],
               );
@@ -459,7 +439,6 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     _locationStreamSub?.cancel();
     _expiryTimer?.cancel();
     _pollTimer?.cancel();
-    _audioPlayer.dispose();
     super.dispose();
   }
 

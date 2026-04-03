@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-/// Service for partner order notification alerts (sound + haptic + local notification)
+/// Service for partner order notification alerts (silent notification + haptic).
 class OrderNotificationService {
   static final OrderNotificationService _instance =
       OrderNotificationService._internal();
@@ -22,7 +22,7 @@ class OrderNotificationService {
       const androidSettings =
           AndroidInitializationSettings('@mipmap/ic_launcher');
       const iosSettings = DarwinInitializationSettings(
-        requestSoundPermission: true,
+        requestSoundPermission: false,
         requestBadgePermission: true,
         requestAlertPermission: true,
       );
@@ -37,7 +37,7 @@ class OrderNotificationService {
     }
   }
 
-  /// Play new order alert: sound + haptic feedback + local notification
+  /// Trigger new-order alert with haptic feedback and silent local notification.
   Future<void> playNewOrderAlert({
     required String orderNumber,
     required String itemsSummary,
@@ -86,7 +86,7 @@ class OrderNotificationService {
     }
   }
 
-  /// Start repeated alert for unattended orders (sound + vibrate every 10s)
+  /// Start repeated alert for unattended orders (haptic feedback every 10s)
   void startRepeatedAlert() {
     stopRepeatedAlert();
     _alertTimer = Timer.periodic(const Duration(seconds: 10), (_) {

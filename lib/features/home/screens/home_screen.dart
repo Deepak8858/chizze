@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -282,12 +284,11 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildPromoBanner(BuildContext context, PromoBanner? banner) {
-    final title = (banner?.title.trim().isNotEmpty ?? false)
-        ? banner!.title
-        : '50% OFF';
+    final hasTitle = banner?.title.trim().isNotEmpty ?? false;
+    final title = hasTitle ? banner!.title : 'Today\'s Offers';
     final subtitle = (banner?.deeplink.trim().isNotEmpty ?? false)
         ? 'Tap to explore this offer'
-        : 'on your first order!\nUse code: CHIZZE50';
+        : 'Fresh deals picked for you';
 
     return Semantics(
       button: true,
@@ -365,7 +366,71 @@ class HomeScreen extends ConsumerWidget {
     ).animate(delay: 300.ms).fadeIn().slideY(begin: 0.1);
   }
 
-  void _onPromoBannerTap(BuildContext context, PromoBanner? banner) {
+  bool _isAllowedInternalPath(String path) {
+    final normalizedPath = path.split('?').first;
+
+    const exactRoutes = {
+      '/home',
+      '/search',
+      '/favorites',
+      '/orders',
+      '/profile',
+      '/role-select',
+      '/login',
+      '/onboarding',
+      '/cart',
+      '/payment',
+      '/addresses',
+      '/notifications',
+      '/coupons',
+      '/referral',
+      '/gold',
+      '/scheduled-orders',
+      '/support',
+      '/partner/dashboard',
+      '/partner/orders',
+      '/partner/menu',
+      '/partner/analytics',
+      '/partner/settings',
+      '/delivery/dashboard',
+      '/delivery/active',
+      '/delivery/earnings',
+      '/delivery/profile',
+      '/delivery/bank-details',
+      '/delivery/documents',
+      '/delivery/availability',
+    };
+    if (exactRoutes.contains(normalizedPath)) {
+      return true;
+    }
+
+    const prefixRoutes = [
+      '/restaurant/',
+      '/order-confirmation/',
+      '/order-tracking/',
+      '/order-detail/',
+      '/review/',
+      '/chat/',
+    ];
+
+    return prefixRoutes.any(normalizedPath.startsWith);
+  }
+
+  String _toInternalPath(Uri uri) {
+    final normalizedPath = uri.path.startsWith('/') ? uri.path : '/${uri.path}';
+    return uri.hasQuery ? '$normalizedPath?${uri.query}' : normalizedPath;
+  }
+
+  void _logRejectedPromoDeeplink(String message, String raw) {
+    if (kDebugMode) {
+      debugPrint('[Home] Rejected promo deeplink: $message (raw: $raw)');
+    }
+  }
+
+  Future<void> _onPromoBannerTap(
+    BuildContext context,
+    PromoBanner? banner,
+  ) async {
     final raw = banner?.deeplink.trim() ?? '';
     if (raw.isEmpty) {
       context.push('/coupons');
@@ -373,16 +438,66 @@ class HomeScreen extends ConsumerWidget {
     }
 
     if (raw.startsWith('/')) {
-      context.push(raw);
+      if (_isAllowedInternalPath(raw)) {
+        context.push(raw);
+      } else {
+        _logRejectedPromoDeeplink('Unknown internal route', raw);
+        context.push('/coupons');
+      }
       return;
     }
 
     final uri = Uri.tryParse(raw);
-    if (uri != null && uri.path.isNotEmpty) {
-      final path = uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path;
+    if (uri == null) {
+      _logRejectedPromoDeeplink('Malformed URL/path', raw);
+      context.push('/coupons');
+      return;
+    }
+
+    const trustedInternalHosts = {
+      'api.devdeepak.me',
+      'chizze.app',
+      'www.chizze.app',
+    };
+
+    if (uri.hasScheme) {
+      final scheme = uri.scheme.toLowerCase();
+      if (scheme != 'http' && scheme != 'https') {
+        _logRejectedPromoDeeplink('Unsupported URL scheme: $scheme', raw);
+        context.push('/coupons');
+        return;
+      }
+
+      final host = uri.host.toLowerCase();
+      if (trustedInternalHosts.contains(host)) {
+        final path = _toInternalPath(uri);
+        if (_isAllowedInternalPath(path)) {
+          context.push(path);
+          return;
+        }
+
+        _logRejectedPromoDeeplink('Trusted host with unknown in-app path', raw);
+        context.push('/coupons');
+        return;
+      }
+
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        _logRejectedPromoDeeplink('Failed to launch external URL', raw);
+      }
+      return;
+    }
+
+    final path = _toInternalPath(uri);
+    if (_isAllowedInternalPath(path)) {
       context.push(path);
       return;
     }
+
+    _logRejectedPromoDeeplink('Relative path is not a known route', raw);
 
     context.push('/coupons');
   }

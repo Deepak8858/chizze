@@ -153,12 +153,9 @@ func (h *Hub) PresenceSummary() (int, map[string]int) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	byRole := map[string]int{
-		"customer":         h.roleCounts["customer"],
-		"restaurant_owner": h.roleCounts["restaurant_owner"],
-		"delivery_partner": h.roleCounts["delivery_partner"],
-		"admin":            h.roleCounts["admin"],
-		"super_admin":      h.roleCounts["super_admin"],
+	byRole := make(map[string]int, len(h.roleCounts))
+	for role, count := range h.roleCounts {
+		byRole[role] = count
 	}
 
 	return len(h.userClients), byRole

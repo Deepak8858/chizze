@@ -52,7 +52,8 @@ class PushNotificationService {
     try {
       final messaging = FirebaseMessaging.instance;
 
-      // Request permission (iOS + Android 13+)
+      // Request visual notification permission (silent alerts only):
+      // alert=true, badge=true, sound=false, provisional=false.
       final settings = await messaging.requestPermission(
         alert: true,
         badge: true,
@@ -70,9 +71,10 @@ class PushNotificationService {
         if (kDebugMode) debugPrint('[Push] Foreground message: ${message.messageId} type=${message.data["type"]}');
         final msgType = message.data['type'] as String? ?? '';
 
-        // Delivery request FCM — app is foreground, play sound + show in-app UI
+        // Delivery request FCM — app is foreground, trigger in-app handling
+        // without notification sound (silent notification policy).
         // The DeliveryNotifier's Appwrite Realtime subscription will handle
-        // showing the actual request card. Here we just play the alert sound.
+        // showing the actual request card.
         if (msgType == 'delivery_request') {
           _onDeliveryRequestPush(message.data);
           return;

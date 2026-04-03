@@ -418,13 +418,12 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 	orderNumber, _ := order["order_number"].(string)
 	if customerID != "" {
 		_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
-			"user_id":    customerID,
-			"title":      "Delivery Partner Assigned",
-			"body":       "A delivery partner has been assigned to your order " + orderNumber,
-			"type":       "delivery_update",
-			"data":       map[string]interface{}{"order_id": orderID},
-			"is_read":    false,
-			"created_at": time.Now().Format(time.RFC3339),
+			"user_id": customerID,
+			"title":   "Delivery Partner Assigned",
+			"body":    "A delivery partner has been assigned to your order " + orderNumber,
+			"type":    "delivery_update",
+			"data":    map[string]interface{}{"order_id": orderID},
+			"is_read": false,
 		})
 		if h.broadcaster != nil {
 			// Send notification for the toast / push
@@ -1343,12 +1342,11 @@ func (h *DeliveryHandler) RequestPayout(c *gin.Context) {
 
 	// Create notification for partner
 	_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
-		"user_id":    userID,
-		"title":      "Payout Requested",
-		"body":       "Your payout of ₹" + fmt.Sprintf("%.0f", req.Amount) + " is being processed",
-		"type":       "payout",
-		"is_read":    false,
-		"created_at": time.Now().Format(time.RFC3339),
+		"user_id": userID,
+		"title":   "Payout Requested",
+		"body":    "Your payout of ₹" + fmt.Sprintf("%.0f", req.Amount) + " is being processed",
+		"type":    "payout",
+		"is_read": false,
 	})
 
 	utils.Created(c, payout)
@@ -1534,13 +1532,12 @@ func (h *DeliveryHandler) ReportIssue(c *gin.Context) {
 	// Notify customer
 	if customerID, _ := order["customer_id"].(string); customerID != "" {
 		_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
-			"user_id":    customerID,
-			"title":      "Delivery Issue Reported",
-			"body":       body,
-			"type":       "delivery_issue",
-			"data":       map[string]interface{}{"order_id": orderID, "reason": reason, "details": details},
-			"is_read":    false,
-			"created_at": time.Now().Format(time.RFC3339),
+			"user_id": customerID,
+			"title":   "Delivery Issue Reported",
+			"body":    body,
+			"type":    "delivery_issue",
+			"data":    map[string]interface{}{"order_id": orderID, "reason": reason, "details": details},
+			"is_read": false,
 		})
 		if h.broadcaster != nil {
 			h.broadcaster.BroadcastNotification(customerID, "Delivery Issue Reported", body, "delivery_issue")
@@ -1553,13 +1550,12 @@ func (h *DeliveryHandler) ReportIssue(c *gin.Context) {
 			ownerID, _ := restaurant["owner_id"].(string)
 			if ownerID != "" {
 				_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
-					"user_id":    ownerID,
-					"title":      "Delivery Issue Reported",
-					"body":       body,
-					"type":       "delivery_issue",
-					"data":       map[string]interface{}{"order_id": orderID, "reason": reason, "details": details},
-					"is_read":    false,
-					"created_at": time.Now().Format(time.RFC3339),
+					"user_id": ownerID,
+					"title":   "Delivery Issue Reported",
+					"body":    body,
+					"type":    "delivery_issue",
+					"data":    map[string]interface{}{"order_id": orderID, "reason": reason, "details": details},
+					"is_read": false,
 				})
 				if h.broadcaster != nil {
 					h.broadcaster.BroadcastNotification(ownerID, "Delivery Issue Reported", body, "delivery_issue")

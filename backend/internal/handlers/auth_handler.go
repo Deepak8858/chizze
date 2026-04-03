@@ -541,6 +541,10 @@ func (h *AuthHandler) CheckPhone(c *gin.Context) {
 func (h *AuthHandler) Onboard(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	role := middleware.GetUserRole(c)
+	if !h.isPartnerSignupAllowed(role) {
+		utils.Error(c, 403, partnerSignupDisabledMessage(role))
+		return
+	}
 
 	if userID == "" {
 		utils.Unauthorized(c, "Authentication required")
@@ -646,10 +650,6 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 
 		// Check if restaurant already exists for this owner
 		existing, _ := h.appwrite.GetRestaurantByOwner(userID)
-		if !h.isPartnerSignupAllowed(role) && (existing == nil || existing.Total == 0) {
-			utils.Error(c, 403, partnerSignupDisabledMessage(role))
-			return
-		}
 		if existing != nil && existing.Total > 0 {
 			// Update existing restaurant
 			restID, _ := existing.Documents[0]["$id"].(string)
@@ -705,10 +705,6 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 
 		// Check if delivery partner profile exists
 		existing, _ := h.appwrite.GetDeliveryPartner(userID)
-		if !h.isPartnerSignupAllowed(role) && (existing == nil || existing.Total == 0) {
-			utils.Error(c, 403, partnerSignupDisabledMessage(role))
-			return
-		}
 		if existing != nil && existing.Total > 0 {
 			// Update existing profile
 			partnerID, _ := existing.Documents[0]["$id"].(string)

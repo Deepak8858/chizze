@@ -425,7 +425,6 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			"type":       "delivery_request",
 			"data":       fmt.Sprintf(`{"order_id":"%s"}`, orderID),
 			"is_read":    false,
-			"created_at": time.Now().UTC().Format(time.RFC3339),
 		})
 
 		// If the WS send failed (rider app backgrounded), send FCM push to wake the app.

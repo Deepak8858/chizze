@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/api_response.dart';
@@ -77,9 +78,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
                   body: m['body'] ?? '',
                   type: _parseType(m['type']),
                   isRead: false,
-                  createdAt:
-                      DateTime.tryParse(m['created_at'] ?? '') ??
-                      DateTime.now(),
+                  createdAt: _parseCreatedAt(m),
                   actionRoute: m['data'] != null
                       ? _extractRoute(m['data'])
                       : null,
@@ -130,8 +129,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
             body: m['body'] ?? '',
             type: _parseType(m['type']),
             isRead: m['is_read'] ?? false,
-            createdAt:
-                DateTime.tryParse(m['created_at'] ?? '') ?? DateTime.now(),
+            createdAt: _parseCreatedAt(m),
             actionRoute: m['data'] != null ? _extractRoute(m['data']) : null,
           );
         }).toList();
@@ -158,10 +156,27 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   }
 
   String? _extractRoute(dynamic data) {
-    if (data is Map && data['order_id'] != null) {
-      return '/order-detail/${data['order_id']}';
+    dynamic payload = data;
+    if (payload is String && payload.isNotEmpty) {
+      try {
+        payload = jsonDecode(payload);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    if (payload is Map && payload['order_id'] != null) {
+      return '/order-detail/${payload['order_id']}';
     }
     return null;
+  }
+
+  DateTime _parseCreatedAt(Map<dynamic, dynamic> notification) {
+    final raw = notification['created_at'] ?? notification['\$createdAt'];
+    if (raw is String) {
+      return DateTime.tryParse(raw) ?? DateTime.now();
+    }
+    return DateTime.now();
   }
 
   void markRead(String id) {

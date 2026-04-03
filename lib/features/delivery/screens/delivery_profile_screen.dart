@@ -80,6 +80,12 @@ class DeliveryProfileScreen extends ConsumerWidget {
                 mode: LaunchMode.externalApplication,
               ),
             ),
+            _buildMenuItem(
+              Icons.privacy_tip_rounded,
+              'Privacy Policy',
+              subtitle: 'How we collect and use your data',
+              onTap: () => context.push('/privacy-policy'),
+            ),
             const SizedBox(height: AppSpacing.xxl),
 
             // ─── Logout ───

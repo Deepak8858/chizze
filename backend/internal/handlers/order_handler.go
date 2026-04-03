@@ -877,13 +877,12 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		}
 		if notifTitle != "" {
 			_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
-				"user_id":    customerID,
-				"title":      notifTitle,
-				"body":       notifBody,
-				"type":       "order_status",
-				"data":       map[string]interface{}{"order_id": orderID, "status": req.Status},
-				"is_read":    false,
-				"created_at": now,
+				"user_id": customerID,
+				"title":   notifTitle,
+				"body":    notifBody,
+				"type":    "order_status",
+				"data":    map[string]interface{}{"order_id": orderID, "status": req.Status},
+				"is_read": false,
 			})
 			// Broadcast via WebSocket for instant updates to customer.
 			// Include delivery partner details so the client can update UI

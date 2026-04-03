@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -175,24 +176,38 @@ func main() {
 
 	// Android App Links verification endpoints.
 	// Keep this on the API domain so Play Console can validate autoVerify hosts.
-	assetLinksPayload := []gin.H{
-		{
-			"relation": []string{"delegate_permission/common.handle_all_urls"},
-			"target": gin.H{
-				"namespace":                "android_app",
-				"package_name":             cfg.AndroidAppPackage,
-				"sha256_cert_fingerprints": cfg.AndroidAssetLinksFingerprints,
-			},
-		},
+	androidAppPackage := strings.TrimSpace(cfg.AndroidAppPackage)
+	assetLinkFingerprints := make([]string, 0, len(cfg.AndroidAssetLinksFingerprints))
+	for _, fp := range cfg.AndroidAssetLinksFingerprints {
+		trimmed := strings.TrimSpace(fp)
+		if trimmed != "" {
+			assetLinkFingerprints = append(assetLinkFingerprints, trimmed)
+		}
 	}
-	r.GET("/.well-known/assetlinks.json", func(c *gin.Context) {
-		c.Header("Cache-Control", "public, max-age=300")
-		c.JSON(http.StatusOK, assetLinksPayload)
-	})
-	r.GET("/assetlinks.json", func(c *gin.Context) {
-		c.Header("Cache-Control", "public, max-age=300")
-		c.JSON(http.StatusOK, assetLinksPayload)
-	})
+
+	if androidAppPackage != "" && len(assetLinkFingerprints) > 0 {
+		assetLinksPayload := []gin.H{
+			{
+				"relation": []string{"delegate_permission/common.handle_all_urls"},
+				"target": gin.H{
+					"namespace":                "android_app",
+					"package_name":             androidAppPackage,
+					"sha256_cert_fingerprints": assetLinkFingerprints,
+				},
+			},
+		}
+
+		r.GET("/.well-known/assetlinks.json", func(c *gin.Context) {
+			c.Header("Cache-Control", "public, max-age=300")
+			c.JSON(http.StatusOK, assetLinksPayload)
+		})
+		r.GET("/assetlinks.json", func(c *gin.Context) {
+			c.Header("Cache-Control", "public, max-age=300")
+			c.JSON(http.StatusOK, assetLinksPayload)
+		})
+	} else {
+		log.Printf("WARNING: Android App Links endpoints disabled: ANDROID_APP_PACKAGE=%q fingerprints=%d", androidAppPackage, len(assetLinkFingerprints))
+	}
 
 	// ─── Swagger UI (dev only) ───
 	if cfg.GinMode != "release" {

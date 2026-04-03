@@ -111,7 +111,7 @@ class ProfileScreen extends ConsumerWidget {
                 _SettingsTile(
                   icon: Icons.privacy_tip_outlined,
                   label: 'Privacy Policy',
-                  onTap: () => launchUrl(Uri.parse('https://chizze.app/privacy')),
+                  onTap: () => context.push('/privacy-policy'),
                 ),
               ]),
               const SizedBox(height: AppSpacing.xxl),
@@ -164,13 +164,13 @@ class ProfileScreen extends ConsumerWidget {
               ? CachedNetworkImage(
                   imageUrl: profile.avatarUrl!,
                   fit: BoxFit.cover,
-                  placeholder: (_, __) => Center(
+                  placeholder: (context, url) => Center(
                     child: Text(
                       profile.initials,
                       style: AppTypography.h1.copyWith(fontSize: 30),
                     ),
                   ),
-                  errorWidget: (_, __, ___) => Container(
+                  errorWidget: (context, url, error) => Container(
                     decoration: BoxDecoration(
                       gradient: AppColors.primaryGradient,
                     ),

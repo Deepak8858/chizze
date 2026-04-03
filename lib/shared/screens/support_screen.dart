@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/theme.dart';
 import '../widgets/glass_card.dart';
@@ -68,7 +69,7 @@ class SupportScreen extends StatelessWidget {
             _LegalLink(
               icon: Icons.privacy_tip_rounded,
               title: 'Privacy Policy',
-              url: 'https://chizze.com/privacy',
+              onTap: () => context.push('/privacy-policy'),
               index: 1,
             ),
             _LegalLink(
@@ -357,12 +358,14 @@ class _LegalLink extends StatelessWidget {
   const _LegalLink({
     required this.icon,
     required this.title,
-    required this.url,
+    this.url,
+    this.onTap,
     required this.index,
   });
   final IconData icon;
   final String title;
-  final String url;
+  final String? url;
+  final VoidCallback? onTap;
   final int index;
 
   @override
@@ -381,10 +384,16 @@ class _LegalLink extends StatelessWidget {
           size: 14,
           color: AppColors.textTertiary,
         ),
-        onTap: () => launchUrl(
-          Uri.parse(url),
-          mode: LaunchMode.externalApplication,
-        ),
+        onTap:
+            onTap ??
+            () {
+              final target = url;
+              if (target == null || target.isEmpty) return;
+              launchUrl(
+                Uri.parse(target),
+                mode: LaunchMode.externalApplication,
+              );
+            },
         dense: true,
       ),
     ).animate(delay: (600 + index * 60).ms).fadeIn().slideX(begin: 0.03);

@@ -34,13 +34,24 @@ class PromoBanner {
       return 9999;
     }
 
+    bool parseIsActive(dynamic value) {
+      if (value == null) return true;
+      if (value is bool) return value;
+      if (value is num) return value == 1;
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        return normalized == 'true' || normalized == '1';
+      }
+      return false;
+    }
+
     return PromoBanner(
       id: map['\$id']?.toString() ?? '',
       title: map['title']?.toString() ?? '',
       imageUrl: map['image_url']?.toString() ?? '',
       deeplink: map['deeplink']?.toString() ?? '',
       targetSegment: map['target_segment']?.toString() ?? 'all',
-      isActive: map['is_active'] == null ? true : map['is_active'] == true,
+      isActive: parseIsActive(map['is_active']),
       validFrom: parseDate(map['valid_from']),
       validUntil: parseDate(map['valid_until']),
       sortOrder: parseSort(map['sort_order']),

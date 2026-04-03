@@ -170,7 +170,7 @@ func (s *AppwriteService) GetCoupon(id string) (map[string]interface{}, error) {
 func (s *AppwriteService) ListNotifications(userID string, limit, offset int) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionNotifications, []string{
 		appwrite.QueryEqual("user_id", userID),
-		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryOrderDesc("$createdAt"),
 		appwrite.QueryLimit(limit),
 		appwrite.QueryOffset(offset),
 	})

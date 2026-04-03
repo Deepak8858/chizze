@@ -220,13 +220,22 @@ export const analyticsApi = {
 export const contentApi = {
   banners: () => GET("/admin/content/banners"),
   getBanners: () => GET("/admin/content/banners"),
-  uploadBannerImage: (formData: FormData) =>
-    api
-      .post("/admin/content/banners/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+  uploadBannerImage: (formData: FormData) => {
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("chizze_admin_token")
+        : null;
+
+    return axios
+      .post(`${BASE_URL}/admin/content/banners/upload`, formData, {
         timeout: 60_000,
+        withCredentials: true,
+        // Intentionally avoid forcing Content-Type here so the browser can
+        // attach the multipart boundary for FormData uploads.
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
-      .then((res) => res.data),
+      .then((res) => res.data);
+  },
   createBanner: (body: Record<string, unknown>) =>
     POST("/admin/content/banners", body),
   updateBanner: (id: string, body: Record<string, unknown>) =>

@@ -5,7 +5,7 @@ import { contentApi } from "@/lib/api";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toast } from "sonner";
 import type { Banner } from "@/types";
-import { Plus, Trash2, ImageIcon, Layout } from "lucide-react";
+import { Plus, Trash2, ImageIcon, Layout, Pencil } from "lucide-react";
 
 const PROMO_BANNERS_BUCKET =
   process.env.NEXT_PUBLIC_APPWRITE_BANNERS_BUCKET ?? "promo-banners";
@@ -17,7 +17,40 @@ const bannerFormFields = [
   { label: "Sort Order", key: "sort_order", type: "number" },
 ] as const;
 
-function BannerCard({ banner, onDelete, onToggle }: { banner: Banner; onDelete: (id: string) => void; onToggle: (id: string, active: boolean) => void }) {
+const parseSafeNumber = (value: string) => {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+type BannerFormState = {
+  title: string;
+  image_url: string;
+  deeplink: string;
+  target_segment: Banner["target_segment"];
+  sort_order: number;
+  is_active: boolean;
+};
+
+const getDefaultBannerForm = (): BannerFormState => ({
+  title: "",
+  image_url: "",
+  deeplink: "",
+  target_segment: "customers",
+  sort_order: 0,
+  is_active: true,
+});
+
+function BannerCard({
+  banner,
+  onDelete,
+  onToggle,
+  onEdit,
+}: {
+  banner: Banner;
+  onDelete: (id: string) => void;
+  onToggle: (id: string, active: boolean) => void;
+  onEdit: (banner: Banner) => void;
+}) {
   return (
     <div className="card overflow-hidden">
       {banner.image_url ? (
@@ -45,6 +78,13 @@ function BannerCard({ banner, onDelete, onToggle }: { banner: Banner; onDelete: 
         </p>
         <div className="flex items-center gap-2">
           <button
+            title="Edit banner"
+            onClick={() => onEdit(banner)}
+            className="text-text-muted hover:text-white transition-colors px-2"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
             onClick={() => onToggle(banner.$id, !banner.is_active)}
             className="flex-1 text-xs py-1 rounded bg-white/5 hover:bg-white/10 text-text-muted transition-colors"
           >
@@ -66,9 +106,37 @@ function BannerCard({ banner, onDelete, onToggle }: { banner: Banner; onDelete: 
 export default function ContentPage() {
   const [activeTab, setActiveTab] = useState<"banners" | "categories">("banners");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title: "", image_url: "", deeplink: "", target_segment: "all", sort_order: 1, is_active: true });
+  const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
+  const [form, setForm] = useState<BannerFormState>(getDefaultBannerForm);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const qc = useQueryClient();
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingBannerId(null);
+    setForm(getDefaultBannerForm());
+  };
+
+  const openCreateForm = () => {
+    setEditingBannerId(null);
+    setForm(getDefaultBannerForm());
+    setShowForm(true);
+  };
+
+  const openEditForm = (banner: Banner) => {
+    setEditingBannerId(banner.$id);
+    setForm({
+      title: banner.title ?? "",
+      image_url: banner.image_url ?? "",
+      deeplink: banner.deeplink ?? "",
+      target_segment: banner.target_segment ?? "all",
+      sort_order: Number.isFinite(Number(banner.sort_order))
+        ? Number(banner.sort_order)
+        : 1,
+      is_active: Boolean(banner.is_active),
+    });
+    setShowForm(true);
+  };
 
   const { data: banners, isLoading: bannersLoading } = useQuery({
     queryKey: ["admin-banners"],
@@ -81,9 +149,24 @@ export default function ContentPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (body: typeof form) => contentApi.createBanner(body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-banners"] }); toast.success("Banner created"); setShowForm(false); },
+    mutationFn: (body: BannerFormState) => contentApi.createBanner(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-banners"] });
+      toast.success("Banner created");
+      closeForm();
+    },
     onError: () => toast.error("Failed"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: BannerFormState }) =>
+      contentApi.updateBanner(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-banners"] });
+      toast.success("Banner updated");
+      closeForm();
+    },
+    onError: () => toast.error("Failed to update banner"),
   });
 
   const deleteMutation = useMutation({
@@ -127,6 +210,31 @@ export default function ContentPage() {
     }
   };
 
+  const isSavingBanner = createMutation.isPending || updateMutation.isPending;
+
+  const handleBannerSubmit = () => {
+    const payload: BannerFormState = {
+      title: form.title.trim(),
+      image_url: form.image_url.trim(),
+      deeplink: form.deeplink.trim(),
+      target_segment: form.target_segment,
+      sort_order: form.sort_order,
+      is_active: form.is_active,
+    };
+
+    if (!payload.title || !payload.image_url) {
+      toast.error("Title and image are required");
+      return;
+    }
+
+    if (editingBannerId) {
+      updateMutation.mutate({ id: editingBannerId, body: payload });
+      return;
+    }
+
+    createMutation.mutate(payload);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -140,7 +248,7 @@ export default function ContentPage() {
         </div>
         {activeTab === "banners" && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={openCreateForm}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition-colors"
           >
             <Plus size={14} /> Add Banner
@@ -177,6 +285,7 @@ export default function ContentPage() {
                 onToggle={(id, active) =>
                   toggleMutation.mutate({ id, is_active: active })
                 }
+                onEdit={openEditForm}
               />
             ))}
           </div>
@@ -218,13 +327,15 @@ export default function ContentPage() {
       {showForm && (
         <div
           className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
-          onClick={() => setShowForm(false)}
+          onClick={closeForm}
         >
           <div
             className="card w-full max-w-sm p-6 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-bold text-white">New Banner</h2>
+            <h2 className="text-lg font-bold text-white">
+              {editingBannerId ? "Edit Banner" : "New Banner"}
+            </h2>
             {bannerFormFields.map(({ label, key, type }) => (
               <div key={key}>
                 <label className="text-xs text-text-muted mb-1 block">
@@ -240,7 +351,7 @@ export default function ContentPage() {
                       ...f,
                       [key]:
                         type === "number"
-                          ? Number(e.target.value || 0)
+                          ? parseSafeNumber(e.target.value)
                           : e.target.value,
                     }))
                   }
@@ -275,7 +386,11 @@ export default function ContentPage() {
                 title="Target segment"
                 value={form.target_segment}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, target_segment: e.target.value }))
+                  setForm((f) => ({
+                    ...f,
+                    target_segment: e.target
+                      .value as BannerFormState["target_segment"],
+                  }))
                 }
                 className="w-full bg-surface-200 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
               >
@@ -285,17 +400,36 @@ export default function ContentPage() {
                   </option>
                 ))}
               </select>
+              <p className="text-[11px] text-text-muted mt-1">
+                For the customer home offers banner, keep this as customers.
+              </p>
             </div>
+            <label className="flex items-center gap-2 text-xs text-text-muted">
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, is_active: e.target.checked }))
+                }
+                className="rounded border-white/10 bg-surface-200"
+              />
+              Active banner
+            </label>
             <div className="flex gap-3">
               <button
-                onClick={() => createMutation.mutate(form)}
-                disabled={!form.title || !form.image_url || isUploadingImage}
+                onClick={handleBannerSubmit}
+                disabled={
+                  !form.title ||
+                  !form.image_url ||
+                  isUploadingImage ||
+                  isSavingBanner
+                }
                 className="flex-1 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium disabled:opacity-50 transition-colors"
               >
-                Create
+                {editingBannerId ? "Save" : "Create"}
               </button>
               <button
-                onClick={() => setShowForm(false)}
+                onClick={closeForm}
                 className="flex-1 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-text-secondary text-sm transition-colors"
               >
                 Cancel

@@ -146,8 +146,15 @@ func ServeWs(hub *Hub, c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	role, _ := c.Get("role")
-	roleStr, _ := role.(string)
+	roleStr := "unknown"
+	roleVal, hasRole := c.Get("role")
+	if !hasRole {
+		log.Printf("[ws] ServeWs: role missing in context for user %v — using unknown", userID)
+	} else if typedRole, ok := roleVal.(string); ok && strings.TrimSpace(typedRole) != "" {
+		roleStr = typedRole
+	} else {
+		log.Printf("[ws] ServeWs: invalid role type/value in context for user %v — using unknown", userID)
+	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {

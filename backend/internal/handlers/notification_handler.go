@@ -42,6 +42,16 @@ func (h *NotificationHandler) List(c *gin.Context) {
 		utils.InternalError(c, "Failed to fetch notifications")
 		return
 	}
+
+	for _, doc := range result.Documents {
+		if existing, _ := doc["created_at"].(string); existing != "" {
+			continue
+		}
+		if createdAt, _ := doc["$createdAt"].(string); createdAt != "" {
+			doc["created_at"] = createdAt
+		}
+	}
+
 	utils.Paginated(c, result.Documents, pg.Page, pg.PerPage, result.Total)
 }
 

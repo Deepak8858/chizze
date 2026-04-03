@@ -42,6 +42,8 @@ class PromoBannerNotifier extends StateNotifier<PromoBannerState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final response = await _api.get(ApiConfig.contentBanners);
+      if (!mounted) return;
+
       if (response.success && response.data != null) {
         final data = response.data;
         final docs = data is List
@@ -55,8 +57,10 @@ class PromoBannerNotifier extends StateNotifier<PromoBannerState> {
             .map(PromoBanner.fromMap)
             .toList();
 
+        if (!mounted) return;
         state = state.copyWith(banners: banners, isLoading: false);
       } else {
+        if (!mounted) return;
         state = state.copyWith(
           banners: const [],
           isLoading: false,
@@ -67,6 +71,7 @@ class PromoBannerNotifier extends StateNotifier<PromoBannerState> {
       if (kDebugMode) {
         debugPrint('[Home] Promo banners ApiException: ${e.message}');
       }
+      if (!mounted) return;
       state = state.copyWith(
         banners: const [],
         isLoading: false,
@@ -76,6 +81,7 @@ class PromoBannerNotifier extends StateNotifier<PromoBannerState> {
       if (kDebugMode) {
         debugPrint('[Home] Promo banners error: $e');
       }
+      if (!mounted) return;
       state = state.copyWith(
         banners: const [],
         isLoading: false,

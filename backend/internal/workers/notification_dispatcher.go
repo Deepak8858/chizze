@@ -90,19 +90,18 @@ func (w *NotificationDispatcher) processQueue(ctx context.Context) {
 
 	// 1. Store notification in Appwrite
 	notifData := map[string]interface{}{
-		"user_id":    notif.UserID,
-		"title":      notif.Title,
-		"body":       notif.Body,
-		"type":       notif.Type,
-		"is_read":    false,
-		"created_at": time.Now().UTC().Format(time.RFC3339),
+		"user_id": notif.UserID,
+		"title":   notif.Title,
+		"body":    notif.Body,
+		"type":    notif.Type,
+		"is_read": false,
 	}
 	if notif.Data != nil {
 		dataJSON, _ := json.Marshal(notif.Data)
 		notifData["data"] = string(dataJSON)
 	}
 
-	_, err = w.awService.CreateNotification("", notifData)
+	_, err = w.awService.CreateNotification("unique()", notifData)
 	if err != nil {
 		log.Printf("[worker] NotificationDispatcher: failed storing notification for %s: %v", notif.UserID, err)
 		// Don't return — still try to send real-time

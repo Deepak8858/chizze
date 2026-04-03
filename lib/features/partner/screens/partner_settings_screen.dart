@@ -107,11 +107,7 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
               Icons.privacy_tip_rounded,
               'Privacy Policy',
               subtitle: 'How we handle your data',
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Coming soon')),
-                );
-              },
+              onTap: () => context.push('/privacy-policy'),
             ),
 
             const SizedBox(height: AppSpacing.xxl),
@@ -185,7 +181,7 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
                       ? Image.network(
                           imageUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
+                          errorBuilder: (context, error, stackTrace) =>
                               _buildPlaceholder(),
                         )
                       : _buildPlaceholder(),
@@ -322,7 +318,8 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
           ),
           Switch.adaptive(
             value: pState.isOnline,
-            activeColor: AppColors.primary,
+            activeTrackColor: AppColors.primary.withValues(alpha: 0.5),
+            activeThumbColor: AppColors.primary,
             onChanged: (_) =>
                 ref.read(partnerProvider.notifier).toggleOnline(),
           ),
