@@ -110,12 +110,19 @@ export interface Order {
   $id: string;
   order_number: string;
   customer_id: string;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
   restaurant_id: string;
   restaurant_name: string;
   delivery_partner_id?: string;
   delivery_partner_name?: string;
   delivery_partner_phone?: string;
   delivery_address_id: string;
+  delivery_address_line?: string;
+  delivery_city?: string;
+  delivery_latitude?: number;
+  delivery_longitude?: number;
   items: string; // JSON string → parse to OrderItem[]
   item_total: number;
   delivery_type: string;
