@@ -7,11 +7,11 @@ Core Value: Admin sees complete customer and delivery context on each order deta
 
 ### Admin Order Details
 
-- [ ] AORD-01: Admin order detail view displays customer name for the selected order.
-- [ ] AORD-02: Admin order detail view displays customer phone number for the selected order.
-- [ ] AORD-03: Admin order detail view displays delivery location details, including resolved address and coordinates when available.
-- [ ] AORD-04: Admin backend endpoint GET /api/v1/admin/orders/:id returns enriched customer and address fields while preserving current order payload fields.
-- [ ] AORD-05: UI and API behavior include safe fallback states for missing customer/location fields without page breakage.
+- [x] AORD-01: Admin order detail view displays customer name for the selected order.
+- [x] AORD-02: Admin order detail view displays customer phone number for the selected order.
+- [x] AORD-03: Admin order detail view displays delivery location details, including resolved address and coordinates when available.
+- [x] AORD-04: Admin backend endpoint GET /api/v1/admin/orders/:id returns enriched customer and address fields while preserving current order payload fields.
+- [x] AORD-05: UI and API behavior include safe fallback states for missing customer/location fields without page breakage.
 
 ## v2 Requirements
 
@@ -31,11 +31,11 @@ Core Value: Admin sees complete customer and delivery context on each order deta
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AORD-01 | Phase 1 | Pending |
-| AORD-02 | Phase 1 | Pending |
-| AORD-03 | Phase 1 | Pending |
-| AORD-04 | Phase 1 | Pending |
-| AORD-05 | Phase 1 | Pending |
+| AORD-01 | Phase 1 | Complete |
+| AORD-02 | Phase 1 | Complete |
+| AORD-03 | Phase 1 | Complete |
+| AORD-04 | Phase 1 | Complete |
+| AORD-05 | Phase 1 | Complete |
 
 Coverage:
 - v1 requirements: 5 total
@@ -44,4 +44,4 @@ Coverage:
 
 ---
 Requirements defined: 2026-04-03
-Last updated: 2026-04-03 after phase bootstrap
+Last updated: 2026-04-03 after phase completion
