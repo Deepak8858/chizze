@@ -43,3 +43,15 @@ Phases execute in numeric order: 1
 | Phase                            | Plans Complete | Status   | Completed  |
 | -------------------------------- | -------------- | -------- | ---------- |
 | 1. Admin Order Detail Enrichment | 2/2            | Complete | 2026-04-03 |
+
+### Phase 2: Clear stuck orders by deleting them from the server
+
+**Goal:** Admin can safely remove stale stuck orders from the server without impacting active order flow.
+**Requirements**: [AOC-01, AOC-02, AOC-03, AOC-04, AOC-05]
+**Depends on:** Phase 1
+**Plans:** 2 plans
+
+Plans:
+
+- [x] 02-01-PLAN.md - Backend stuck-order preview and bulk hard-delete APIs with safety guards
+- [ ] 02-02-PLAN.md - Admin orders cleanup flow with explicit confirmation and regression tests
