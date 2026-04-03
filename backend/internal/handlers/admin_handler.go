@@ -213,6 +213,148 @@ func stringFromAny(value interface{}, defaultValue string) string {
 	return defaultValue
 }
 
+const (
+	defaultStuckOrderMinAgeMinutes = 120
+	maxStuckOrderMinAgeMinutes     = 43200
+)
+
+var (
+	stuckOrderTerminalStatuses = map[string]struct{}{
+		models.OrderStatusDelivered: {},
+		models.OrderStatusCancelled: {},
+	}
+	stuckOrderBlockedStatuses = map[string]struct{}{
+		models.OrderStatusPlaced:         {},
+		models.OrderStatusConfirmed:      {},
+		models.OrderStatusPreparing:      {},
+		models.OrderStatusReady:          {},
+		models.OrderStatusPickedUp:       {},
+		models.OrderStatusOutForDelivery: {},
+	}
+)
+
+func parseCleanupCSV(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func canonicalOrderStatus(raw string) string {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	normalized = strings.ReplaceAll(normalized, "_", "")
+	normalized = strings.ReplaceAll(normalized, "-", "")
+	normalized = strings.ReplaceAll(normalized, " ", "")
+
+	switch normalized {
+	case "placed":
+		return models.OrderStatusPlaced
+	case "confirmed":
+		return models.OrderStatusConfirmed
+	case "preparing":
+		return models.OrderStatusPreparing
+	case "ready":
+		return models.OrderStatusReady
+	case "pickedup":
+		return models.OrderStatusPickedUp
+	case "outfordelivery":
+		return models.OrderStatusOutForDelivery
+	case "delivered":
+		return models.OrderStatusDelivered
+	case "cancelled", "canceled":
+		return models.OrderStatusCancelled
+	default:
+		return ""
+	}
+}
+
+func uniqueSortedStatuses(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	uniq := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		uniq[value] = struct{}{}
+	}
+	out := make([]string, 0, len(uniq))
+	for value := range uniq {
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func normalizeStuckOrderStatuses(raw string) (requested, effective, blocked, ignored []string) {
+	requestedRaw := parseCleanupCSV(raw)
+	if len(requestedRaw) == 0 {
+		effective = []string{models.OrderStatusCancelled, models.OrderStatusDelivered}
+		requested = append([]string{}, effective...)
+		sort.Strings(effective)
+		sort.Strings(requested)
+		return requested, effective, nil, nil
+	}
+
+	for _, value := range requestedRaw {
+		canonical := canonicalOrderStatus(value)
+		if canonical == "" {
+			ignored = append(ignored, strings.TrimSpace(value))
+			continue
+		}
+
+		requested = append(requested, canonical)
+		if _, ok := stuckOrderTerminalStatuses[canonical]; ok {
+			effective = append(effective, canonical)
+			continue
+		}
+		if _, ok := stuckOrderBlockedStatuses[canonical]; ok {
+			blocked = append(blocked, canonical)
+			continue
+		}
+		ignored = append(ignored, canonical)
+	}
+
+	return uniqueSortedStatuses(requested), uniqueSortedStatuses(effective), uniqueSortedStatuses(blocked), uniqueSortedStatuses(ignored)
+}
+
+func parseCleanupMinAgeMinutes(raw string) int {
+	if strings.TrimSpace(raw) == "" {
+		return defaultStuckOrderMinAgeMinutes
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || parsed <= 0 {
+		return defaultStuckOrderMinAgeMinutes
+	}
+	if parsed > maxStuckOrderMinAgeMinutes {
+		return maxStuckOrderMinAgeMinutes
+	}
+	return parsed
+}
+
+func buildStuckOrderQueries(statuses []string, cutoff time.Time, p models.Pagination) []string {
+	statusValues := make([]interface{}, 0, len(statuses))
+	for _, status := range statuses {
+		statusValues = append(statusValues, status)
+	}
+
+	return []string{
+		appwrite.QueryEqual("status", statusValues...),
+		appwrite.QueryLessThan("placed_at", cutoff.UTC().Format(time.RFC3339)),
+		appwrite.QueryOrderDesc("placed_at"),
+		appwrite.QueryLimit(p.PerPage),
+		appwrite.QueryOffset(p.Offset()),
+	}
+}
+
 func parseBannerTime(value interface{}) (time.Time, bool) {
 	s, ok := value.(string)
 	if !ok || strings.TrimSpace(s) == "" {
@@ -1037,6 +1179,47 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 		return
 	}
 	utils.Paginated(c, result.Documents, p.Page, p.PerPage, result.Total)
+}
+
+func (h *AdminHandler) PreviewStuckOrders(c *gin.Context) {
+	p := models.ParsePagination(c)
+	requested, effective, blocked, ignored := normalizeStuckOrderStatuses(c.Query("statuses"))
+	minAgeMinutes := parseCleanupMinAgeMinutes(c.Query("min_age_minutes"))
+	cutoff := time.Now().UTC().Add(-time.Duration(minAgeMinutes) * time.Minute)
+
+	orders := []map[string]interface{}{}
+	total := 0
+	if len(effective) > 0 {
+		queries := buildStuckOrderQueries(effective, cutoff, p)
+		result, err := h.appwrite.ListOrders(queries)
+		if err != nil {
+			utils.InternalError(c, "Failed to preview stuck orders")
+			return
+		}
+		if result != nil {
+			orders = result.Documents
+			total = result.Total
+		}
+	}
+
+	utils.Success(c, gin.H{
+		"orders":          orders,
+		"eligible_count":  total,
+		"blocked_count":   len(blocked),
+		"min_age_minutes": minAgeMinutes,
+		"cutoff_time":     cutoff.Format(time.RFC3339),
+		"filters": gin.H{
+			"requested_statuses": requested,
+			"effective_statuses": effective,
+			"blocked_statuses":   blocked,
+			"ignored_statuses":   ignored,
+		},
+		"pagination": gin.H{
+			"page":     p.Page,
+			"per_page": p.PerPage,
+			"total":    total,
+		},
+	})
 }
 
 func (h *AdminHandler) GetOrder(c *gin.Context) {
