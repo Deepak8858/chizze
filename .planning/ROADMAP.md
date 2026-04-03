@@ -13,6 +13,8 @@ Phase Numbering:
 
 - [x] Phase 1: Admin Order Detail Enrichment - Show complete customer and location context in admin order detail.
   (completed 2026-04-03)
+- [x] Phase 2: Clear stuck orders by deleting them from the server - Safely remove stale stuck orders from server-side storage.
+  (completed 2026-04-03)
 
 ## Phase Details
 
@@ -38,11 +40,12 @@ Plans:
 
 Execution Order:
 
-Phases execute in numeric order: 1
+Phases execute in numeric order: 1 -> 2
 
 | Phase                            | Plans Complete | Status   | Completed  |
 | -------------------------------- | -------------- | -------- | ---------- |
 | 1. Admin Order Detail Enrichment | 2/2            | Complete | 2026-04-03 |
+| 2. Clear stuck orders by deleting them from the server | 2/2 | Complete | 2026-04-03 |
 
 ### Phase 2: Clear stuck orders by deleting them from the server
 
@@ -54,4 +57,4 @@ Phases execute in numeric order: 1
 Plans:
 
 - [x] 02-01-PLAN.md - Backend stuck-order preview and bulk hard-delete APIs with safety guards
-- [ ] 02-02-PLAN.md - Admin orders cleanup flow with explicit confirmation and regression tests
+- [x] 02-02-PLAN.md - Admin orders cleanup flow with explicit confirmation and regression tests
