@@ -216,6 +216,8 @@ func stringFromAny(value interface{}, defaultValue string) string {
 const (
 	defaultStuckOrderMinAgeMinutes = 120
 	maxStuckOrderMinAgeMinutes     = 43200
+	defaultStuckOrderDeleteLimit   = 200
+	maxStuckOrderDeleteLimit       = 500
 )
 
 var (
@@ -294,8 +296,7 @@ func uniqueSortedStatuses(values []string) []string {
 	return out
 }
 
-func normalizeStuckOrderStatuses(raw string) (requested, effective, blocked, ignored []string) {
-	requestedRaw := parseCleanupCSV(raw)
+func normalizeStuckOrderStatusesFromValues(requestedRaw []string) (requested, effective, blocked, ignored []string) {
 	if len(requestedRaw) == 0 {
 		effective = []string{models.OrderStatusCancelled, models.OrderStatusDelivered}
 		requested = append([]string{}, effective...)
@@ -326,21 +327,46 @@ func normalizeStuckOrderStatuses(raw string) (requested, effective, blocked, ign
 	return uniqueSortedStatuses(requested), uniqueSortedStatuses(effective), uniqueSortedStatuses(blocked), uniqueSortedStatuses(ignored)
 }
 
+func normalizeStuckOrderStatuses(raw string) (requested, effective, blocked, ignored []string) {
+	return normalizeStuckOrderStatusesFromValues(parseCleanupCSV(raw))
+}
+
+func normalizeCleanupMinAgeMinutes(value int) int {
+	if value <= 0 {
+		return defaultStuckOrderMinAgeMinutes
+	}
+	if value > maxStuckOrderMinAgeMinutes {
+		return maxStuckOrderMinAgeMinutes
+	}
+	return value
+}
+
 func parseCleanupMinAgeMinutes(raw string) int {
 	if strings.TrimSpace(raw) == "" {
 		return defaultStuckOrderMinAgeMinutes
 	}
 	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || parsed <= 0 {
+	if err != nil {
 		return defaultStuckOrderMinAgeMinutes
 	}
-	if parsed > maxStuckOrderMinAgeMinutes {
-		return maxStuckOrderMinAgeMinutes
+	return normalizeCleanupMinAgeMinutes(parsed)
+}
+
+func normalizeStuckOrderDeleteLimit(value int) int {
+	if value <= 0 {
+		return defaultStuckOrderDeleteLimit
 	}
-	return parsed
+	if value > maxStuckOrderDeleteLimit {
+		return maxStuckOrderDeleteLimit
+	}
+	return value
 }
 
 func buildStuckOrderQueries(statuses []string, cutoff time.Time, p models.Pagination) []string {
+	return buildStuckOrderQueriesWithPaging(statuses, cutoff, p.PerPage, p.Offset())
+}
+
+func buildStuckOrderQueriesWithPaging(statuses []string, cutoff time.Time, limit, offset int) []string {
 	statusValues := make([]interface{}, 0, len(statuses))
 	for _, status := range statuses {
 		statusValues = append(statusValues, status)
@@ -350,8 +376,8 @@ func buildStuckOrderQueries(statuses []string, cutoff time.Time, p models.Pagina
 		appwrite.QueryEqual("status", statusValues...),
 		appwrite.QueryLessThan("placed_at", cutoff.UTC().Format(time.RFC3339)),
 		appwrite.QueryOrderDesc("placed_at"),
-		appwrite.QueryLimit(p.PerPage),
-		appwrite.QueryOffset(p.Offset()),
+		appwrite.QueryLimit(limit),
+		appwrite.QueryOffset(offset),
 	}
 }
 
@@ -1218,6 +1244,101 @@ func (h *AdminHandler) PreviewStuckOrders(c *gin.Context) {
 			"page":     p.Page,
 			"per_page": p.PerPage,
 			"total":    total,
+		},
+	})
+}
+
+func (h *AdminHandler) DeleteStuckOrders(c *gin.Context) {
+	var body struct {
+		Statuses      []string `json:"statuses"`
+		MinAgeMinutes int      `json:"min_age_minutes"`
+		Limit         int      `json:"limit"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.BadRequest(c, "Invalid request body")
+		return
+	}
+
+	requested, effective, blockedStatuses, ignored := normalizeStuckOrderStatusesFromValues(body.Statuses)
+	minAgeMinutes := normalizeCleanupMinAgeMinutes(body.MinAgeMinutes)
+	deleteLimit := normalizeStuckOrderDeleteLimit(body.Limit)
+	cutoff := time.Now().UTC().Add(-time.Duration(minAgeMinutes) * time.Minute)
+
+	eligibleOrders := []map[string]interface{}{}
+	if len(effective) > 0 {
+		eligibleQuery := buildStuckOrderQueriesWithPaging(effective, cutoff, deleteLimit, 0)
+		eligibleResult, err := h.appwrite.ListOrders(eligibleQuery)
+		if err != nil {
+			utils.InternalError(c, "Failed to list eligible stuck orders")
+			return
+		}
+		if eligibleResult != nil {
+			eligibleOrders = eligibleResult.Documents
+		}
+	}
+
+	blockedOrders := []map[string]interface{}{}
+	if len(blockedStatuses) > 0 {
+		blockedQuery := buildStuckOrderQueriesWithPaging(blockedStatuses, cutoff, deleteLimit, 0)
+		blockedResult, err := h.appwrite.ListOrders(blockedQuery)
+		if err != nil {
+			utils.InternalError(c, "Failed to evaluate blocked stuck orders")
+			return
+		}
+		if blockedResult != nil {
+			blockedOrders = blockedResult.Documents
+		}
+	}
+
+	failedOrders := make([]gin.H, 0)
+	blockedDetails := make([]gin.H, 0, len(blockedOrders))
+	for _, order := range blockedOrders {
+		blockedDetails = append(blockedDetails, gin.H{
+			"order_id": stringFromAny(order["$id"], ""),
+			"status":   stringFromAny(order["status"], ""),
+			"reason":   "status_not_eligible",
+		})
+	}
+
+	deletedCount := 0
+	for _, order := range eligibleOrders {
+		orderID := stringFromAny(order["$id"], "")
+		if orderID == "" {
+			failedOrders = append(failedOrders, gin.H{
+				"order_id": "",
+				"status":   stringFromAny(order["status"], ""),
+				"reason":   "missing_order_id",
+			})
+			continue
+		}
+
+		if err := h.appwrite.DeleteOrder(orderID); err != nil {
+			failedOrders = append(failedOrders, gin.H{
+				"order_id": orderID,
+				"status":   stringFromAny(order["status"], ""),
+				"reason":   err.Error(),
+			})
+			continue
+		}
+		deletedCount++
+	}
+
+	utils.Success(c, gin.H{
+		"examined_count": len(eligibleOrders) + len(blockedOrders),
+		"eligible_count": len(eligibleOrders),
+		"deleted_count":  deletedCount,
+		"failed_count":   len(failedOrders),
+		"blocked_count":  len(blockedOrders),
+		"failed_orders":  failedOrders,
+		"blocked_orders": blockedDetails,
+		"min_age_minutes": minAgeMinutes,
+		"limit":           deleteLimit,
+		"cutoff_time":     cutoff.Format(time.RFC3339),
+		"filters": gin.H{
+			"requested_statuses": requested,
+			"effective_statuses": effective,
+			"blocked_statuses":   blockedStatuses,
+			"ignored_statuses":   ignored,
 		},
 	})
 }

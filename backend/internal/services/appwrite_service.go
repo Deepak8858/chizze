@@ -131,6 +131,10 @@ func (s *AppwriteService) ListOrders(queries []string) (*appwrite.DocumentList, 
 	return s.client.ListDocuments(models.CollectionOrders, queries)
 }
 
+func (s *AppwriteService) DeleteOrder(id string) error {
+	return s.client.DeleteDocument(models.CollectionOrders, id)
+}
+
 // ─── Reviews ───
 
 func (s *AppwriteService) CreateReview(id string, data map[string]interface{}) (map[string]interface{}, error) {

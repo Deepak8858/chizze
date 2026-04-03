@@ -417,6 +417,8 @@ func main() {
 		// Orders
 		admin.GET("/orders", adminHandler.ListOrders)
 		admin.GET("/orders/active", adminHandler.ActiveOrders)
+		admin.GET("/orders/stuck/preview", adminHandler.PreviewStuckOrders)
+		admin.POST("/orders/stuck/delete", adminHandler.DeleteStuckOrders)
 		admin.GET("/orders/:id", adminHandler.GetOrder)
 		admin.PUT("/orders/:id/cancel", adminHandler.CancelOrder)
 		admin.PUT("/orders/:id/reassign", adminHandler.ReassignOrder)
