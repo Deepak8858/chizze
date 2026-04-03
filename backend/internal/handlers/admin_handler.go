@@ -1045,6 +1045,48 @@ func (h *AdminHandler) GetOrder(c *gin.Context) {
 		utils.NotFound(c, "Order not found")
 		return
 	}
+
+	customerID := stringFromAny(doc["customer_id"], "")
+	if customerID != "" {
+		user, userErr := h.appwrite.GetUser(customerID)
+		if userErr == nil && user != nil {
+			if name := stringFromAny(user["name"], ""); name != "" {
+				doc["customer_name"] = name
+			}
+			if phone := stringFromAny(user["phone"], ""); phone != "" {
+				doc["customer_phone"] = phone
+			}
+			if email := stringFromAny(user["email"], ""); email != "" {
+				doc["customer_email"] = email
+			}
+		}
+	}
+
+	addressID := stringFromAny(doc["delivery_address_id"], "")
+	if addressID != "" {
+		address, addressErr := h.appwrite.GetAddress(addressID)
+		if addressErr == nil && address != nil {
+			if line := stringFromAny(address["full_address"], stringFromAny(address["address"], "")); line != "" {
+				doc["delivery_address_line"] = line
+			}
+			if city := stringFromAny(address["city"], ""); city != "" {
+				doc["delivery_city"] = city
+			}
+
+			if lat, ok := address["latitude"]; ok {
+				doc["delivery_latitude"] = floatFromAny(lat, 0)
+			} else if lat, ok := address["lat"]; ok {
+				doc["delivery_latitude"] = floatFromAny(lat, 0)
+			}
+
+			if lng, ok := address["longitude"]; ok {
+				doc["delivery_longitude"] = floatFromAny(lng, 0)
+			} else if lng, ok := address["lng"]; ok {
+				doc["delivery_longitude"] = floatFromAny(lng, 0)
+			}
+		}
+	}
+
 	utils.Success(c, doc)
 }
 
@@ -1518,7 +1560,6 @@ func (h *AdminHandler) BroadcastNotification(c *gin.Context) {
 			"title":      body.Title,
 			"body":       body.Body,
 			"is_read":    false,
-			"created_at": time.Now().UTC().Format(time.RFC3339),
 		})
 		if createErr != nil {
 			log.Printf("BroadcastNotification create failed for user %s: %v", userID, createErr)
@@ -1570,7 +1611,7 @@ func (h *AdminHandler) BroadcastNotification(c *gin.Context) {
 func (h *AdminHandler) NotificationHistory(c *gin.Context) {
 	p := models.ParsePagination(c)
 	queries := []string{
-		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryOrderDesc("$createdAt"),
 		appwrite.QueryLimit(p.PerPage),
 		appwrite.QueryOffset(p.Offset()),
 	}
@@ -1579,6 +1620,16 @@ func (h *AdminHandler) NotificationHistory(c *gin.Context) {
 		utils.InternalError(c, "Failed to list notifications")
 		return
 	}
+
+	for _, doc := range result.Documents {
+		if existing := stringFromAny(doc["created_at"], ""); existing != "" {
+			continue
+		}
+		if createdAt := stringFromAny(doc["$createdAt"], ""); createdAt != "" {
+			doc["created_at"] = createdAt
+		}
+	}
+
 	utils.Paginated(c, result.Documents, p.Page, p.PerPage, result.Total)
 }
 
@@ -1797,6 +1848,45 @@ func (h *AdminHandler) LiveRiders(c *gin.Context) {
 		}
 	}
 
+	userByID := make(map[string]map[string]interface{})
+	if partners != nil {
+		riderIDs := make([]string, 0, len(partners.Documents))
+		seenRiderIDs := make(map[string]struct{}, len(partners.Documents))
+		for _, p := range partners.Documents {
+			riderID, _ := p["user_id"].(string)
+			if riderID == "" {
+				continue
+			}
+			if _, exists := seenRiderIDs[riderID]; exists {
+				continue
+			}
+			seenRiderIDs[riderID] = struct{}{}
+			riderIDs = append(riderIDs, riderID)
+		}
+
+		if len(riderIDs) > 0 {
+			idValues := make([]interface{}, 0, len(riderIDs))
+			for _, id := range riderIDs {
+				idValues = append(idValues, id)
+			}
+
+			usersResult, usersErr := h.appwrite.ListUsers([]string{
+				appwrite.QueryEqual("$id", idValues...),
+				appwrite.QueryLimit(len(riderIDs)),
+			})
+			if usersErr != nil {
+				log.Printf("LiveRiders: failed to batch fetch users: %v", usersErr)
+			} else if usersResult != nil {
+				for _, user := range usersResult.Documents {
+					id, _ := user["$id"].(string)
+					if id != "" {
+						userByID[id] = user
+					}
+				}
+			}
+		}
+	}
+
 	riders := make([]map[string]interface{}, 0)
 	if partners != nil {
 		for _, p := range partners.Documents {
@@ -1805,7 +1895,7 @@ func (h *AdminHandler) LiveRiders(c *gin.Context) {
 				continue
 			}
 
-			user, _ := h.appwrite.GetUser(riderID)
+			user := userByID[riderID]
 			name, _ := user["name"].(string)
 			phone, _ := user["phone"].(string)
 			if name == "" {

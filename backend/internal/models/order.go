@@ -27,12 +27,19 @@ type Order struct {
 	ID                   string     `json:"$id"`
 	OrderNumber          string     `json:"order_number"`
 	CustomerID           string     `json:"customer_id"`
+	CustomerName         string     `json:"customer_name,omitempty"`
+	CustomerPhone        string     `json:"customer_phone,omitempty"`
+	CustomerEmail        string     `json:"customer_email,omitempty"`
 	RestaurantID         string     `json:"restaurant_id"`
 	RestaurantName       string     `json:"restaurant_name"`
 	DeliveryPartnerID    string     `json:"delivery_partner_id,omitempty"`
 	DeliveryPartnerName  string     `json:"delivery_partner_name,omitempty"`
 	DeliveryPartnerPhone string     `json:"delivery_partner_phone,omitempty"`
 	DeliveryAddressID    string     `json:"delivery_address_id"`
+	DeliveryAddressLine  string     `json:"delivery_address_line,omitempty"`
+	DeliveryCity         string     `json:"delivery_city,omitempty"`
+	DeliveryLatitude     float64    `json:"delivery_latitude,omitempty"`
+	DeliveryLongitude    float64    `json:"delivery_longitude,omitempty"`
 	Items                string     `json:"items"` // JSON array string
 	ItemTotal            float64    `json:"item_total"`
 	DeliveryType         string     `json:"delivery_type"`
