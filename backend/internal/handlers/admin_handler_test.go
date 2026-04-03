@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,7 +18,67 @@ func registerAdminOrderRoutes(te *testutil.TestEnv) {
 	admin := v1.Group("/admin")
 	admin.Use(middleware.Auth(te.Config, te.RedisClient))
 	admin.Use(middleware.RequireRole("admin", "super_admin"))
+	admin.GET("/orders/stuck/preview", adminHandler.PreviewStuckOrders)
+	admin.POST("/orders/stuck/delete", adminHandler.DeleteStuckOrders)
 	admin.GET("/orders/:id", adminHandler.GetOrder)
+}
+
+func asInt(t *testing.T, value interface{}) int {
+	t.Helper()
+	n, ok := value.(float64)
+	if !ok {
+		t.Fatalf("expected numeric value, got %#v", value)
+	}
+	return int(n)
+}
+
+func asStringSlice(t *testing.T, value interface{}) []string {
+	t.Helper()
+	items, ok := value.([]interface{})
+	if !ok {
+		t.Fatalf("expected []interface{}, got %#v", value)
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			t.Fatalf("expected string item, got %#v", item)
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func asOrderIDs(t *testing.T, value interface{}) map[string]struct{} {
+	t.Helper()
+	orders, ok := value.([]interface{})
+	if !ok {
+		t.Fatalf("expected []interface{} orders payload, got %#v", value)
+	}
+
+	ids := make(map[string]struct{}, len(orders))
+	for _, orderVal := range orders {
+		order, ok := orderVal.(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected order object, got %#v", orderVal)
+		}
+		id, _ := order["$id"].(string)
+		if id == "" {
+			t.Fatalf("expected order id in payload, got %#v", order)
+		}
+		ids[id] = struct{}{}
+	}
+
+	return ids
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestAdminGetOrder(t *testing.T) {
@@ -124,5 +185,169 @@ func TestAdminGetOrder_MissingLinkedDocsFallback(t *testing.T) {
 	}
 	if _, exists := data["delivery_address_line"]; exists {
 		t.Errorf("expected delivery_address_line to be absent when linked address is missing, got %v", data["delivery_address_line"])
+	}
+}
+
+func TestAdminStuckOrdersPreview(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerAdminOrderRoutes(te)
+
+	now := time.Now().UTC()
+	stale := now.Add(-4 * time.Hour).Format(time.RFC3339)
+	fresh := now.Add(-20 * time.Minute).Format(time.RFC3339)
+
+	te.SeedOrder("order_delivered_stale", map[string]interface{}{
+		"status":    "delivered",
+		"placed_at": stale,
+	})
+	te.SeedOrder("order_cancelled_stale", map[string]interface{}{
+		"status":    "cancelled",
+		"placed_at": stale,
+	})
+	te.SeedOrder("order_placed_stale", map[string]interface{}{
+		"status":    "placed",
+		"placed_at": stale,
+	})
+	te.SeedOrder("order_delivered_fresh", map[string]interface{}{
+		"status":    "delivered",
+		"placed_at": fresh,
+	})
+
+	rec := te.AuthRequest(
+		"GET",
+		"/api/v1/admin/orders/stuck/preview?statuses=delivered,cancelled,placed&min_age_minutes=60&per_page=50",
+		nil,
+		"admin_1",
+		"admin",
+	)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := te.ParseResponse(rec)
+	data, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected response data object, got %#v", resp["data"])
+	}
+
+	if got := asInt(t, data["eligible_count"]); got != 2 {
+		t.Fatalf("expected eligible_count=2, got %d", got)
+	}
+
+	filters, ok := data["filters"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected filters object, got %#v", data["filters"])
+	}
+
+	blockedStatuses := asStringSlice(t, filters["blocked_statuses"])
+	if !containsString(blockedStatuses, "placed") {
+		t.Fatalf("expected blocked statuses to include placed, got %#v", blockedStatuses)
+	}
+
+	effectiveStatuses := asStringSlice(t, filters["effective_statuses"])
+	if !(containsString(effectiveStatuses, "delivered") && containsString(effectiveStatuses, "cancelled")) {
+		t.Fatalf("expected effective statuses to include delivered and cancelled, got %#v", effectiveStatuses)
+	}
+
+	ids := asOrderIDs(t, data["orders"])
+	if _, ok := ids["order_delivered_stale"]; !ok {
+		t.Fatal("expected stale delivered order in preview results")
+	}
+	if _, ok := ids["order_cancelled_stale"]; !ok {
+		t.Fatal("expected stale cancelled order in preview results")
+	}
+	if _, ok := ids["order_placed_stale"]; ok {
+		t.Fatal("expected stale placed order to be excluded from preview candidates")
+	}
+	if _, ok := ids["order_delivered_fresh"]; ok {
+		t.Fatal("expected fresh delivered order to be excluded from preview candidates")
+	}
+}
+
+func TestAdminDeleteStuckOrders(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerAdminOrderRoutes(te)
+
+	now := time.Now().UTC()
+	stale := now.Add(-5 * time.Hour).Format(time.RFC3339)
+	fresh := now.Add(-15 * time.Minute).Format(time.RFC3339)
+
+	te.SeedOrder("order_delivered_stale", map[string]interface{}{
+		"status":    "delivered",
+		"placed_at": stale,
+	})
+	te.SeedOrder("order_cancelled_stale", map[string]interface{}{
+		"status":    "cancelled",
+		"placed_at": stale,
+	})
+	te.SeedOrder("order_placed_stale", map[string]interface{}{
+		"status":    "placed",
+		"placed_at": stale,
+	})
+	te.SeedOrder("order_cancelled_fresh", map[string]interface{}{
+		"status":    "cancelled",
+		"placed_at": fresh,
+	})
+
+	body := map[string]interface{}{
+		"statuses":        []string{"delivered", "cancelled", "placed"},
+		"min_age_minutes": 60,
+		"limit":           50,
+	}
+
+	rec := te.AuthRequest("POST", "/api/v1/admin/orders/stuck/delete", body, "admin_1", "admin")
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := te.ParseResponse(rec)
+	data, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected response data object, got %#v", resp["data"])
+	}
+
+	assertions := map[string]int{
+		"eligible_count": 2,
+		"blocked_count":  1,
+		"deleted_count":  2,
+		"failed_count":   0,
+		"examined_count": 3,
+	}
+	for key, want := range assertions {
+		if got := asInt(t, data[key]); got != want {
+			t.Fatalf("expected %s=%d, got %d", key, want, got)
+		}
+	}
+
+	blockedOrders, ok := data["blocked_orders"].([]interface{})
+	if !ok {
+		t.Fatalf("expected blocked_orders list, got %#v", data["blocked_orders"])
+	}
+	if len(blockedOrders) != 1 {
+		t.Fatalf("expected 1 blocked order detail, got %d", len(blockedOrders))
+	}
+	blockedOrder, ok := blockedOrders[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected blocked order object, got %#v", blockedOrders[0])
+	}
+	if got := fmt.Sprintf("%v", blockedOrder["order_id"]); got != "order_placed_stale" {
+		t.Fatalf("expected blocked order id order_placed_stale, got %s", got)
+	}
+
+	if doc := te.FakeAW.GetDocument("orders", "order_delivered_stale"); doc != nil {
+		t.Fatal("expected stale delivered order to be hard-deleted")
+	}
+	if doc := te.FakeAW.GetDocument("orders", "order_cancelled_stale"); doc != nil {
+		t.Fatal("expected stale cancelled order to be hard-deleted")
+	}
+	if doc := te.FakeAW.GetDocument("orders", "order_placed_stale"); doc == nil {
+		t.Fatal("expected stale placed order to remain due to blocked status")
+	}
+	if doc := te.FakeAW.GetDocument("orders", "order_cancelled_fresh"); doc == nil {
+		t.Fatal("expected fresh cancelled order to remain because it is not stale")
 	}
 }
