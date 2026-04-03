@@ -1,4 +1,10 @@
 import axios, { AxiosError } from "axios";
+import type {
+  StuckOrderCleanupDeleteRequest,
+  StuckOrderCleanupDeleteResult,
+  StuckOrderCleanupPreviewFilters,
+  StuckOrderCleanupPreviewResult,
+} from "@/types";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "https://api.devdeepak.me/api/v1";
@@ -116,6 +122,21 @@ export const ordersApi = {
   cancel: (id: string, reason: string) => PUT(`/admin/orders/${id}/cancel`, { reason }),
   reassign: (id: string, rider_id: string) =>
     PUT(`/admin/orders/${id}/reassign`, { rider_id }),
+  previewStuck: (filters: StuckOrderCleanupPreviewFilters = {}) => {
+    const statusParam =
+      filters.statuses && filters.statuses.length > 0
+        ? filters.statuses.join(",")
+        : undefined;
+
+    return GET<{ data: StuckOrderCleanupPreviewResult }>("/admin/orders/stuck/preview", {
+      statuses: statusParam,
+      min_age_minutes: filters.min_age_minutes,
+      page: filters.page,
+      per_page: filters.per_page,
+    });
+  },
+  deleteStuck: (body: StuckOrderCleanupDeleteRequest) =>
+    POST<{ data: StuckOrderCleanupDeleteResult }>("/admin/orders/stuck/delete", body),
 };
 
 // Delivery partners

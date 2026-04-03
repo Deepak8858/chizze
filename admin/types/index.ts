@@ -151,6 +151,60 @@ export interface Order {
   cancelled_by?: string;
 }
 
+export interface StuckOrderCleanupPreviewFilters {
+  statuses?: OrderStatus[];
+  min_age_minutes?: number;
+  page?: number;
+  per_page?: number;
+}
+
+export interface StuckOrderCleanupFilterMeta {
+  requested_statuses: string[];
+  effective_statuses: string[];
+  blocked_statuses: string[];
+  ignored_statuses: string[];
+}
+
+export interface StuckOrderCleanupPreviewResult {
+  orders: Order[];
+  eligible_count: number;
+  blocked_count: number;
+  min_age_minutes: number;
+  cutoff_time: string;
+  filters: StuckOrderCleanupFilterMeta;
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+  };
+}
+
+export interface StuckOrderCleanupDeleteRequest {
+  statuses?: OrderStatus[];
+  min_age_minutes?: number;
+  limit?: number;
+}
+
+export interface StuckOrderCleanupDeleteIssue {
+  order_id: string;
+  status: string;
+  reason: string;
+}
+
+export interface StuckOrderCleanupDeleteResult {
+  examined_count: number;
+  eligible_count: number;
+  deleted_count: number;
+  failed_count: number;
+  blocked_count: number;
+  min_age_minutes: number;
+  limit: number;
+  cutoff_time: string;
+  filters: StuckOrderCleanupFilterMeta;
+  failed_orders: StuckOrderCleanupDeleteIssue[];
+  blocked_orders: StuckOrderCleanupDeleteIssue[];
+}
+
 // ─── Delivery Partner ────────────────────────────────────────────────────────
 export type VehicleType = "bike" | "scooter" | "bicycle" | "car";
 
