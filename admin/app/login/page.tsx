@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Phone, KeyRound, Loader2, ShieldCheck } from "lucide-react";
@@ -25,11 +25,6 @@ function unwrapEnvelope<T extends object>(payload: ApiEnvelope<T>): T {
 
 export default function LoginPage() {
   useRedirectIfAuthed();
-
-  // Clear any lingering backend Appwrite session on mount
-  useEffect(() => {
-    account.deleteSession("current").catch(() => {});
-  }, []);
 
   const router = useRouter();
   const [step, setStep] = useState<"phone" | "otp">("phone");

@@ -251,6 +251,7 @@ func (h *RestaurantHandler) GetReviews(c *gin.Context) {
 
 	result, err := h.appwrite.ListReviewsByQuery([]string{
 		appwrite.QueryEqual("restaurant_id", restaurantID),
+		appwrite.QueryEqual("is_visible", true),
 		appwrite.QueryOrderDesc("created_at"),
 		appwrite.QueryLimit(pg.PerPage),
 		appwrite.QueryOffset(pg.Offset()),

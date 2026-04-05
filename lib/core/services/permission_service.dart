@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -47,18 +48,18 @@ class PermissionService {
 
   // ─── Photos / Storage ────────────────────────────────────
 
-  /// Request photo / media-images permission. Returns `true` if granted.
+  /// Request photo permission where required.
+  /// Android gallery picking uses the system photo picker, so no broad
+  /// photo/storage runtime permission is requested there.
   Future<bool> ensurePhotosPermission() async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return true;
+    }
+
     var status = await Permission.photos.status;
     if (status.isGranted) return true;
 
     status = await Permission.photos.request();
-    if (status.isGranted) return true;
-
-    // Fallback for older Android (< 13) where photos maps to storage
-    status = await Permission.storage.status;
-    if (status.isGranted) return true;
-    status = await Permission.storage.request();
     return status.isGranted;
   }
 

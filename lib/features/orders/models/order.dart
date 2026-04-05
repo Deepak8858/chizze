@@ -343,13 +343,29 @@ enum OrderStatus {
   const OrderStatus(this.value, this.label, this.emoji);
 
   static String _normalizeStatus(String value) {
-    switch (value) {
+    final normalized = value.trim().toLowerCase();
+    switch (normalized) {
+      case 'placed':
+        return 'placed';
+      case 'confirmed':
+        return 'confirmed';
+      case 'preparing':
+        return 'preparing';
+      case 'ready':
+        return 'ready';
       case 'picked_up':
+      case 'pickedup':
         return 'pickedUp';
       case 'out_for_delivery':
+      case 'outfordelivery':
         return 'outForDelivery';
+      case 'completed':
+      case 'delivered':
+        return 'delivered';
+      case 'cancelled':
+        return 'cancelled';
       default:
-        return value;
+        return value.trim();
     }
   }
 

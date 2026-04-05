@@ -199,6 +199,15 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         return;
       }
 
+      if (kReleaseMode && razorpayKeyId.startsWith('rzp_test_')) {
+        state = state.copyWith(
+          isProcessing: false,
+          error:
+              'Production payment is misconfigured. Live Razorpay key is required.',
+        );
+        return;
+      }
+
       // Step 2: Open Razorpay checkout
       final options = {
         'key': razorpayKeyId,

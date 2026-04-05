@@ -1396,23 +1396,52 @@ func (h *AdminHandler) GetOrder(c *gin.Context) {
 
 func (h *AdminHandler) ActiveOrders(c *gin.Context) {
 	p := models.ParsePagination(c)
-	result, err := h.appwrite.ListOrders([]string{
-		appwrite.QueryNotEqual("status", "delivered", "cancelled"),
-		appwrite.QueryOrderDesc("placed_at"),
-		appwrite.QueryLimit(p.PerPage),
-		appwrite.QueryOffset(p.Offset()),
+	activeStatuses := []string{
+		models.OrderStatusPlaced,
+		models.OrderStatusConfirmed,
+		models.OrderStatusPreparing,
+		models.OrderStatusReady,
+		models.OrderStatusPickedUp,
+		models.OrderStatusOutForDelivery,
+	}
+
+	allOrders := make([]map[string]interface{}, 0)
+	for _, status := range activeStatuses {
+		result, err := h.appwrite.ListOrders([]string{
+			appwrite.QueryEqual("status", status),
+			appwrite.QueryOrderDesc("placed_at"),
+			appwrite.QueryLimit(1000),
+		})
+		if err != nil {
+			utils.InternalError(c, "Failed to list active orders")
+			return
+		}
+		if result != nil && len(result.Documents) > 0 {
+			allOrders = append(allOrders, result.Documents...)
+		}
+	}
+
+	sort.SliceStable(allOrders, func(i, j int) bool {
+		left, _ := parseBannerTime(allOrders[i]["placed_at"])
+		right, _ := parseBannerTime(allOrders[j]["placed_at"])
+		if left.Equal(right) {
+			return stringFromAny(allOrders[i]["order_number"], "") > stringFromAny(allOrders[j]["order_number"], "")
+		}
+		return left.After(right)
 	})
-	if err != nil {
-		utils.InternalError(c, "Failed to list active orders")
+
+	total := len(allOrders)
+	start := p.Offset()
+	if start >= total {
+		utils.Paginated(c, []map[string]interface{}{}, p.Page, p.PerPage, total)
 		return
 	}
-	docs := []map[string]interface{}{}
-	total := 0
-	if result != nil {
-		docs = result.Documents
-		total = result.Total
+	end := start + p.PerPage
+	if end > total {
+		end = total
 	}
-	utils.Paginated(c, docs, p.Page, p.PerPage, total)
+
+	utils.Paginated(c, allOrders[start:end], p.Page, p.PerPage, total)
 }
 
 func (h *AdminHandler) CancelOrder(c *gin.Context) {
@@ -1656,6 +1685,23 @@ func (h *AdminHandler) ListReviews(c *gin.Context) {
 		appwrite.QueryOffset(p.Offset()),
 		appwrite.QueryOrderDesc("created_at"),
 	}
+
+	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
+	switch status {
+	case "", "all":
+		// No filter.
+	case "approved", "visible":
+		queries = append(queries, appwrite.QueryEqual("is_visible", true))
+	case "rejected", "hidden":
+		queries = append(queries, appwrite.QueryEqual("is_visible", false))
+	case "pending", "flagged":
+		// Legacy moderation statuses may be stored as a string status field.
+		queries = append(queries, appwrite.QueryEqual("status", status))
+	default:
+		utils.BadRequest(c, "Invalid review status filter")
+		return
+	}
+
 	result, err := h.appwrite.ListReviewsByQuery(queries)
 	if err != nil {
 		utils.InternalError(c, "Failed to list reviews")

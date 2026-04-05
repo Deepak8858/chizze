@@ -22,22 +22,13 @@ class ImageUploadService {
     int quality = 85,
   }) async {
     try {
-      // Request appropriate permission before opening picker
+      // Request camera permission only for camera capture.
+      // Gallery selection uses the system photo picker (no broad media permission).
       if (source == ImageSource.camera) {
         final status = await ph.Permission.camera.request();
         if (!status.isGranted) {
           if (kDebugMode) debugPrint('[ImageUploadService] Camera permission denied');
           return null;
-        }
-      } else {
-        // Gallery — request photos or storage based on Android version
-        var status = await ph.Permission.photos.request();
-        if (!status.isGranted) {
-          status = await ph.Permission.storage.request();
-          if (!status.isGranted) {
-            if (kDebugMode) debugPrint('[ImageUploadService] Photo access denied');
-            return null;
-          }
         }
       }
 

@@ -39,7 +39,9 @@ export default function DeliveryPartnersPage() {
       accessorKey: "vehicle_type",
       header: "Vehicle",
       cell: ({ getValue }) => (
-        <span className="capitalize text-text-secondary text-xs">{(getValue() as string).replace("_", " ")}</span>
+        <span className="capitalize text-text-secondary text-xs">
+          {(getValue() as string).replace("_", " ")}
+        </span>
       ),
     },
     {
@@ -48,14 +50,18 @@ export default function DeliveryPartnersPage() {
       cell: ({ getValue }) => (
         <div className="flex items-center gap-1">
           <Star size={12} className="text-rating fill-rating" />
-          <span className="text-white text-xs">{(getValue() as number).toFixed(1)}</span>
+          <span className="text-white text-xs">
+            {Number(getValue() ?? 0).toFixed(1)}
+          </span>
         </div>
       ),
     },
     {
       accessorKey: "total_deliveries",
       header: "Deliveries",
-      cell: ({ getValue }) => <span className="text-white">{getValue() as number}</span>,
+      cell: ({ getValue }) => (
+        <span className="text-white">{Number(getValue() ?? 0)}</span>
+      ),
     },
     {
       accessorKey: "total_earnings",
@@ -63,14 +69,19 @@ export default function DeliveryPartnersPage() {
       cell: ({ getValue }) => (
         <div className="flex items-center gap-1 text-status-success text-xs">
           <IndianRupee size={11} />
-          {(getValue() as number).toLocaleString()}
+          {formatCurrency(Number(getValue() ?? 0))}
         </div>
       ),
     },
     {
       accessorKey: "is_online",
       header: "Online",
-      cell: ({ getValue }) => <StatusBadge status={getValue() ? "active" : "inactive"} label={getValue() ? "Online" : "Offline"} />,
+      cell: ({ getValue }) => (
+        <StatusBadge
+          status={getValue() ? "active" : "inactive"}
+          label={getValue() ? "Online" : "Offline"}
+        />
+      ),
     },
     {
       id: "block_action",
@@ -79,7 +90,12 @@ export default function DeliveryPartnersPage() {
         const r = row.original as any;
         return (
           <button
-            onClick={() => blockMutation.mutate({ id: row.original.$id, block: !r.is_blocked })}
+            onClick={() =>
+              blockMutation.mutate({
+                id: row.original.$id,
+                block: !r.is_blocked,
+              })
+            }
             className={`text-xs px-2 py-0.5 rounded transition-colors ${
               r.is_blocked
                 ? "bg-status-error/20 text-status-error hover:bg-status-error/30"
@@ -91,7 +107,15 @@ export default function DeliveryPartnersPage() {
         );
       },
     },
-    { accessorKey: "created_at", header: "Joined", cell: ({ getValue }) => <span className="text-xs text-text-muted">{formatDate(getValue() as string)}</span> },
+    {
+      accessorKey: "created_at",
+      header: "Joined",
+      cell: ({ getValue }) => (
+        <span className="text-xs text-text-muted">
+          {formatDate(getValue() as string)}
+        </span>
+      ),
+    },
   ];
 
   return (

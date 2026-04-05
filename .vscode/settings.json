@@ -8,5 +8,6 @@
         "chizze",
         "deeplink",
         "Upgrader"
-    ]
+    ],
+    "git.ignoreLimitWarning": true
 }

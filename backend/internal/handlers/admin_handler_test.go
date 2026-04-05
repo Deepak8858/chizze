@@ -18,6 +18,7 @@ func registerAdminOrderRoutes(te *testutil.TestEnv) {
 	admin := v1.Group("/admin")
 	admin.Use(middleware.Auth(te.Config, te.RedisClient))
 	admin.Use(middleware.RequireRole("admin", "super_admin"))
+	admin.GET("/orders/active", adminHandler.ActiveOrders)
 	admin.GET("/orders/stuck/preview", adminHandler.PreviewStuckOrders)
 	admin.POST("/orders/stuck/delete", adminHandler.DeleteStuckOrders)
 	admin.GET("/orders/:id", adminHandler.GetOrder)
@@ -185,6 +186,76 @@ func TestAdminGetOrder_MissingLinkedDocsFallback(t *testing.T) {
 	}
 	if _, exists := data["delivery_address_line"]; exists {
 		t.Errorf("expected delivery_address_line to be absent when linked address is missing, got %v", data["delivery_address_line"])
+	}
+}
+
+func TestAdminActiveOrders(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerAdminOrderRoutes(te)
+
+	now := time.Now().UTC()
+	te.SeedOrder("order_placed", map[string]interface{}{
+		"order_number": "CHZ-ACT-1",
+		"status":       "placed",
+		"placed_at":    now.Add(-5 * time.Minute).Format(time.RFC3339),
+	})
+	te.SeedOrder("order_confirmed", map[string]interface{}{
+		"order_number": "CHZ-ACT-2",
+		"status":       "confirmed",
+		"placed_at":    now.Add(-15 * time.Minute).Format(time.RFC3339),
+	})
+	te.SeedOrder("order_delivered", map[string]interface{}{
+		"order_number": "CHZ-ACT-3",
+		"status":       "delivered",
+		"placed_at":    now.Add(-25 * time.Minute).Format(time.RFC3339),
+	})
+	te.SeedOrder("order_cancelled", map[string]interface{}{
+		"order_number": "CHZ-ACT-4",
+		"status":       "cancelled",
+		"placed_at":    now.Add(-35 * time.Minute).Format(time.RFC3339),
+	})
+
+	rec := te.AuthRequest("GET", "/api/v1/admin/orders/active?per_page=20&page=1", nil, "admin_1", "admin")
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := te.ParseResponse(rec)
+	data, ok := resp["data"].([]interface{})
+	if !ok {
+		t.Fatalf("expected response data array, got %#v", resp["data"])
+	}
+	if len(data) != 2 {
+		t.Fatalf("expected 2 active orders, got %d", len(data))
+	}
+
+	first, ok := data[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected first active order object, got %#v", data[0])
+	}
+	if got := first["order_number"]; got != "CHZ-ACT-1" {
+		t.Fatalf("expected first active order to be most recent placed order, got %v", got)
+	}
+
+	second, ok := data[1].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected second active order object, got %#v", data[1])
+	}
+	if got := second["status"]; got != "confirmed" {
+		t.Fatalf("expected second active order status confirmed, got %v", got)
+	}
+
+	for _, item := range data {
+		order, ok := item.(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected order object, got %#v", item)
+		}
+		status, _ := order["status"].(string)
+		if status == "delivered" || status == "cancelled" {
+			t.Fatalf("expected active orders only, found terminal status %q", status)
+		}
 	}
 }
 

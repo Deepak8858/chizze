@@ -16,7 +16,11 @@ export default function ReviewsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-reviews", tab],
-    queryFn: () => reviewsApi.list({ status: tab === "all" ? undefined : tab, limit: 200 }) as Promise<{ data: Review[] }>,
+    queryFn: () =>
+      reviewsApi.list({
+        status: tab === "all" ? undefined : tab,
+        per_page: 200,
+      }) as Promise<{ data: Review[] }>,
   });
 
   const moderateMutation = useMutation({

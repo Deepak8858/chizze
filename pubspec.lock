@@ -1396,10 +1396,10 @@ packages:
     dependency: "direct main"
     description:
       name: razorpay_flutter
-      sha256: a90e05bb571fd1df5b7846d2173cb9cf1e07ec6d57df48068a05c152be177311
+      sha256: "8d985b769808cb6c8d3f2fbcc25f9ab78e29191965c31c98e2d69d55d9d20ff1"
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.1"
+    version: "1.4.3"
   rbush:
     dependency: transitive
     description:

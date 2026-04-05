@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,9 @@ import 'config/environment.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Opt into edge-to-edge for Android 15+ behavior and backward consistency.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   // Set Mapbox access token before any MapWidget is created (fixes FLUTTER-B)
   // Guard against empty token in release builds where dart-define was omitted —
@@ -41,11 +45,20 @@ void main() async {
   // Initialize offline cache (Hive)
   await cacheService.init();
 
-  // Lock to portrait mode (mobile-only app)
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  // Keep portrait lock on phones, but allow all orientations on large screens.
+  final view = WidgetsBinding.instance.platformDispatcher.views.first;
+  final logicalWidth = view.physicalSize.width / view.devicePixelRatio;
+  final logicalHeight = view.physicalSize.height / view.devicePixelRatio;
+  final isLargeScreen = math.min(logicalWidth, logicalHeight) >= 600;
+
+  if (isLargeScreen) {
+    await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+  } else {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
 
   // Global error handler — catches uncaught Flutter exceptions and reports to Sentry
   // Note: SentryFlutter.init will override FlutterError.onError with its own handler
@@ -134,13 +147,11 @@ class ChizzeApp extends ConsumerWidget {
     // Activate WebSocket auto-connect (reacts to auth state)
     ref.watch(wsAutoConnectProvider);
 
-    // Update system UI to match theme
+    // Keep icon contrast while leaving bar colors unmanaged for edge-to-edge.
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
         statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-        systemNavigationBarColor:
-            isDark ? AppColors.background : AppColors.lightBackground,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
         systemNavigationBarIconBrightness:
             isDark ? Brightness.light : Brightness.dark,
       ),

@@ -4,13 +4,11 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   getPaginationRowModel,
-  getFilteredRowModel,
   flexRender,
   type ColumnDef,
   type SortingState,
-  type ColumnFiltersState,
 } from "@tanstack/react-table";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,24 +32,36 @@ export function DataTable<TData>({
   searchPlaceholder = "Search…",
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [searchValue, setSearchValue] = useState("");
+
+  const normalizedSearch = searchValue.trim().toLowerCase();
+
+  const filteredData = useMemo(() => {
+    if (!searchColumn || normalizedSearch === "") {
+      return data;
+    }
+
+    return data.filter((row) => {
+      const value = (row as Record<string, unknown>)[searchColumn];
+      if (value === null || value === undefined) {
+        return false;
+      }
+
+      return String(value).toLowerCase().includes(normalizedSearch);
+    });
+  }, [data, normalizedSearch, searchColumn]);
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
-    state: { sorting, columnFilters },
+    state: { sorting },
     onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
+    autoResetPageIndex: true,
     initialState: { pagination: { pageSize } },
   });
-
-  const searchValue = searchColumn
-    ? (table.getColumn(searchColumn)?.getFilterValue() as string ?? "")
-    : "";
 
   return (
     <div className="space-y-3">
@@ -61,9 +71,7 @@ export function DataTable<TData>({
           type="text"
           placeholder={searchPlaceholder}
           value={searchValue}
-          onChange={(e) =>
-            table.getColumn(searchColumn)?.setFilterValue(e.target.value)
-          }
+          onChange={(e) => setSearchValue(e.target.value)}
           className="h-9 w-full max-w-xs bg-bg-elevated border border-white/10 rounded-lg px-3 text-sm text-white placeholder-text-muted outline-none focus:border-brand-500 transition-colors"
         />
       )}
@@ -74,18 +82,25 @@ export function DataTable<TData>({
           <table className="w-full">
             <thead>
               {table.getHeaderGroups().map((hg) => (
-                <tr key={hg.id} className="bg-bg-elevated border-b border-white/[0.06]">
+                <tr
+                  key={hg.id}
+                  className="bg-bg-elevated border-b border-white/[0.06]"
+                >
                   {hg.headers.map((header) => (
                     <th
                       key={header.id}
                       onClick={header.column.getToggleSortingHandler()}
                       className={cn(
                         "px-4 py-3 text-left text-[11px] font-semibold text-text-secondary uppercase tracking-wider whitespace-nowrap",
-                        header.column.getCanSort() && "cursor-pointer select-none hover:text-white"
+                        header.column.getCanSort() &&
+                          "cursor-pointer select-none hover:text-white",
                       )}
                     >
                       <div className="flex items-center gap-1">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
                         {header.column.getCanSort() && (
                           <span className="text-text-muted">
                             {header.column.getIsSorted() === "asc" ? (
@@ -130,8 +145,14 @@ export function DataTable<TData>({
                     className="border-b border-white/[0.04] hover:bg-bg-hover transition-colors duration-100"
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 text-sm text-white">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      <td
+                        key={cell.id}
+                        className="px-4 py-3 text-sm text-white"
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -143,7 +164,7 @@ export function DataTable<TData>({
       </div>
 
       {/* Pagination */}
-      {data.length > pageSize && (
+      {filteredData.length > pageSize && (
         <div className="flex items-center justify-between text-sm text-text-secondary">
           <span>
             Page {table.getState().pagination.pageIndex + 1} of{" "}
@@ -153,31 +174,38 @@ export function DataTable<TData>({
             <button
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
+              title="Previous page"
+              aria-label="Previous page"
               className="h-7 w-7 flex items-center justify-center rounded bg-bg-elevated text-text-muted hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft size={14} />
             </button>
-            {Array.from({ length: Math.min(5, table.getPageCount()) }).map((_, i) => {
-              const page = i + Math.max(0, table.getState().pagination.pageIndex - 2);
-              if (page >= table.getPageCount()) return null;
-              return (
-                <button
-                  key={page}
-                  onClick={() => table.setPageIndex(page)}
-                  className={cn(
-                    "h-7 w-7 flex items-center justify-center rounded text-xs font-medium transition-colors",
-                    table.getState().pagination.pageIndex === page
-                      ? "bg-brand-500 text-bg-base"
-                      : "bg-bg-elevated text-text-muted hover:text-white"
-                  )}
-                >
-                  {page + 1}
-                </button>
-              );
-            })}
+            {Array.from({ length: Math.min(5, table.getPageCount()) }).map(
+              (_, i) => {
+                const page =
+                  i + Math.max(0, table.getState().pagination.pageIndex - 2);
+                if (page >= table.getPageCount()) return null;
+                return (
+                  <button
+                    key={page}
+                    onClick={() => table.setPageIndex(page)}
+                    className={cn(
+                      "h-7 w-7 flex items-center justify-center rounded text-xs font-medium transition-colors",
+                      table.getState().pagination.pageIndex === page
+                        ? "bg-brand-500 text-bg-base"
+                        : "bg-bg-elevated text-text-muted hover:text-white",
+                    )}
+                  >
+                    {page + 1}
+                  </button>
+                );
+              },
+            )}
             <button
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
+              title="Next page"
+              aria-label="Next page"
               className="h-7 w-7 flex items-center justify-center rounded bg-bg-elevated text-text-muted hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight size={14} />

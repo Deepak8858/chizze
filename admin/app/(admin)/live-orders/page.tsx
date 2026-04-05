@@ -89,11 +89,17 @@ export default function LiveOrdersPage() {
             >
               {/* Column header */}
               <div className="px-3 py-2 border-b border-white/[0.06] bg-bg-elevated flex items-center justify-between">
-                <span className="text-xs font-semibold text-white">{col.label}</span>
-                <span className={cn(
-                  "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
-                  colOrders.length > 0 ? "bg-brand-500/20 text-brand-400" : "bg-white/5 text-text-muted"
-                )}>
+                <span className="text-xs font-semibold text-white">
+                  {col.label}
+                </span>
+                <span
+                  className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                    colOrders.length > 0
+                      ? "bg-brand-500/20 text-brand-400"
+                      : "bg-white/5 text-text-muted",
+                  )}
+                >
                   {colOrders.length}
                 </span>
               </div>
@@ -101,10 +107,15 @@ export default function LiveOrdersPage() {
               {/* Cards */}
               <div className="p-2 space-y-2 min-h-[100px] max-h-[calc(100vh-280px)] overflow-y-auto">
                 {colOrders.length === 0 ? (
-                  <p className="text-center text-text-muted text-[11px] py-4">Empty</p>
+                  <p className="text-center text-text-muted text-[11px] py-4">
+                    Empty
+                  </p>
                 ) : (
                   colOrders.map((order) => (
-                    <OrderCard key={order.order_id} order={order} />
+                    <OrderCard
+                      key={`${col.status}-${order.order_number}`}
+                      order={order}
+                    />
                   ))
                 )}
               </div>
