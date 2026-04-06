@@ -17,10 +17,7 @@ func main() {
 	}
 
 	client := appwrite.NewClient(
-		cfg.AppwriteEndpoint,
-		cfg.AppwriteProjectID,
-		cfg.AppwriteAPIKey,
-		cfg.AppwriteDatabaseID,
+		cfg,
 	)
 
 	// List orders matching order_id
@@ -49,7 +46,7 @@ func main() {
 			})
 			b, _ := json.MarshalIndent(res, "", "  ")
 			fmt.Println("Users:", string(b))
-			
+
 			// Try delivery partners
 			res, _ = client.ListDocuments(models.CollectionDeliveryPartners, []string{
 				appwrite.QuerySearch("name", "prince"),

@@ -14,6 +14,7 @@ func TestCanTransition_ValidTransitions(t *testing.T) {
 		{OrderStatusPreparing, OrderStatusReady},
 		{OrderStatusPreparing, OrderStatusCancelled},
 		{OrderStatusReady, OrderStatusPickedUp},
+		{OrderStatusReady, OrderStatusCancelled},
 		{OrderStatusPickedUp, OrderStatusOutForDelivery},
 		{OrderStatusOutForDelivery, OrderStatusDelivered},
 	}
@@ -43,8 +44,7 @@ func TestCanTransition_InvalidTransitions(t *testing.T) {
 		// Terminal states (delivered has no transitions)
 		{OrderStatusDelivered, OrderStatusCancelled},
 		{OrderStatusCancelled, OrderStatusPlaced},
-		// Cannot cancel after ready
-		{OrderStatusReady, OrderStatusCancelled},
+		// Cannot cancel after pickup has started
 		{OrderStatusPickedUp, OrderStatusCancelled},
 		{OrderStatusOutForDelivery, OrderStatusCancelled},
 		// Same status
@@ -93,14 +93,14 @@ func TestValidOrderTransitions_Coverage(t *testing.T) {
 func TestOrderConstants(t *testing.T) {
 	// Verify constants have expected values (guards against refactoring mistakes)
 	checks := map[string]string{
-		"placed":           OrderStatusPlaced,
-		"confirmed":        OrderStatusConfirmed,
-		"preparing":        OrderStatusPreparing,
-		"ready":            OrderStatusReady,
-		"pickedUp":        OrderStatusPickedUp,
+		"placed":         OrderStatusPlaced,
+		"confirmed":      OrderStatusConfirmed,
+		"preparing":      OrderStatusPreparing,
+		"ready":          OrderStatusReady,
+		"pickedUp":       OrderStatusPickedUp,
 		"outForDelivery": OrderStatusOutForDelivery,
-		"delivered":        OrderStatusDelivered,
-		"cancelled":        OrderStatusCancelled,
+		"delivered":      OrderStatusDelivered,
+		"cancelled":      OrderStatusCancelled,
 	}
 
 	for expected, got := range checks {

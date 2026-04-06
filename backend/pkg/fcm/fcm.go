@@ -36,15 +36,15 @@ func NewClient(serverKey string) *Client {
 
 // DeliveryRequestPayload is the data sent to a rider for a new delivery request.
 type DeliveryRequestPayload struct {
-	OrderID         string
-	RestaurantName  string
+	OrderID          string
+	RestaurantName   string
 	EstimatedEarning float64
 }
 
 // SendDeliveryRequest sends an FCM data+notification push to a single device token.
 // This wakes the app from background/killed state and triggers the delivery flow.
 func (c *Client) SendDeliveryRequest(ctx context.Context, fcmToken string, p DeliveryRequestPayload) error {
-	if c == nil || fcmToken == "" || fcmToken == "" {
+	if c == nil || fcmToken == "" {
 		return nil
 	}
 	// Ignore dev/test tokens
@@ -53,8 +53,8 @@ func (c *Client) SendDeliveryRequest(ctx context.Context, fcmToken string, p Del
 	}
 
 	body := map[string]interface{}{
-		"to": fcmToken,
-		"priority": "high",
+		"to":                fcmToken,
+		"priority":          "high",
 		"content_available": true, // wake iOS
 		// Data-only message so the Flutter background handler can process it
 		// without showing a system notification (the app handles the UI itself)
@@ -67,9 +67,9 @@ func (c *Client) SendDeliveryRequest(ctx context.Context, fcmToken string, p Del
 		},
 		// Notification block so device shows heads-up even if app is killed
 		"notification": map[string]interface{}{
-			"title": "🛵 New Delivery Request",
-			"body":  fmt.Sprintf("From %s • ₹%.0f earning", p.RestaurantName, p.EstimatedEarning),
-			"sound": "mkb", // custom sound (must be bundled in iOS app)
+			"title":              "🛵 New Delivery Request",
+			"body":               fmt.Sprintf("From %s • ₹%.0f earning", p.RestaurantName, p.EstimatedEarning),
+			"sound":              "mkb", // custom sound (must be bundled in iOS app)
 			"android_channel_id": "delivery_requests",
 		},
 		"android": map[string]interface{}{

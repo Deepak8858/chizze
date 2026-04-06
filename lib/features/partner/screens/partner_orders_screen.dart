@@ -90,14 +90,20 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
                     if (partnerState.inTransitOrders.isNotEmpty) ...[
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           '${partnerState.inTransitOrders.length}',
-                          style: const TextStyle(fontSize: 10, color: Colors.white),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ],
@@ -248,10 +254,15 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
             const Divider(color: AppColors.divider, height: AppSpacing.xl),
 
             // Customer name and delivery address
-            if (order.customerName != null && order.customerName!.isNotEmpty) ...[
+            if (order.customerName != null &&
+                order.customerName!.isNotEmpty) ...[
               Row(
                 children: [
-                  const Icon(Icons.person_rounded, size: 16, color: AppColors.textSecondary),
+                  const Icon(
+                    Icons.person_rounded,
+                    size: 16,
+                    color: AppColors.textSecondary,
+                  ),
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
@@ -265,16 +276,22 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
               ),
               const SizedBox(height: 4),
             ],
-            if (order.deliveryAddress != null && order.deliveryAddress!.isNotEmpty) ...[
+            if (order.deliveryAddress != null &&
+                order.deliveryAddress!.isNotEmpty) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.location_on_rounded, size: 16, color: AppColors.textSecondary),
+                  const Icon(
+                    Icons.location_on_rounded,
+                    size: 16,
+                    color: AppColors.textSecondary,
+                  ),
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
                       order.deliveryAddress! +
-                          (order.deliveryLandmark != null && order.deliveryLandmark!.isNotEmpty
+                          (order.deliveryLandmark != null &&
+                                  order.deliveryLandmark!.isNotEmpty
                               ? ' (${order.deliveryLandmark})'
                               : ''),
                       style: AppTypography.caption.copyWith(
@@ -426,7 +443,8 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
     }
 
     if (po.order.status == OrderStatus.ready) {
-      final hasRider = po.order.deliveryPartnerId != null &&
+      final hasRider =
+          po.order.deliveryPartnerId != null &&
           po.order.deliveryPartnerId!.isNotEmpty;
       return Container(
         width: double.infinity,
@@ -464,8 +482,11 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.person_rounded,
-                      size: 14, color: AppColors.textSecondary),
+                  const Icon(
+                    Icons.person_rounded,
+                    size: 14,
+                    color: AppColors.textSecondary,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     po.order.deliveryPartnerName ?? 'Delivery Partner',
@@ -475,8 +496,11 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
                   ),
                   if (po.order.deliveryPartnerPhone != null) ...[
                     const SizedBox(width: AppSpacing.md),
-                    const Icon(Icons.phone_rounded,
-                        size: 14, color: AppColors.textSecondary),
+                    const Icon(
+                      Icons.phone_rounded,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       po.order.deliveryPartnerPhone!,
@@ -522,28 +546,31 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: reasons.map(
-                    (reason) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Radio<String>(
-                        value: reason,
-                          groupValue: selectedReason,
-                          onChanged: (String? val) {
-                            if (val != null) {
-                              setDialogState(() => selectedReason = val);
-                            }
-                          },
-                        activeColor: AppColors.primary,
+                mainAxisSize: MainAxisSize.min,
+                children: reasons
+                    .map(
+                      (reason) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          selectedReason == reason
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_off_rounded,
+                          color: selectedReason == reason
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                        title: Text(
+                          reason,
+                          style: AppTypography.body2.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                        onTap: () =>
+                            setDialogState(() => selectedReason = reason),
                       ),
-                      title: Text(
-                        reason,
-                        style: AppTypography.body2.copyWith(color: Colors.white),
-                      ),
-                      onTap: () => setDialogState(() => selectedReason = reason),
-                    ),
-                  ).toList(),
+                    )
+                    .toList(),
               ),
             ],
           ),

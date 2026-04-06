@@ -25,43 +25,43 @@ class PartnerDashboardScreen extends ConsumerWidget {
         child: partnerState.isLoading
             ? const EarningsSkeleton()
             : SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ─── Connection Status ───
-              if (partnerState.connectionStatus !=
-                  RealtimeConnectionStatus.connected)
-                _buildConnectionBanner(partnerState.connectionStatus),
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ─── Connection Status ───
+                    if (partnerState.connectionStatus !=
+                        RealtimeConnectionStatus.connected)
+                      _buildConnectionBanner(partnerState.connectionStatus),
 
-              // ─── New Orders Alert ───
-              if (partnerState.unacknowledgedNewOrders > 0)
-                _buildNewOrderBanner(
-                  context,
-                  ref,
-                  partnerState.unacknowledgedNewOrders,
+                    // ─── New Orders Alert ───
+                    if (partnerState.unacknowledgedNewOrders > 0)
+                      _buildNewOrderBanner(
+                        context,
+                        ref,
+                        partnerState.unacknowledgedNewOrders,
+                      ),
+
+                    // ─── Header ───
+                    _buildHeader(ref, partnerState),
+
+                    const SizedBox(height: AppSpacing.xxl),
+
+                    // ─── Metrics ───
+                    _buildMetricsRow(metrics),
+
+                    const SizedBox(height: AppSpacing.xxl),
+
+                    // ─── Active Orders ───
+                    _buildActiveOrdersSection(context, ref, partnerState),
+
+                    const SizedBox(height: AppSpacing.xxl),
+
+                    // ─── Quick Actions ───
+                    _buildQuickActions(context),
+                  ],
                 ),
-
-              // ─── Header ───
-              _buildHeader(ref, partnerState),
-
-              const SizedBox(height: AppSpacing.xxl),
-
-              // ─── Metrics ───
-              _buildMetricsRow(metrics),
-
-              const SizedBox(height: AppSpacing.xxl),
-
-              // ─── Active Orders ───
-              _buildActiveOrdersSection(context, ref, partnerState),
-
-              const SizedBox(height: AppSpacing.xxl),
-
-              // ─── Quick Actions ───
-              _buildQuickActions(context),
-            ],
-          ),
-        ),
+              ),
       ),
     );
   }
@@ -97,52 +97,54 @@ class PartnerDashboardScreen extends ConsumerWidget {
         // Online/Offline toggle
         Semantics(
           toggled: partnerState.isOnline,
-          label: partnerState.isOnline ? 'Online, tap to go offline' : 'Offline, tap to go online',
+          label: partnerState.isOnline
+              ? 'Online, tap to go offline'
+              : 'Offline, tap to go online',
           button: true,
           child: GestureDetector(
-          onTap: () => ref.read(partnerProvider.notifier).toggleOnline(),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: partnerState.isOnline
-                  ? AppColors.success.withValues(alpha: 0.15)
-                  : AppColors.error.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
-              border: Border.all(
+            onTap: () => ref.read(partnerProvider.notifier).toggleOnline(),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
                 color: partnerState.isOnline
-                    ? AppColors.success
-                    : AppColors.error,
+                    ? AppColors.success.withValues(alpha: 0.15)
+                    : AppColors.error.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                border: Border.all(
+                  color: partnerState.isOnline
+                      ? AppColors.success
+                      : AppColors.error,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: partnerState.isOnline
+                          ? AppColors.success
+                          : AppColors.error,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    partnerState.isOnline ? 'Online' : 'Offline',
+                    style: AppTypography.overline.copyWith(
+                      color: partnerState.isOnline
+                          ? AppColors.success
+                          : AppColors.error,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: partnerState.isOnline
-                        ? AppColors.success
-                        : AppColors.error,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  partnerState.isOnline ? 'Online' : 'Offline',
-                  style: AppTypography.overline.copyWith(
-                    color: partnerState.isOnline
-                        ? AppColors.success
-                        : AppColors.error,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
           ),
-        ),
         ),
       ],
     ).animate().fadeIn(duration: 400.ms);
@@ -212,9 +214,7 @@ class PartnerDashboardScreen extends ConsumerWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         if (activeOrders.isEmpty)
-          GlassCard(
-            child: EmptyStateWidget.noPartnerOrders(),
-          )
+          GlassCard(child: EmptyStateWidget.noPartnerOrders())
         else
           ...activeOrders.take(3).toList().asMap().entries.map((entry) {
             final po = entry.value;
@@ -224,7 +224,8 @@ class PartnerDashboardScreen extends ConsumerWidget {
                 partnerOrder: po,
                 onAccept: () =>
                     ref.read(partnerProvider.notifier).acceptOrder(po.order.id),
-                onReject: () => _showQuickRejectDialog(context, ref, po.order.id),
+                onReject: () =>
+                    _showQuickRejectDialog(context, ref, po.order.id),
                 onTap: () => context.go('/partner/orders'),
               ),
             ).animate(delay: (entry.key * 80).ms).fadeIn().slideX(begin: 0.03);
@@ -233,7 +234,11 @@ class PartnerDashboardScreen extends ConsumerWidget {
     );
   }
 
-  void _showQuickRejectDialog(BuildContext context, WidgetRef ref, String orderId) {
+  void _showQuickRejectDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String orderId,
+  ) {
     const reasons = [
       'Too busy right now',
       'Item unavailable',
@@ -252,20 +257,31 @@ class PartnerDashboardScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: reasons.map((reason) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Radio<String>(
-                      value: reason,
-                          groupValue: selectedReason,
-                          onChanged: (String? val) =>
-                              setDialogState(() => selectedReason = val ?? ''),
-                      activeColor: AppColors.primary,
-                    ),
-                    title: Text(reason, style: AppTypography.body2.copyWith(color: Colors.white)),
-                    onTap: () => setDialogState(() => selectedReason = reason),
-                  )).toList(),
+                mainAxisSize: MainAxisSize.min,
+                children: reasons
+                    .map(
+                      (reason) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          selectedReason == reason
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_off_rounded,
+                          color: selectedReason == reason
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                        title: Text(
+                          reason,
+                          style: AppTypography.body2.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                        onTap: () =>
+                            setDialogState(() => selectedReason = reason),
+                      ),
+                    )
+                    .toList(),
               ),
             ],
           ),
@@ -278,7 +294,9 @@ class PartnerDashboardScreen extends ConsumerWidget {
               onPressed: selectedReason.isEmpty
                   ? null
                   : () {
-                      ref.read(partnerProvider.notifier).rejectOrder(orderId, selectedReason);
+                      ref
+                          .read(partnerProvider.notifier)
+                          .rejectOrder(orderId, selectedReason);
                       Navigator.pop(context);
                     },
               style: TextButton.styleFrom(foregroundColor: AppColors.error),
@@ -354,12 +372,14 @@ class PartnerDashboardScreen extends ConsumerWidget {
         vertical: AppSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: (isPolling ? AppColors.warning : AppColors.error)
-            .withValues(alpha: 0.1),
+        color: (isPolling ? AppColors.warning : AppColors.error).withValues(
+          alpha: 0.1,
+        ),
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         border: Border.all(
-          color: (isPolling ? AppColors.warning : AppColors.error)
-              .withValues(alpha: 0.3),
+          color: (isPolling ? AppColors.warning : AppColors.error).withValues(
+            alpha: 0.3,
+          ),
         ),
       ),
       child: Row(
@@ -386,71 +406,71 @@ class PartnerDashboardScreen extends ConsumerWidget {
   }
 
   /// New order alert banner
-  Widget _buildNewOrderBanner(
-      BuildContext context, WidgetRef ref, int count) {
+  Widget _buildNewOrderBanner(BuildContext context, WidgetRef ref, int count) {
     return GestureDetector(
-      onTap: () {
-        ref.read(partnerProvider.notifier).acknowledgeNewOrders();
-        context.go('/partner/orders');
-      },
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: AppSpacing.md),
-        padding: const EdgeInsets.all(AppSpacing.base),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppColors.primary.withValues(alpha: 0.15),
-              AppColors.primary.withValues(alpha: 0.08),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: Text('🔔', style: TextStyle(fontSize: 18)),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$count new order${count > 1 ? 's' : ''}!',
-                    style: AppTypography.body1.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  Text(
-                    'Tap to view and accept',
-                    style: AppTypography.caption,
-                  ),
+          onTap: () {
+            ref.read(partnerProvider.notifier).acknowledgeNewOrders();
+            context.go('/partner/orders');
+          },
+          child: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: AppSpacing.md),
+            padding: const EdgeInsets.all(AppSpacing.base),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.15),
+                  AppColors.primary.withValues(alpha: 0.08),
                 ],
               ),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.4),
+              ),
             ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.primary,
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Text('🔔', style: TextStyle(fontSize: 18)),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$count new order${count > 1 ? 's' : ''}!',
+                        style: AppTypography.body1.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      Text(
+                        'Tap to view and accept',
+                        style: AppTypography.caption,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.primary,
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    ).animate().fadeIn(duration: 300.ms).shake(
-          hz: 3,
-          duration: 600.ms,
-          offset: const Offset(2, 0),
-        );
+          ),
+        )
+        .animate()
+        .fadeIn(duration: 300.ms)
+        .shake(hz: 3, duration: 600.ms, offset: const Offset(2, 0));
   }
 }
 
@@ -472,23 +492,25 @@ class _MetricCard extends StatelessWidget {
     return Semantics(
       label: '$label: $value',
       child: GlassCard(
-      child: Column(
-        children: [
-          ExcludeSemantics(child: Text(emoji, style: const TextStyle(fontSize: 24))),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            value,
-            style: AppTypography.h3.copyWith(color: color, fontSize: 18),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: AppTypography.overline.copyWith(fontSize: 9),
-            textAlign: TextAlign.center,
-          ),
-        ],
+        child: Column(
+          children: [
+            ExcludeSemantics(
+              child: Text(emoji, style: const TextStyle(fontSize: 24)),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              value,
+              style: AppTypography.h3.copyWith(color: color, fontSize: 18),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: AppTypography.overline.copyWith(fontSize: 9),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 }
@@ -509,108 +531,120 @@ class _QuickOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final order = partnerOrder.order;
-    final itemsSummary = order.items.map((i) => '${i.name} times ${i.quantity}').join(', ');
+    final itemsSummary = order.items
+        .map((i) => '${i.name} times ${i.quantity}')
+        .join(', ');
 
     return Semantics(
-      label: 'Order ${order.orderNumber}, $itemsSummary, '
+      label:
+          'Order ${order.orderNumber}, $itemsSummary, '
           'total \u20b9${order.grandTotal.toInt()}, status ${order.status.label}',
       child: GestureDetector(
-      onTap: onTap,
-      child: GlassCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                ExcludeSemantics(child: Text(order.status.emoji, style: const TextStyle(fontSize: 20))),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    order.orderNumber,
-                    style: AppTypography.body1.copyWith(
-                      fontWeight: FontWeight.w600,
+        onTap: onTap,
+        child: GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  ExcludeSemantics(
+                    child: Text(
+                      order.status.emoji,
+                      style: const TextStyle(fontSize: 20),
                     ),
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _statusColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    order.status.label,
-                    style: AppTypography.overline.copyWith(
-                      color: _statusColor,
-                      fontSize: 10,
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      order.orderNumber,
+                      style: AppTypography.body1.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              order.items.map((i) => '${i.name} × ${i.quantity}').join(', '),
-              style: AppTypography.caption,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '₹${order.grandTotal.toInt()}',
-                  style: AppTypography.price,
-                ),
-                if (partnerOrder.isNew)
-                  Row(
-                    children: [
-                      SizedBox(
-                        height: 30,
-                        child: TextButton(
-                          onPressed: onReject,
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            minimumSize: const Size(0, 30),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text(
-                            'Reject',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _statusColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      order.status.label,
+                      style: AppTypography.overline.copyWith(
+                        color: _statusColor,
+                        fontSize: 10,
                       ),
-                      const SizedBox(width: 4),
-                      SizedBox(
-                        height: 30,
-                        child: ElevatedButton(
-                          onPressed: onAccept,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.success,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            minimumSize: const Size(0, 30),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text(
-                            'Accept',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-              ],
-            ),
-          ],
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                order.items.map((i) => '${i.name} × ${i.quantity}').join(', '),
+                style: AppTypography.caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '₹${order.grandTotal.toInt()}',
+                    style: AppTypography.price,
+                  ),
+                  if (partnerOrder.isNew)
+                    Row(
+                      children: [
+                        SizedBox(
+                          height: 30,
+                          child: TextButton(
+                            onPressed: onReject,
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.error,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              minimumSize: const Size(0, 30),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Reject',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        SizedBox(
+                          height: 30,
+                          child: ElevatedButton(
+                            onPressed: onAccept,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.success,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              minimumSize: const Size(0, 30),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Accept',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 

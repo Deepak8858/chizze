@@ -52,7 +52,9 @@ class _RestaurantDetailScreenState
     setState(() => _isMenuLoading = true);
     try {
       final api = ref.read(apiClientProvider);
-      final response = await api.get('/restaurants/${widget.restaurantId}/menu');
+      final response = await api.get(
+        '/restaurants/${widget.restaurantId}/menu',
+      );
       if (response.success && response.data != null) {
         final data = response.data as Map<String, dynamic>;
         final cats = <MenuCategory>[];
@@ -62,12 +64,14 @@ class _RestaurantDetailScreenState
         final categoriesList = data['categories'] as List<dynamic>? ?? [];
         for (final cat in categoriesList) {
           final catMap = cat as Map<String, dynamic>;
-          cats.add(MenuCategory(
-            id: catMap['id'] ?? '',
-            restaurantId: widget.restaurantId,
-            name: catMap['name'] ?? '',
-            sortOrder: (catMap['sort_order'] ?? 0).toInt(),
-          ));
+          cats.add(
+            MenuCategory(
+              id: catMap['id'] ?? '',
+              restaurantId: widget.restaurantId,
+              name: catMap['name'] ?? '',
+              sortOrder: (catMap['sort_order'] ?? 0).toInt(),
+            ),
+          );
           final catItems = catMap['items'] as List<dynamic>? ?? [];
           for (final item in catItems) {
             items.add(MenuItem.fromMap(item as Map<String, dynamic>));
@@ -120,7 +124,10 @@ class _RestaurantDetailScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
-                    ShimmerLoader(height: 200, borderRadius: AppSpacing.radiusLg),
+                    ShimmerLoader(
+                      height: 200,
+                      borderRadius: AppSpacing.radiusLg,
+                    ),
                     SizedBox(height: AppSpacing.xl),
                     ShimmerLoader(height: 24, width: 220),
                     SizedBox(height: AppSpacing.md),
@@ -163,7 +170,9 @@ class _RestaurantDetailScreenState
                   child: Padding(
                     padding: EdgeInsets.all(AppSpacing.xxl),
                     child: Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 )
@@ -213,7 +222,7 @@ class _RestaurantDetailScreenState
                 restaurant.coverImageUrl,
                 fit: BoxFit.cover,
                 width: double.infinity,
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (_, _, _) => Container(
                   color: AppColors.surfaceElevated,
                   child: Center(
                     child: Text(
@@ -540,13 +549,15 @@ class _RestaurantDetailScreenState
                   ),
                   child: item.imageUrl.isNotEmpty
                       ? ClipRRect(
-                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          borderRadius: BorderRadius.circular(
+                            AppSpacing.radiusMd,
+                          ),
                           child: Image.network(
                             item.imageUrl,
                             width: 90,
                             height: 90,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Center(
+                            errorBuilder: (_, _, _) => Center(
                               child: Text(
                                 item.isVeg ? '🥗' : '🍖',
                                 style: const TextStyle(fontSize: 32),
@@ -882,22 +893,22 @@ class _AddButton extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-        width: 90,
-        height: 34,
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.primary),
-        ),
-        child: Center(
-          child: Text(
-            hasCustomizations ? 'ADD +' : 'ADD',
-            style: AppTypography.buttonSmall.copyWith(
-              color: AppColors.primary,
-              fontSize: 13,
+          width: 90,
+          height: 34,
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.primary),
+          ),
+          child: Center(
+            child: Text(
+              hasCustomizations ? 'ADD +' : 'ADD',
+              style: AppTypography.buttonSmall.copyWith(
+                color: AppColors.primary,
+                fontSize: 13,
+              ),
             ),
           ),
-        ),
         ),
       ),
     );

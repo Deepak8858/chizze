@@ -38,7 +38,6 @@ definitions:
           type: string
         type: array
     required:
-    - delivery_rating
     - food_rating
     type: object
   github_com_chizze_backend_internal_models.CreateScheduledOrderRequest:

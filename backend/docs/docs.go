@@ -4061,7 +4061,6 @@ const docTemplate = `{
         "github_com_chizze_backend_internal_models.CreateReviewRequest": {
             "type": "object",
             "required": [
-                "delivery_rating",
                 "food_rating"
             ],
             "properties": {

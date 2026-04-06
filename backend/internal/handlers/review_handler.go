@@ -75,13 +75,21 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 		appwrite.QueryEqual("customer_id", userID),
 		appwrite.QueryLimit(1),
 	})
-	if err == nil && existing.Total > 0 {
+	if err != nil {
+		utils.InternalError(c, "Failed to validate existing reviews")
+		return
+	}
+	if existing.Total > 0 {
 		utils.BadRequest(c, "You have already reviewed this order")
 		return
 	}
 
 	restaurantID, _ := order["restaurant_id"].(string)
 	deliveryPartnerID, _ := order["delivery_partner_id"].(string)
+	deliveryRating := req.FoodRating
+	if req.DeliveryRating != nil {
+		deliveryRating = *req.DeliveryRating
+	}
 
 	reviewData := map[string]interface{}{
 		"order_id":            orderID,
@@ -89,7 +97,7 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 		"restaurant_id":       restaurantID,
 		"delivery_partner_id": deliveryPartnerID,
 		"food_rating":         req.FoodRating,
-		"delivery_rating":     req.DeliveryRating,
+		"delivery_rating":     deliveryRating,
 		"review_text":         req.ReviewText,
 		"tags":                req.Tags,
 		"is_visible":          true,
@@ -118,6 +126,9 @@ func (h *ReviewHandler) updateRestaurantRating(restaurantID string) {
 	var totalRating float64
 	count := 0
 	for _, rev := range reviews.Documents {
+		if isVisible, ok := rev["is_visible"].(bool); ok && !isVisible {
+			continue
+		}
 		foodRating, _ := rev["food_rating"].(float64)
 		if foodRating > 0 {
 			totalRating += foodRating
@@ -129,7 +140,7 @@ func (h *ReviewHandler) updateRestaurantRating(restaurantID string) {
 		avgRating := totalRating / float64(count)
 		_, _ = h.appwrite.UpdateRestaurant(restaurantID, map[string]interface{}{
 			"rating":        avgRating,
-			"total_reviews": count,
+			"total_ratings": count,
 		})
 	}
 }

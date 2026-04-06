@@ -878,7 +878,7 @@ func TestCancelOrder_MissingReason(t *testing.T) {
 }
 
 func TestCancelOrder_FromEachAllowedStatus(t *testing.T) {
-	statuses := []string{"placed", "confirmed", "preparing"}
+	statuses := []string{"placed", "confirmed", "preparing", "ready"}
 	for _, s := range statuses {
 		t.Run("cancel_from_"+s, func(t *testing.T) {
 			te := testutil.NewTestEnv(t)
@@ -902,7 +902,7 @@ func TestCancelOrder_FromEachAllowedStatus(t *testing.T) {
 }
 
 func TestCancelOrder_FromNonCancellableStatuses(t *testing.T) {
-	statuses := []string{"ready", "pickedUp", "outForDelivery", "delivered"}
+	statuses := []string{"pickedUp", "outForDelivery", "delivered"}
 	for _, s := range statuses {
 		t.Run("no_cancel_from_"+s, func(t *testing.T) {
 			te := testutil.NewTestEnv(t)

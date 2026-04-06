@@ -82,9 +82,9 @@ func TestCreateReview_GatesAndLegacyCompletedStatus(t *testing.T) {
 	te.SeedRestaurant("rest_1", "owner_1", 12.97, 77.59, true)
 
 	te.SeedOrder("order_preparing", map[string]interface{}{
-		"customer_id":  "cust_1",
+		"customer_id":   "cust_1",
 		"restaurant_id": "rest_1",
-		"status":       "preparing",
+		"status":        "preparing",
 	})
 
 	body := map[string]interface{}{
@@ -100,9 +100,9 @@ func TestCreateReview_GatesAndLegacyCompletedStatus(t *testing.T) {
 	}
 
 	te.SeedOrder("order_completed", map[string]interface{}{
-		"customer_id":  "cust_1",
+		"customer_id":   "cust_1",
 		"restaurant_id": "rest_1",
-		"status":       "completed",
+		"status":        "completed",
 	})
 
 	rec = te.AuthRequest("POST", "/api/v1/orders/order_completed/review", body, "cust_1", "customer")
@@ -242,10 +242,10 @@ func TestReviewVisibilityFlow_CustomerToAdminModeration(t *testing.T) {
 
 	te.SeedRestaurant("rest_1", "owner_1", 12.97, 77.59, true)
 	te.SeedOrder("order_delivered", map[string]interface{}{
-		"customer_id":       "cust_1",
-		"restaurant_id":     "rest_1",
+		"customer_id":         "cust_1",
+		"restaurant_id":       "rest_1",
 		"delivery_partner_id": "dp_1",
-		"status":            "delivered",
+		"status":              "delivered",
 	})
 
 	createBody := map[string]interface{}{
@@ -296,5 +296,66 @@ func TestReviewVisibilityFlow_CustomerToAdminModeration(t *testing.T) {
 	publicAfter := reviewListFromResponse(t, te, publicRecAfter.Code, te.ParseResponse(publicRecAfter))
 	if containsReviewID(publicAfter, reviewID) {
 		t.Fatalf("did not expect public list to include hidden review, got %#v", publicAfter)
+	}
+}
+
+func TestCreateReview_DeliveryRatingOptionalFallsBackToFoodRating(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerReviewRoutes(te)
+
+	te.SeedRestaurant("rest_1", "owner_1", 12.97, 77.59, true)
+	te.SeedOrder("order_delivered", map[string]interface{}{
+		"customer_id":   "cust_1",
+		"restaurant_id": "rest_1",
+		"status":        "delivered",
+	})
+
+	body := map[string]interface{}{
+		"food_rating": 4,
+		"review_text": "Good food",
+		"tags":        []string{"fresh"},
+	}
+
+	rec := te.AuthRequest("POST", "/api/v1/orders/order_delivered/review", body, "cust_1", "customer")
+	if rec.Code != 201 {
+		t.Fatalf("expected 201 creating review without delivery_rating, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := te.ParseResponse(rec)
+	createdData, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected review object in response, got %#v", resp["data"])
+	}
+
+	deliveryRating, ok := createdData["delivery_rating"].(float64)
+	if !ok {
+		t.Fatalf("expected delivery_rating in response, got %#v", createdData["delivery_rating"])
+	}
+	if int(deliveryRating) != 4 {
+		t.Fatalf("expected delivery_rating fallback to food_rating=4, got %v", deliveryRating)
+	}
+
+	deadline := time.Now().Add(1 * time.Second)
+	updated := false
+	for time.Now().Before(deadline) {
+		restaurant := te.FakeAW.GetDocument("restaurants", "rest_1")
+		if restaurant != nil {
+			rating, _ := restaurant["rating"].(float64)
+			totalRatings, hasTotalRatings := restaurant["total_ratings"].(float64)
+			_, hasTotalReviews := restaurant["total_reviews"]
+
+			if rating == 4 && hasTotalRatings && int(totalRatings) == 1 && !hasTotalReviews {
+				updated = true
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if !updated {
+		restaurant := te.FakeAW.GetDocument("restaurants", "rest_1")
+		t.Fatalf("expected restaurant aggregate update with total_ratings, got %#v", restaurant)
 	}
 }

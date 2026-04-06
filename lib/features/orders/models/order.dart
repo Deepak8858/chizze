@@ -233,10 +233,14 @@ class Order {
     String? deliveryPartnerId,
     String? deliveryPartnerName,
     String? deliveryPartnerPhone,
+    DateTime? placedAt,
     DateTime? confirmedAt,
     DateTime? preparedAt,
     DateTime? pickedUpAt,
     DateTime? deliveredAt,
+    DateTime? cancelledAt,
+    String? cancellationReason,
+    String? cancelledBy,
   }) {
     return Order(
       id: id,
@@ -273,16 +277,14 @@ class Order {
       specialInstructions: specialInstructions,
       deliveryInstructions: deliveryInstructions,
       estimatedDeliveryMin: estimatedDeliveryMin,
-      placedAt:
-          placedAt ??
-          placedAt, // Fix: was `placedAt ?? placedAt` (self-reference bug)
+      placedAt: placedAt ?? this.placedAt,
       confirmedAt: confirmedAt ?? this.confirmedAt,
       preparedAt: preparedAt ?? this.preparedAt,
       pickedUpAt: pickedUpAt ?? this.pickedUpAt,
       deliveredAt: deliveredAt ?? this.deliveredAt,
-      cancelledAt: cancelledAt,
-      cancellationReason: cancellationReason,
-      cancelledBy: cancelledBy,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      cancellationReason: cancellationReason ?? this.cancellationReason,
+      cancelledBy: cancelledBy ?? this.cancelledBy,
     );
   }
 }

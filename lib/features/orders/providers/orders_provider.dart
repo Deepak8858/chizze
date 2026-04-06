@@ -242,6 +242,31 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     }
     return null;
   }
+
+  /// Force refresh a single order by ID from the API.
+  /// Always fetches fresh data, even if order exists in local state.
+  /// Returns the refreshed order or null on error.
+  Future<Order?> refreshOrderById(String orderId) async {
+    try {
+      final response = await _api.get('${ApiConfig.orders}/$orderId');
+      if (response.success && response.data != null) {
+        final order = Order.fromMap(response.data as Map<String, dynamic>);
+        // Merge into existing list (replace if exists, or prepend)
+        final existing = state.orders.indexWhere((o) => o.id == orderId);
+        final updatedOrders = [...state.orders];
+        if (existing >= 0) {
+          updatedOrders[existing] = order;
+        } else {
+          updatedOrders.insert(0, order);
+        }
+        state = state.copyWith(orders: updatedOrders);
+        return order;
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Orders] refreshOrderById error: $e');
+    }
+    return null;
+  }
 }
 
 /// Global orders provider

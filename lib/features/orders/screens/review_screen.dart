@@ -24,6 +24,11 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   final _reviewController = TextEditingController();
   final _selectedTags = <String>{};
   bool _isSubmitting = false;
+  bool _isLoading = true;
+  String? _error;
+
+  // Retry state
+  Map<String, dynamic>? _lastSubmissionData;
 
   final _tags = [
     '😋 Great Food',
@@ -33,6 +38,45 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     '👨‍🍳 Fresh & Hot',
     '💰 Worth Price',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeOrderData();
+  }
+
+  /// Validate order status and refresh data on screen load
+  Future<void> _initializeOrderData() async {
+    final ordersNotifier = ref.read(ordersProvider.notifier);
+
+    // Force refresh order to get latest status
+    final order = await ordersNotifier.refreshOrderById(widget.orderId);
+
+    if (!mounted) return;
+
+    if (order == null) {
+      setState(() {
+        _error = 'Order not found';
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // Validate order status - only delivered/completed orders can be reviewed
+    if (order.status.name != 'delivered' && order.status.name != 'completed') {
+      setState(() {
+        _error = 'This order has not been delivered yet';
+        _isLoading = false;
+      });
+      // Navigate back after showing error
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) context.go('/home');
+      });
+      return;
+    }
+
+    setState(() => _isLoading = false);
+  }
 
   @override
   void dispose() {
@@ -50,175 +94,295 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Rate Your Order')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ─── Restaurant Info ───
-            if (order != null)
-              GlassCard(
-                child: Row(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('🍽️', style: TextStyle(fontSize: 32)),
-                    const SizedBox(width: AppSpacing.md),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          order.restaurantName,
-                          style: AppTypography.h3.copyWith(fontSize: 16),
-                        ),
-                        Text(
-                          'Order #${order.orderNumber}',
-                          style: AppTypography.caption,
-                        ),
-                      ],
+                    Icon(Icons.error_outline, size: 64, color: AppColors.error),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      _error!,
+                      style: AppTypography.body1,
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
-              ).animate().fadeIn(),
-
-            const SizedBox(height: AppSpacing.xxl),
-
-            // ─── Food Rating ───
-            Center(child: Text('How was the food?', style: AppTypography.h3)),
-            const SizedBox(height: AppSpacing.md),
-            _buildStarRating(
-              rating: _foodRating,
-              onChanged: (r) => setState(() => _foodRating = r),
-            ),
-
-            const SizedBox(height: AppSpacing.xxl),
-
-            // ─── Delivery Rating ───
-            Center(
-              child: Text('How was the delivery?', style: AppTypography.h3),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _buildStarRating(
-              rating: _deliveryRating,
-              onChanged: (r) => setState(() => _deliveryRating = r),
-            ),
-
-            const SizedBox(height: AppSpacing.xxl),
-
-            // ─── Tags ───
-            Text(
-              'What was good?',
-              style: AppTypography.body1.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: _tags.map((tag) {
-                final isSelected = _selectedTags.contains(tag);
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isSelected) {
-                        _selectedTags.remove(tag);
-                      } else {
-                        _selectedTags.add(tag);
-                      }
-                    });
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.primary.withValues(alpha: 0.15)
-                          : AppColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(
-                        AppSpacing.radiusFull,
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ─── Restaurant Info ───
+                  if (order != null)
+                    GlassCard(
+                      child: Row(
+                        children: [
+                          const Text('🍽️', style: TextStyle(fontSize: 32)),
+                          const SizedBox(width: AppSpacing.md),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                order.restaurantName,
+                                style: AppTypography.h3.copyWith(fontSize: 16),
+                              ),
+                              Text(
+                                'Order #${order.orderNumber}',
+                                style: AppTypography.caption,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppColors.primary
-                            : AppColors.divider,
-                      ),
-                    ),
+                    ).animate().fadeIn(),
+
+                  const SizedBox(height: AppSpacing.xxl),
+
+                  // ─── Food Rating ───
+                  Center(
+                    child: Text('How was the food?', style: AppTypography.h3),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _buildStarRating(
+                    rating: _foodRating,
+                    onChanged: (r) => setState(() => _foodRating = r),
+                  ),
+
+                  const SizedBox(height: AppSpacing.xxl),
+
+                  // ─── Delivery Rating ───
+                  Center(
                     child: Text(
-                      tag,
-                      style: AppTypography.caption.copyWith(
-                        color: isSelected
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
-                      ),
+                      'How was the delivery?',
+                      style: AppTypography.h3,
                     ),
                   ),
-                );
-              }).toList(),
-            ),
+                  const SizedBox(height: AppSpacing.sm),
+                  // Helper text explaining delivery rating is optional
+                  Center(
+                    child: Text(
+                      '(Optional - if not rated, food rating will be used)',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textTertiary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _buildStarRating(
+                    rating: _deliveryRating,
+                    onChanged: (r) => setState(() => _deliveryRating = r),
+                  ),
 
-            const SizedBox(height: AppSpacing.xxl),
+                  const SizedBox(height: AppSpacing.xxl),
 
-            // ─── Review Text ───
-            Text(
-              'Write a review (optional)',
-              style: AppTypography.body1.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: _reviewController,
-              style: AppTypography.body2.copyWith(color: Colors.white),
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText: 'Share your experience with this order...',
+                  // ─── Tags ───
+                  Text(
+                    'What was good?',
+                    style: AppTypography.body1.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: _tags.map((tag) {
+                      final isSelected = _selectedTags.contains(tag);
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedTags.remove(tag);
+                            } else {
+                              _selectedTags.add(tag);
+                            }
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppColors.primary.withValues(alpha: 0.15)
+                                : AppColors.surfaceElevated,
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.radiusFull,
+                            ),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.divider,
+                            ),
+                          ),
+                          child: Text(
+                            tag,
+                            style: AppTypography.caption.copyWith(
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: AppSpacing.xxl),
+
+                  // ─── Review Text ───
+                  Text(
+                    'Write a review (optional)',
+                    style: AppTypography.body1.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: _reviewController,
+                    style: AppTypography.body2.copyWith(color: Colors.white),
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      hintText: 'Share your experience with this order...',
+                    ),
+                  ),
+
+                  const SizedBox(height: AppSpacing.xxl),
+
+                  // ─── Submit ───
+                  ChizzeButton(
+                    label: _isSubmitting ? 'Submitting...' : 'Submit Review',
+                    icon: Icons.send_rounded,
+                    onPressed: _foodRating > 0 && !_isSubmitting
+                        ? _submitReview
+                        : null,
+                  ),
+
+                  // ─── Retry Button (if previous submission failed) ───
+                  if (_lastSubmissionData != null && !_isSubmitting) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    OutlinedButton.icon(
+                      onPressed: _retrySubmission,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry Last Submission'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.warning,
+                        side: BorderSide(color: AppColors.warning),
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-
-            const SizedBox(height: AppSpacing.xxl),
-
-            // ─── Submit ───
-            ChizzeButton(
-              label: _isSubmitting ? 'Submitting...' : 'Submit Review',
-              icon: Icons.send_rounded,
-              onPressed: _foodRating > 0 && !_isSubmitting
-                  ? () async {
-                      setState(() => _isSubmitting = true);
-                      try {
-                        final api = ref.read(apiClientProvider);
-                        await api.post(
-                          '${ApiConfig.orders}/${widget.orderId}/review',
-                          body: {
-                            'food_rating': _foodRating,
-                            'delivery_rating':
-                                _deliveryRating > 0 ? _deliveryRating : _foodRating,
-                            'review_text': _reviewController.text.trim(),
-                            'tags': _selectedTags.toList(),
-                          },
-                        );
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Thanks for your review! 🎉'),
-                            backgroundColor: AppColors.success,
-                          ),
-                        );
-                        context.go('/home');
-                      } catch (e) {
-                        if (!context.mounted) return;
-                        setState(() => _isSubmitting = false);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Failed to submit review: $e'),
-                            backgroundColor: AppColors.error,
-                          ),
-                        );
-                      }
-                    }
-                  : null,
-            ),
-          ],
-        ),
-      ),
     );
+  }
+
+  Map<String, dynamic> _buildSubmissionData() {
+    final payload = <String, dynamic>{
+      'food_rating': _foodRating,
+      'review_text': _reviewController.text.trim(),
+      'tags': _selectedTags.toList(),
+    };
+
+    if (_deliveryRating > 0) {
+      payload['delivery_rating'] = _deliveryRating;
+    }
+
+    return payload;
+  }
+
+  /// Submit review to backend
+  Future<void> _submitReview() async {
+    setState(() => _isSubmitting = true);
+
+    final submissionData = _buildSubmissionData();
+
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post(
+        '${ApiConfig.orders}/${widget.orderId}/review',
+        body: submissionData,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _lastSubmissionData = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Thanks for your review! 🎉'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      context.go('/home');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _lastSubmissionData = submissionData;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to submit review: $e'),
+          backgroundColor: AppColors.error,
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: _retrySubmission,
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Retry failed submission with saved data
+  Future<void> _retrySubmission() async {
+    if (_lastSubmissionData == null) return;
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post(
+        '${ApiConfig.orders}/${widget.orderId}/review',
+        body: _lastSubmissionData!,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _lastSubmissionData = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Thanks for your review! 🎉'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      context.go('/home');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Retry failed: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   Widget _buildStarRating({

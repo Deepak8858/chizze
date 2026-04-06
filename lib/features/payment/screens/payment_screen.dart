@@ -140,11 +140,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Widget _buildDeliveryAddressSection(BuildContext context, WidgetRef ref) {
     final addresses = ref.watch(addressProvider);
     final profile = ref.watch(userProfileProvider);
-    final defaultAddr = addresses.where((a) => a.isDefault).firstOrNull ??
+    final defaultAddr =
+        addresses.where((a) => a.isDefault).firstOrNull ??
         (addresses.isNotEmpty ? addresses.first : null);
 
     final label = defaultAddr?.label ?? 'Home';
-    final addressText = defaultAddr?.fullAddress ??
+    final addressText =
+        defaultAddr?.fullAddress ??
         (profile.address.isNotEmpty ? profile.address : null);
 
     return GlassCard(
@@ -181,9 +183,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           if (addressText != null) ...[
             Text(
               label,
-              style: AppTypography.body2.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
+              style: AppTypography.body2.copyWith(fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 2),
             Text(
@@ -206,9 +206,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               child: Center(
                 child: Text(
                   'No delivery address set. Tap "Add Address" above.',
-                  style: AppTypography.caption.copyWith(
-                    color: AppColors.error,
-                  ),
+                  style: AppTypography.caption.copyWith(color: AppColors.error),
                 ),
               ),
             ),
@@ -422,22 +420,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     // If no saved address exists but profile has address data, auto-create one
     if (defaultAddress == null && profile.address.isNotEmpty) {
-      final created = await ref.read(addressProvider.notifier).addAddressAsync(
-        SavedAddress(
-          id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-          label: 'Home',
-          fullAddress: profile.address,
-          latitude: profile.latitude,
-          longitude: profile.longitude,
-          isDefault: true,
-        ),
-      );
+      final created = await ref
+          .read(addressProvider.notifier)
+          .addAddressAsync(
+            SavedAddress(
+              id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+              label: 'Home',
+              fullAddress: profile.address,
+              latitude: profile.latitude,
+              longitude: profile.longitude,
+              isDefault: true,
+            ),
+          );
       if (created != null) {
         defaultAddress = created;
       }
     }
 
     final deliveryAddressId = defaultAddress?.id ?? '';
+
+    if (!mounted) return;
 
     if (deliveryAddressId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -450,7 +452,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final paymentMethod = _selectedMethod == 'cod' ? 'cod' : 'online';
 
     // Step 1: Create order on backend
-    final orderDoc = await ref.read(paymentProvider.notifier).placeBackendOrder(
+    final orderDoc = await ref
+        .read(paymentProvider.notifier)
+        .placeBackendOrder(
           cartState: cartState,
           paymentMethod: paymentMethod,
           deliveryAddressId: deliveryAddressId,
@@ -473,7 +477,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       context.go('/order-confirmation/$orderId');
     } else {
       // Razorpay — initiate payment with the backend order ID
-      await ref.read(paymentProvider.notifier).startPayment(
+      await ref
+          .read(paymentProvider.notifier)
+          .startPayment(
             orderId: orderId,
             amount: total,
             customerEmail: userEmail,
@@ -585,7 +591,9 @@ class _PaymentMethodCard extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.textSecondary,
                   width: 2,
                 ),
               ),

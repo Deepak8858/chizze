@@ -111,7 +111,9 @@ class _AvailabilityScreenState extends ConsumerState<AvailabilityScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          partner.isOnline ? 'You\'re Online' : 'You\'re Offline',
+                          partner.isOnline
+                              ? 'You\'re Online'
+                              : 'You\'re Offline',
                           style: AppTypography.h3.copyWith(fontSize: 16),
                         ),
                         const SizedBox(height: 2),
@@ -231,19 +233,18 @@ class _AvailabilityScreenState extends ConsumerState<AvailabilityScreen> {
                         context: context,
                         initialTime: _startTime,
                       );
+                      if (!context.mounted) return;
                       if (t != null) {
                         final tMin = t.hour * 60 + t.minute;
                         final endMin = _endTime.hour * 60 + _endTime.minute;
                         if (tMin >= endMin) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Start time must be before end time',
-                                ),
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Start time must be before end time',
                               ),
-                            );
-                          }
+                            ),
+                          );
                           return;
                         }
                         setState(() => _startTime = t);
@@ -261,20 +262,19 @@ class _AvailabilityScreenState extends ConsumerState<AvailabilityScreen> {
                         context: context,
                         initialTime: _endTime,
                       );
+                      if (!context.mounted) return;
                       if (t != null) {
                         final tMin = t.hour * 60 + t.minute;
                         final startMin =
                             _startTime.hour * 60 + _startTime.minute;
                         if (tMin <= startMin) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'End time must be after start time',
-                                ),
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'End time must be after start time',
                               ),
-                            );
-                          }
+                            ),
+                          );
                           return;
                         }
                         setState(() => _endTime = t);
@@ -322,8 +322,11 @@ class _AvailabilityScreenState extends ConsumerState<AvailabilityScreen> {
             GlassCard(
               child: Row(
                 children: [
-                  Icon(Icons.info_outline_rounded,
-                      size: 20, color: AppColors.info),
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 20,
+                    color: AppColors.info,
+                  ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Text(

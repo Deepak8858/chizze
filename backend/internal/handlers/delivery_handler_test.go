@@ -534,9 +534,9 @@ func TestUpdateProfile_Success(t *testing.T) {
 	te.SeedDeliveryPartner("dp_up1", "dp_up", true, 12.97, 77.59)
 
 	rec := te.AuthRequest("PUT", "/api/v1/delivery/profile", map[string]interface{}{
-		"vehicle_type":   "scooter",
-		"vehicle_number": "KA01AB9999",
-		"upi_id":         "rider@upi",
+		"vehicle_type":    "scooter",
+		"vehicle_number":  "KA01AB9999",
+		"bank_account_id": "bank_acc_1",
 	}, "dp_up", "delivery_partner")
 
 	if rec.Code != 200 {
@@ -547,8 +547,8 @@ func TestUpdateProfile_Success(t *testing.T) {
 	if doc["vehicle_type"] != "scooter" {
 		t.Errorf("expected vehicle_type=scooter, got %v", doc["vehicle_type"])
 	}
-	if doc["upi_id"] != "rider@upi" {
-		t.Errorf("expected upi_id=rider@upi, got %v", doc["upi_id"])
+	if doc["bank_account_id"] != "bank_acc_1" {
+		t.Errorf("expected bank_account_id=bank_acc_1, got %v", doc["bank_account_id"])
 	}
 }
 
