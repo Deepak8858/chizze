@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
-import { getToken, getUser } from "@/lib/auth";
+import { clearAuth, getUser } from "@/lib/auth";
+import { authApi } from "@/lib/api";
 
 export default function AdminLayout({
   children,
@@ -14,13 +15,31 @@ export default function AdminLayout({
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const token = getToken();
+    let active = true;
     const user = getUser();
-    if (!token || !user?.role) {
+
+    if (!user?.role) {
       router.replace("/login");
-    } else {
-      setReady(true);
+      return;
     }
+
+    authApi
+      .me()
+      .then(() => {
+        if (active) {
+          setReady(true);
+        }
+      })
+      .catch(() => {
+        clearAuth();
+        if (active) {
+          router.replace("/login");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [router]);
 
   if (!ready) {

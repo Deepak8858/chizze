@@ -5,9 +5,13 @@ import type {
   StuckOrderCleanupPreviewFilters,
   StuckOrderCleanupPreviewResult,
 } from "@/types";
+import { clearAuth } from "@/lib/auth";
 
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://api.devdeepak.me/api/v1";
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production"
+    ? "https://api.devdeepak.me/api/v1"
+    : "http://localhost:8080/api/v1");
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -16,22 +20,13 @@ export const api = axios.create({
   withCredentials: true, // send cookies for httpOnly JWT
 });
 
-// ─── Request interceptor — attach Bearer token ────────────────────────────────
-api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("chizze_admin_token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
 // ─── Response interceptor — handle 401 globally ──────────────────────────────
 api.interceptors.response.use(
   (res) => res,
   async (err: AxiosError) => {
     if (err.response?.status === 401) {
       if (typeof window !== "undefined") {
-        localStorage.removeItem("chizze_admin_token");
+        clearAuth();
         window.location.href = "/login";
       }
     }
@@ -76,9 +71,15 @@ export const authApi = {
   sendOtp: (phone: string) => POST("/auth/send-otp", { phone }),
   /** Exchange an Appwrite JWT for a Chizze API token */
   exchange: (appwriteJwt: string) =>
-    POST<{ token: string; user_id: string; role: string; is_new: boolean }>("/auth/exchange", { jwt: appwriteJwt }),
-  /** Fetch current user profile (requires auth token in header) */
-  me: () => GET<{ $id: string; name: string; phone: string; role: string }>("/users/me"),
+    POST<{ token: string; user_id: string; role: string; is_new: boolean }>(
+      "/auth/exchange",
+      { jwt: appwriteJwt },
+    ),
+  /** Fetch current user profile (cookie-backed auth) */
+  me: () =>
+    GET<{ $id: string; name: string; phone: string; role: string }>(
+      "/users/me",
+    ),
   logout: () => api.delete("/auth/logout"),
 };
 
@@ -241,22 +242,15 @@ export const analyticsApi = {
 export const contentApi = {
   banners: () => GET("/admin/content/banners"),
   getBanners: () => GET("/admin/content/banners"),
-  uploadBannerImage: (formData: FormData) => {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("chizze_admin_token")
-        : null;
-
-    return axios
+  uploadBannerImage: (formData: FormData) =>
+    axios
       .post(`${BASE_URL}/admin/content/banners/upload`, formData, {
         timeout: 60_000,
         withCredentials: true,
         // Intentionally avoid forcing Content-Type here so the browser can
         // attach the multipart boundary for FormData uploads.
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
-      .then((res) => res.data);
-  },
+      .then((res) => res.data),
   createBanner: (body: Record<string, unknown>) =>
     POST("/admin/content/banners", body),
   updateBanner: (id: string, body: Record<string, unknown>) =>

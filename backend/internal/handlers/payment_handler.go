@@ -237,6 +237,14 @@ func (h *PaymentHandler) Webhook(c *gin.Context) {
 			paymentDoc := paymentResult.Documents[0]
 			paymentID, _ := paymentDoc["$id"].(string)
 			orderID, _ := paymentDoc["order_id"].(string)
+			currentStatus, _ := paymentDoc["status"].(string)
+			existingPaymentID, _ := paymentDoc["razorpay_payment_id"].(string)
+
+			// Idempotency: ignore duplicate captured events once payment is already marked successful.
+			if currentStatus == "success" && existingPaymentID == event.Payload.Payment.Entity.ID {
+				log.Printf("[INFO] webhook payment.captured duplicate ignored: rzp_order=%s payment=%s", rzpOrderID, paymentID)
+				break
+			}
 
 			// Verify captured amount matches stored amount (stored in rupees, webhook in paise)
 			storedAmountRupees, _ := paymentDoc["amount"].(float64)
@@ -271,6 +279,13 @@ func (h *PaymentHandler) Webhook(c *gin.Context) {
 			paymentDoc := paymentResult.Documents[0]
 			paymentID, _ := paymentDoc["$id"].(string)
 			orderID, _ := paymentDoc["order_id"].(string)
+			currentStatus, _ := paymentDoc["status"].(string)
+
+			// Ignore stale/duplicate failures once payment is already successful.
+			if currentStatus == "success" {
+				log.Printf("[SECURITY] webhook payment.failed ignored for successful payment: rzp_order=%s payment=%s", rzpOrderID, paymentID)
+				break
+			}
 
 			if _, err := h.appwrite.UpdatePayment(paymentID, map[string]interface{}{
 				"status": "failed",

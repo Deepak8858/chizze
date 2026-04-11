@@ -11,8 +11,11 @@ import 'core/services/api_client.dart';
 import 'features/profile/providers/user_profile_provider.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/services/map_config.dart';
 import 'config/environment.dart';
+
+const _kLocationDisclosureAcceptedKey = 'location_disclosure_accepted_v1';
 
 
 void main() async {
@@ -136,11 +139,75 @@ void main() async {
   );
 }
 
-class ChizzeApp extends ConsumerWidget {
+class ChizzeApp extends ConsumerStatefulWidget {
   const ChizzeApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChizzeApp> createState() => _ChizzeAppState();
+}
+
+class _ChizzeAppState extends ConsumerState<ChizzeApp> {
+  bool _disclosureFlowStarted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showFirstLaunchDisclosureIfNeeded();
+    });
+  }
+
+  Future<void> _showFirstLaunchDisclosureIfNeeded() async {
+    if (_disclosureFlowStarted || !mounted) return;
+
+    _disclosureFlowStarted = true;
+    final prefs = await SharedPreferences.getInstance();
+    final accepted = prefs.getBool(_kLocationDisclosureAcceptedKey) ?? false;
+    if (accepted || !mounted) return;
+
+    final navigatorState = rootNavigatorKey.currentState;
+    if (navigatorState == null || !navigatorState.mounted) {
+      _disclosureFlowStarted = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showFirstLaunchDisclosureIfNeeded();
+      });
+      return;
+    }
+
+    await showDialog<void>(
+      context: navigatorState.context,
+      barrierDismissible: false,
+      builder: (context) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            icon: const Icon(Icons.location_on, size: 40),
+            title: const Text('Location Data Disclosure'),
+            content: const Text(
+              'This app collects location data to enable real time delivery '
+              'tracking and partner saftey even when the app is closed.',
+            ),
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () async {
+                    final navigator = Navigator.of(context);
+                    await prefs.setBool(_kLocationDisclosureAcceptedKey, true);
+                    navigator.pop();
+                  },
+                  child: const Text('Agree'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     final isDark = ref.watch(userProfileProvider.select((p) => p.darkMode));
 

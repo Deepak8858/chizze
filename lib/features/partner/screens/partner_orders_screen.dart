@@ -549,25 +549,23 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: reasons
                     .map(
-                      (reason) => ListTile(
+                      (reason) => RadioListTile<String>(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          selectedReason == reason
-                              ? Icons.radio_button_checked_rounded
-                              : Icons.radio_button_off_rounded,
-                          color: selectedReason == reason
-                              ? AppColors.primary
-                              : AppColors.textSecondary,
-                        ),
+                        value: reason,
+                        groupValue: selectedReason,
+                        activeColor: AppColors.primary,
                         title: Text(
                           reason,
                           style: AppTypography.body2.copyWith(
                             color: Colors.white,
                           ),
                         ),
-                        onTap: () =>
-                            setDialogState(() => selectedReason = reason),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setDialogState(() => selectedReason = v);
+                          }
+                        },
                       ),
                     )
                     .toList(),

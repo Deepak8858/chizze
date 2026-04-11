@@ -1,42 +1,55 @@
 # Copilot Instructions for Chizze
 
-## Big picture (use this mental model first)
-- This repo is a **Flutter mobile app** (`lib/`) + **Go API server** (`backend/`) + **Appwrite Cloud** (managed auth/db/storage/realtime).
-- Runtime flow: Flutter authenticates with Appwrite, then exchanges Appwrite JWT for backend JWT via `POST /api/v1/auth/exchange`.
-- Business logic lives in Go (`backend/internal/services`, `backend/internal/handlers`), while Appwrite acts as data/auth platform.
-- Real-time updates are dual-path: Appwrite Realtime + Go WebSocket (`/api/v1/ws`) for order/delivery events.
+## Big Picture
+- This repo is a Flutter mobile app (`lib/`), Go API server (`backend/`), Next.js admin web app (`admin/`), and Appwrite Cloud for auth/data/realtime.
+- Runtime auth flow: client authenticates with Appwrite, then exchanges Appwrite JWT for backend JWT via `POST /api/v1/auth/exchange`.
+- Business logic lives in Go (`backend/internal/services`, `backend/internal/handlers`), while Appwrite is the managed auth/data platform.
+- Real-time updates are dual-path: Appwrite Realtime plus Go WebSocket (`/api/v1/ws`) for order and delivery events.
 
-## Where to change code
-- Flutter app code: `lib/core` (shared infra), `lib/features/*` (role-specific/user-facing features).
-- Go API entrypoint + route map: `backend/cmd/server/main.go`.
-- Go internals: `backend/internal/{handlers,services,middleware,workers,websocket}`.
+## Code Boundaries
+- Flutter app code: `lib/core` (shared infra) and `lib/features/*` (role/user features).
+- Backend entrypoint and route map: `backend/cmd/server/main.go`.
+- Backend internals: `backend/internal/{handlers,services,middleware,workers,websocket}`.
+- Admin web app: `admin/app` (pages), `admin/lib` (API/auth), `admin/types` (contracts).
 - Shared contracts to keep in sync:
-  - WebSocket events: `backend/internal/websocket/events.go` ↔ `lib/core/services/websocket_service.dart` (`WsEventType`).
-  - API response shape (`success/data/error/meta`): `lib/core/models/api_response.dart`.
-  - Order statuses/transitions: `backend/internal/models/order.go` and Flutter order models/providers.
+  - WebSocket events: `backend/internal/websocket/events.go` <-> `lib/core/services/websocket_service.dart` (`WsEventType`).
+  - API response envelope (`success/data/error/meta`): `backend/pkg/utils/response.go` <-> `lib/core/models/api_response.dart`.
+  - Order statuses/transitions: `backend/internal/models/order.go` plus Flutter/admin order models.
 
-## Project conventions (important)
-- State management in Flutter uses `StateNotifierProvider` + immutable `State` classes with `copyWith` (see `lib/features/home/providers/restaurant_provider.dart`).
-- Routing/role guards are centralized in `lib/core/router/app_router.dart`; do not duplicate auth/role redirect logic in screens.
-- Role strings are exact: `customer`, `restaurant_owner`, `delivery_partner`; keep backend middleware and Flutter checks aligned.
-- API endpoints are centralized in `lib/core/services/api_config.dart`; update this when backend routes change.
-- Auth persistence uses secure storage + backend token restore (`lib/core/auth/auth_provider.dart`); avoid bypassing this flow.
-
-## Dev workflows (preferred commands)
-- Full stack dev backend (local): `make dev` (runs `go run ./cmd/server` in `backend/`).
-- Docker dev backend+redis: `make dev-docker`.
+## Build And Test
+- Backend local dev: `make dev`.
+- Backend via Docker: `make dev-docker`.
 - Flutter deps/test/lint: `make flutter-deps`, `make flutter-test`, `make flutter-lint`.
-- Go deps/test/lint: `make go-deps`, `make go-test`, `make go-lint`, `make go-vuln`.
+- Go deps/test/lint/vuln: `make go-deps`, `make go-test`, `make go-lint`, `make go-vuln`.
+- Android artifacts: `make android-apk`, `make android-aab`.
 - Combined checks: `make test`, `make lint`.
+- Admin app (from `admin/`): `npm run dev`, `npm run build`, `npm run lint`, `npm run test`.
 
-## Environment and config
-- Flutter API/Appwrite endpoints are controlled with `--dart-define`; see `lib/config/environment.dart`.
-- Backend env keys are in `backend/.env.example` (Appwrite, Redis, JWT, Razorpay).
-- Production deploy assets are in `deploy/` and `deploy/README.md`; backend container config is `backend/Dockerfile`.
+## Conventions
+- Flutter state uses `StateNotifierProvider` and immutable state with `copyWith` (example: `lib/features/home/providers/restaurant_provider.dart`).
+- Routing and role guards are centralized in `lib/core/router/app_router.dart`; do not duplicate redirect logic in screens.
+- Role strings must stay exact and aligned across layers: `customer`, `restaurant_owner`, `delivery_partner` (plus backend admin roles where relevant).
+- Keep endpoint declarations centralized:
+  - Flutter: `lib/core/services/api_config.dart`
+  - Admin: `admin/lib/api.ts`
+- Auth persistence in Flutter must follow `lib/core/auth/auth_provider.dart` (secure storage + backend token restore).
+- For new protected backend routes, use the middleware pattern from `backend/cmd/server/main.go`: `Auth(...)` then `RequireRole(...)`.
 
-## Agent guardrails for this repo
-- Prefer editing source under `lib/` and `backend/`; avoid touching generated/third-party content in `build/`, `backend/.gopath/`, and `backend/.gomod/`.
-- Validate cross-layer changes end-to-end: if you add/rename a backend field/event/route, update corresponding Flutter model/provider/service.
-- Keep response contracts backward-compatible where possible; many providers parse dynamic maps from API payloads.
-- For new authenticated backend routes, apply existing middleware pattern: `Auth(...)` then `RequireRole(...)` when role-scoped.
+## Environment
+- Flutter env comes from `--dart-define`; see `lib/config/environment.dart`.
+- Backend env template: `backend/.env.example`.
+- Admin env template: `admin/.env.example`.
+- Deployment and infra docs: `deploy/README.md`; backend container config: `backend/Dockerfile`.
+
+## Guardrails
+- Prefer editing source under `lib/`, `backend/`, and `admin/`.
+- Do not edit generated/vendor/cache outputs: `build/`, `admin/.next/`, `admin/node_modules/`, `backend/.gopath/`, `backend/.gomod/`.
+- Validate cross-layer changes end-to-end: backend field/event/route changes usually require Flutter and admin updates.
+- Keep API contracts backward-compatible where possible (many consumers parse dynamic maps).
 - Keep Sentry noise controls intact unless intentionally changing telemetry (`lib/main.dart`, `lib/core/services/api_client.dart`).
+
+## Reference Docs (Link, Do Not Duplicate)
+- Architecture and boundaries: `.planning/codebase/ARCHITECTURE.md`, `.planning/codebase/STRUCTURE.md`.
+- Project conventions and testing patterns: `.planning/codebase/CONVENTIONS.md`, `.planning/codebase/TESTING.md`.
+- Known risks and integration notes: `.planning/codebase/CONCERNS.md`, `.planning/codebase/INTEGRATIONS.md`.
+- Production topology and deployment: `production_architecture.md`, `deploy/README.md`.

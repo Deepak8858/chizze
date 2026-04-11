@@ -73,7 +73,9 @@ class _DeliveryMapState extends State<DeliveryMap> {
     super.initState();
     // Safety: re-set Mapbox access token before every map instance to
     // guard against native SDK losing the token on rebuilds / backgrounding.
-    MapboxOptions.setAccessToken(MapConfig.accessToken);
+    if (MapConfig.accessToken.isNotEmpty) {
+      MapboxOptions.setAccessToken(MapConfig.accessToken);
+    }
   }
 
   @override

@@ -532,7 +532,7 @@ class _QuickOrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final order = partnerOrder.order;
     final itemsSummary = order.items
-        .map((i) => '${i.name} times ${i.quantity}')
+        .map((i) => '${i.quantity} x ${i.name}')
         .join(', ');
 
     return Semantics(

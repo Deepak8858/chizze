@@ -119,10 +119,26 @@ func Load() *Config {
 	}
 
 	if cfg.IsProduction() && strings.HasPrefix(cfg.RazorpayKeyID, "rzp_test_") {
-		log.Println("WARNING: Razorpay TEST keys detected in production — real payments will NOT be processed")
+		allowTestKeys := strings.EqualFold(
+			strings.TrimSpace(getEnv("ALLOW_RAZORPAY_TEST_KEYS_IN_PROD", "false")),
+			"true",
+		)
+		if allowTestKeys {
+			log.Println("WARNING: Razorpay TEST keys detected in production and ALLOW_RAZORPAY_TEST_KEYS_IN_PROD=true — payments are running in test mode")
+		} else {
+			log.Fatal("FATAL: Razorpay TEST keys detected in production — configure live keys before startup")
+		}
 	}
 	if cfg.IsProduction() && cfg.RazorpayWebhookSecret == "" {
-		log.Println("WARNING: RAZORPAY_WEBHOOK_SECRET not set — webhook signatures cannot be verified in production")
+		allowTestKeys := strings.EqualFold(
+			strings.TrimSpace(getEnv("ALLOW_RAZORPAY_TEST_KEYS_IN_PROD", "false")),
+			"true",
+		)
+		if allowTestKeys && strings.HasPrefix(cfg.RazorpayKeyID, "rzp_test_") {
+			log.Println("WARNING: RAZORPAY_WEBHOOK_SECRET not set while test-mode override is enabled — webhook verification may fail for test traffic")
+		} else {
+			log.Fatal("FATAL: RAZORPAY_WEBHOOK_SECRET not set — webhook signatures cannot be verified safely in production")
+		}
 	}
 
 	if len(cfg.AndroidAssetLinksFingerprints) == 0 {

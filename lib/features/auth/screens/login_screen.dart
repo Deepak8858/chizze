@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:appwrite/enums.dart';
@@ -55,6 +56,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  String? _extractIndianTenDigitPhone(String input) {
+    final digitsOnly = input.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.length == 10) {
+      return digitsOnly;
+    }
+    if (digitsOnly.length == 12 && digitsOnly.startsWith('91')) {
+      return digitsOnly.substring(2);
+    }
+    return null;
+  }
+
+  String _toE164IndianPhone(String localPhone) {
+    return '+91$localPhone';
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -79,13 +108,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Error → show snackbar
       if (next.error != null) {
         if (kDebugMode) debugPrint('[Login] Error: ${next.error}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.error!),
-            backgroundColor: AppColors.error,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        _showError(next.error!);
         ref.read(authProvider.notifier).clearError();
       }
     });
@@ -187,14 +210,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           // Phone input
           TextField(
             controller: _phoneController,
-            keyboardType: TextInputType.phone,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
             style: AppTypography.body1,
             decoration: InputDecoration(
-              hintText: '+91 98765 43210',
+              hintText: '9876543210',
               prefixIcon: Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Text('🇮🇳', style: TextStyle(fontSize: 20)),
               ),
+              prefixText: '+91 ',
+              counterText: '',
             ),
           ),
 
@@ -205,12 +234,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             label: 'Send OTP',
             isLoading: authState.isLoading,
             onPressed: () async {
-              final phone = _phoneController.text.trim();
-              if (phone.isEmpty) return;
+              final inputPhone = _phoneController.text.trim();
+              if (inputPhone.isEmpty) {
+                _showError('Please enter your phone number to continue.');
+                return;
+              }
 
-              final formattedPhone = phone.startsWith('+')
-                  ? phone
-                  : '+91$phone';
+              final localPhone = _extractIndianTenDigitPhone(inputPhone);
+              if (localPhone == null) {
+                _showError('Please enter a valid 10-digit mobile number.');
+                return;
+              }
+
+              final formattedPhone = _toE164IndianPhone(localPhone);
+
               final userId = await ref
                   .read(authProvider.notifier)
                   .sendPhoneOTP(formattedPhone);
@@ -328,11 +365,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             label: 'Login',
             isLoading: authState.isLoading,
             onPressed: () {
+              final email = _emailController.text.trim();
+              final password = _passwordController.text;
+
+              if (email.isEmpty) {
+                _showError('Please enter your email address.');
+                return;
+              }
+
+              final isValidEmail = RegExp(
+                r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+              ).hasMatch(email);
+              if (!isValidEmail) {
+                _showError('Please enter a valid email address.');
+                return;
+              }
+
+              if (password.isEmpty) {
+                _showError('Please enter your password.');
+                return;
+              }
+
               ref
                   .read(authProvider.notifier)
                   .loginWithEmail(
-                    _emailController.text.trim(),
-                    _passwordController.text,
+                    email, password,
                   );
             },
           ),

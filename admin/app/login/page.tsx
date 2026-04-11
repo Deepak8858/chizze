@@ -65,7 +65,10 @@ export default function LoginPage() {
       } catch (err: unknown) {
         // If there's an active session lingering, delete it and retry
         const typedErr = err as { code?: number; type?: string };
-        if (typedErr?.code === 401 || typedErr?.type === "user_session_already_exists") {
+        if (
+          typedErr?.code === 401 ||
+          typedErr?.type === "user_session_already_exists"
+        ) {
           await account.deleteSession("current").catch(() => {});
           await account.createSession(userIdRef.current, otp);
         } else {
@@ -87,17 +90,30 @@ export default function LoginPage() {
 
       // 4. Check admin role
       const role = res.role;
-      if (!role || role === "customer" || role === "restaurant_owner" || role === "delivery_partner") {
+      if (
+        !role ||
+        role === "customer" ||
+        role === "restaurant_owner" ||
+        role === "delivery_partner"
+      ) {
         toast.error("Access denied. Admin accounts only.");
         // Clean up Appwrite session
-        try { await account.deleteSession("current"); } catch { /* ignore */ }
+        try {
+          await account.deleteSession("current");
+        } catch {
+          /* ignore */
+        }
         setLoading(false);
         return;
       }
 
-      // 5. Store token, then fetch user profile
-      localStorage.setItem("chizze_admin_token", res.token);
-      let user: AdminUser = { id: res.user_id, name: "", phone: `+91${phone}`, role };
+      // 5. Fetch user profile for UI metadata
+      let user: AdminUser = {
+        id: res.user_id,
+        name: "",
+        phone: `+91${phone}`,
+        role,
+      };
       try {
         const profileRes = (await authApi.me()) as ApiEnvelope<{
           $id: string;
@@ -106,10 +122,17 @@ export default function LoginPage() {
           role: string;
         }>;
         const profile = unwrapEnvelope(profileRes);
-        user = { id: profile.$id || res.user_id, name: profile.name || "", phone: profile.phone || `+91${phone}`, role: profile.role || role };
-      } catch { /* profile fetch is best-effort */ }
+        user = {
+          id: profile.$id || res.user_id,
+          name: profile.name || "",
+          phone: profile.phone || `+91${phone}`,
+          role: profile.role || role,
+        };
+      } catch {
+        /* profile fetch is best-effort */
+      }
 
-      saveAuth(res.token, user);
+      saveAuth(user);
       toast.success("Welcome back!");
       router.replace("/");
     } catch {

@@ -148,6 +148,35 @@ func TestAuth_ValidToken(t *testing.T) {
 	}
 }
 
+func TestAuth_ValidTokenFromCookie(t *testing.T) {
+	cfg := &config.Config{JWTSecret: "test-secret"}
+	token := createTestToken("test-secret", "user_cookie", "admin", 1*time.Hour)
+
+	var capturedUserID, capturedRole string
+
+	r := gin.New()
+	r.GET("/test", Auth(cfg), func(c *gin.Context) {
+		capturedUserID = GetUserID(c)
+		capturedRole = GetUserRole(c)
+		c.JSON(200, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test", nil)
+	req.AddCookie(&http.Cookie{Name: "chizze_auth_token", Value: token})
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200, got %d", w.Code)
+	}
+	if capturedUserID != "user_cookie" {
+		t.Errorf("UserID = %q, want 'user_cookie'", capturedUserID)
+	}
+	if capturedRole != "admin" {
+		t.Errorf("Role = %q, want 'admin'", capturedRole)
+	}
+}
+
 func TestRequireRole_Allowed(t *testing.T) {
 	r := gin.New()
 	r.GET("/test", func(c *gin.Context) {

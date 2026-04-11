@@ -1538,8 +1538,28 @@ func (h *AdminHandler) UpdateDeliveryPartner(c *gin.Context) {
 		utils.BadRequest(c, "Invalid request body")
 		return
 	}
-	doc, err := h.appwrite.UpdateDeliveryPartner(c.Param("id"), body)
+
+	// Only allow known fields to prevent Appwrite schema errors
+	allowed := map[string]bool{
+		"is_online": true, "is_active": true, "is_available": true,
+		"documents_verified": true, "status": true, "phone": true,
+		"name": true, "vehicle_type": true, "vehicle_number": true,
+		"latitude": true, "longitude": true, "city": true,
+	}
+	clean := make(map[string]interface{})
+	for k, v := range body {
+		if allowed[k] {
+			clean[k] = v
+		}
+	}
+	if len(clean) == 0 {
+		utils.BadRequest(c, "No valid fields to update")
+		return
+	}
+
+	doc, err := h.appwrite.UpdateDeliveryPartner(c.Param("id"), clean)
 	if err != nil {
+		log.Printf("[AdminHandler.UpdateDeliveryPartner] Appwrite error for %s: %v (body: %v)", c.Param("id"), err, clean)
 		utils.InternalError(c, "Failed to update delivery partner")
 		return
 	}
@@ -1704,7 +1724,9 @@ func (h *AdminHandler) ListReviews(c *gin.Context) {
 
 	result, err := h.appwrite.ListReviewsByQuery(queries)
 	if err != nil {
-		utils.InternalError(c, "Failed to list reviews")
+		log.Printf("[AdminHandler.ListReviews] Appwrite error: %v (queries: %v)", err, queries)
+		// Return empty list instead of 500 if collection has issues
+		utils.Paginated(c, []map[string]interface{}{}, p.Page, p.PerPage, 0)
 		return
 	}
 	utils.Paginated(c, result.Documents, p.Page, p.PerPage, result.Total)
@@ -1994,9 +2016,17 @@ func (h *AdminHandler) ListDisputes(c *gin.Context) {
 		appwrite.QueryLimit(p.PerPage),
 		appwrite.QueryOffset(p.Offset()),
 	}
+
+	// Support status filter from admin panel
+	if status := strings.TrimSpace(c.Query("status")); status != "" && status != "all" {
+		queries = append(queries, appwrite.QueryEqual("status", status))
+	}
+
 	result, err := h.appwrite.ListDeliveryIssuesByQuery(queries)
 	if err != nil {
-		utils.InternalError(c, "Failed to list disputes")
+		log.Printf("[AdminHandler.ListDisputes] Appwrite error: %v (queries: %v)", err, queries)
+		// Return empty list instead of 500 if collection doesn't exist yet
+		utils.Paginated(c, []map[string]interface{}{}, p.Page, p.PerPage, 0)
 		return
 	}
 	docs := []map[string]interface{}{}

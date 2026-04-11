@@ -20,21 +20,6 @@ class PermissionService {
     return status.isGranted;
   }
 
-  /// Request "always" (background) location permission.
-  /// Must be called **after** `ensureLocationPermission()` succeeds because
-  /// Android requires foreground location first.
-  Future<bool> ensureBackgroundLocationPermission() async {
-    // Foreground first
-    final foreground = await ensureLocationPermission();
-    if (!foreground) return false;
-
-    var status = await Permission.locationAlways.status;
-    if (status.isGranted) return true;
-
-    status = await Permission.locationAlways.request();
-    return status.isGranted;
-  }
-
   // ─── Camera ───────────────────────────────────────────────
 
   /// Request camera permission. Returns `true` if granted.
@@ -100,12 +85,11 @@ class PermissionService {
   }
 
   /// Request delivery-partner specific permissions:
-  ///   • Location (always / background)
+  ///   • Location (foreground / while in use)
   ///   • Notifications
   Future<Map<String, bool>> requestDeliveryPermissions() async {
     final results = <String, bool>{};
-    results['backgroundLocation'] =
-        await ensureBackgroundLocationPermission();
+    results['location'] = await ensureLocationPermission();
     results['notifications'] = await ensureNotificationPermission();
     return results;
   }

@@ -79,6 +79,19 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     _focusNodes[0].requestFocus();
   }
 
+  void _showError(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -97,15 +110,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       // Error → show snackbar, reset verify flag, clear OTP
       if (next.error != null) {
         if (kDebugMode) debugPrint('[OTP] Error: ${next.error}');
+        final wasVerifying = _isVerifying;
         setState(() => _isVerifying = false);
-        _clearOtp();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.error!),
-            backgroundColor: AppColors.error,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        if (wasVerifying) {
+          _clearOtp();
+        }
+        _showError(next.error!);
         ref.read(authProvider.notifier).clearError();
       }
       // Loading finished without success → reset flag
@@ -221,12 +231,19 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       ? null
                       : () async {
                           final messenger = ScaffoldMessenger.of(context);
-                          await ref
+                          final resentUserId = await ref
                               .read(authProvider.notifier)
-                              .sendPhoneOTP(widget.phone);
-                          if (mounted) {
+                              .sendPhoneOTP(
+                                widget.phone,
+                                userId: widget.userId,
+                              );
+                          if (mounted && resentUserId != null) {
                             messenger.showSnackBar(
-                              const SnackBar(content: Text('OTP resent!')),
+                              const SnackBar(
+                                content: Text(
+                                  'A new OTP has been sent to your phone.',
+                                ),
+                              ),
                             );
                           }
                         },

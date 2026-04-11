@@ -32,23 +32,34 @@ interface DashboardData {
   recent_orders: Order[];
 }
 
+interface ApiEnvelope<T> {
+  success: boolean;
+  data: T;
+  error?: string;
+}
+
 export default function DashboardPage() {
-  const { data, isLoading } = useQuery<DashboardData>({
+  const { data, isLoading } = useQuery<ApiEnvelope<DashboardData>>({
     queryKey: ["admin-dashboard"],
-    queryFn: () => dashboardApi.stats() as Promise<DashboardData>,
+    queryFn: () => dashboardApi.stats() as Promise<ApiEnvelope<DashboardData>>,
     refetchInterval: 30_000,
   });
 
-  const { data: analyticsData } = useQuery({
+  const { data: analyticsData } = useQuery<
+    ApiEnvelope<{ revenue_chart?: RevenueDataPoint[] }>
+  >({
     queryKey: ["admin-analytics", "month"],
-    queryFn: () => dashboardApi.analytics("month"),
+    queryFn: () =>
+      dashboardApi.analytics("month") as Promise<
+        ApiEnvelope<{ revenue_chart?: RevenueDataPoint[] }>
+      >,
     refetchInterval: 60_000,
   });
 
-  const stats = data?.stats;
-  const revenueData = (analyticsData as { revenue_chart?: RevenueDataPoint[] })?.revenue_chart ?? [];
-  const statusData = data?.status_chart ?? [];
-  const recentOrders = data?.recent_orders ?? [];
+  const stats = data?.data?.stats;
+  const revenueData = analyticsData?.data?.revenue_chart ?? [];
+  const statusData = data?.data?.status_chart ?? [];
+  const recentOrders = data?.data?.recent_orders ?? [];
 
   return (
     <div className="space-y-6">

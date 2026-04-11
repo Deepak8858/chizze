@@ -7,6 +7,14 @@
         go-test go-lint go-build flutter-test flutter-lint flutter-build \
         android-apk android-aab
 
+# Flutter release build-time defines (override on command line or environment)
+DART_DEFINE_ENV ?= production
+DART_DEFINE_API_URL ?= https://api.devdeepak.me/api/v1
+DART_DEFINE_APPWRITE_PROJECT_ID ?= 6993347c0006ead7404d
+DART_DEFINE_APPWRITE_ENDPOINT ?= https://sgp.cloud.appwrite.io/v1
+DART_DEFINE_SENTRY_DSN ?=
+DART_DEFINE_MAPBOX_ACCESS_TOKEN ?=
+
 # ─── Default Target ───
 help: ## Show this help
 	@echo "Chizze - Available Commands:"
@@ -53,10 +61,22 @@ flutter-build: ## Build Flutter web
 
 # ─── Android ───
 android-apk: ## Build release APK (split per ABI)
-	flutter build apk --release --split-per-abi
+	flutter build apk --release --split-per-abi \
+		--dart-define=ENV=$(DART_DEFINE_ENV) \
+		--dart-define=API_URL=$(DART_DEFINE_API_URL) \
+		--dart-define=APPWRITE_PROJECT_ID=$(DART_DEFINE_APPWRITE_PROJECT_ID) \
+		--dart-define=APPWRITE_ENDPOINT=$(DART_DEFINE_APPWRITE_ENDPOINT) \
+		--dart-define=SENTRY_DSN=$(DART_DEFINE_SENTRY_DSN) \
+		--dart-define=MAPBOX_ACCESS_TOKEN=$(DART_DEFINE_MAPBOX_ACCESS_TOKEN)
 
 android-aab: ## Build release App Bundle
-	flutter build appbundle --release
+	flutter build appbundle --release \
+		--dart-define=ENV=$(DART_DEFINE_ENV) \
+		--dart-define=API_URL=$(DART_DEFINE_API_URL) \
+		--dart-define=APPWRITE_PROJECT_ID=$(DART_DEFINE_APPWRITE_PROJECT_ID) \
+		--dart-define=APPWRITE_ENDPOINT=$(DART_DEFINE_APPWRITE_ENDPOINT) \
+		--dart-define=SENTRY_DSN=$(DART_DEFINE_SENTRY_DSN) \
+		--dart-define=MAPBOX_ACCESS_TOKEN=$(DART_DEFINE_MAPBOX_ACCESS_TOKEN)
 
 # ─── Docker ───
 docker-build: ## Build Docker images for production

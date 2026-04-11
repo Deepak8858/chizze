@@ -20,6 +20,7 @@ concurrency:
 env:
   GO_VERSION: "1.24"
   FLUTTER_VERSION: "3.38.x"
+  NODE_VERSION: "22"
   DOCKER_REGISTRY: ghcr.io
   DOCKER_IMAGE: ${{ github.repository }}/chizze-api
 
@@ -102,6 +103,36 @@ jobs:
           path: coverage/lcov.info
           if-no-files-found: ignore
 
+  # ─── Admin: Lint, Test, Build ───
+  admin-test:
+    name: Admin Lint, Test & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
   # ─── Build Docker Image ───
   docker-build:
     name: Build & Push Docker Image
@@ -154,6 +185,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [flutter-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+      MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -176,8 +211,6 @@ jobs:
 
       - name: Decode keystore
         if: env.ANDROID_KEYSTORE_BASE64 != ''
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/chizze-release.jks
           cat > android/key.properties << EOF
@@ -188,10 +221,24 @@ jobs:
           EOF
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release \
+            --dart-define=ENV=production \
+            --dart-define=API_URL=https://api.devdeepak.me/api/v1 \
+            --dart-define=APPWRITE_PROJECT_ID=6993347c0006ead7404d \
+            --dart-define=APPWRITE_ENDPOINT=https://sgp.cloud.appwrite.io/v1 \
+            --dart-define=SENTRY_DSN=$SENTRY_DSN \
+            --dart-define=MAPBOX_ACCESS_TOKEN=$MAPBOX_ACCESS_TOKEN
 
       - name: Build App Bundle (AAB)
-        run: flutter build appbundle --release
+        run: |
+          flutter build appbundle --release \
+            --dart-define=ENV=production \
+            --dart-define=API_URL=https://api.devdeepak.me/api/v1 \
+            --dart-define=APPWRITE_PROJECT_ID=6993347c0006ead7404d \
+            --dart-define=APPWRITE_ENDPOINT=https://sgp.cloud.appwrite.io/v1 \
+            --dart-define=SENTRY_DSN=$SENTRY_DSN \
+            --dart-define=MAPBOX_ACCESS_TOKEN=$MAPBOX_ACCESS_TOKEN
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
@@ -206,7 +253,7 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [docker-build, flutter-test]
+    needs: [docker-build, flutter-test, admin-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
 

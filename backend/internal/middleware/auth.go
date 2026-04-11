@@ -44,7 +44,14 @@ func Auth(cfg *config.Config, redisClient ...*redispkg.Client) gin.HandlerFunc {
 			}
 		}
 
-		// 2. Fallback: check query parameter (for WebSocket connections)
+		// 2. Fallback: check HttpOnly auth cookie
+		if tokenStr == "" {
+			if cookieToken, err := c.Cookie("chizze_auth_token"); err == nil {
+				tokenStr = cookieToken
+			}
+		}
+
+		// 3. Fallback: check query parameter (for WebSocket connections)
 		if tokenStr == "" {
 			tokenStr = c.Query("token")
 		}

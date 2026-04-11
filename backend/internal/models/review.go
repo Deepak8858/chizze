@@ -10,7 +10,7 @@ type Review struct {
 	RestaurantID      string    `json:"restaurant_id"`
 	DeliveryPartnerID string    `json:"delivery_partner_id,omitempty"`
 	FoodRating        int       `json:"food_rating"`     // 1-5
-	DeliveryRating    int       `json:"delivery_rating"` // 1-5
+	DeliveryRating    *int      `json:"delivery_rating,omitempty"` // 1-5
 	ReviewText        string    `json:"review_text"`
 	Tags              []string  `json:"tags"`
 	Photos            []string  `json:"photos"`

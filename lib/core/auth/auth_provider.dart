@@ -70,6 +70,187 @@ class AuthNotifier extends StateNotifier<AuthState> {
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 
+  String _roleDisplayName(String role) {
+    switch (role) {
+      case 'restaurant_owner':
+        return 'Restaurant Partner';
+      case 'delivery_partner':
+        return 'Delivery Partner';
+      case 'customer':
+        return 'Customer';
+      default:
+        return 'selected role';
+    }
+  }
+
+  String? _extractRoleLabelFromMessage(String lowerCaseMessage) {
+    if (lowerCaseMessage.contains('restaurant partner') ||
+        lowerCaseMessage.contains('restaurant_owner')) {
+      return 'Restaurant Partner';
+    }
+    if (lowerCaseMessage.contains('delivery partner') ||
+        lowerCaseMessage.contains('delivery_partner')) {
+      return 'Delivery Partner';
+    }
+    if (lowerCaseMessage.contains('customer')) {
+      return 'Customer';
+    }
+    return null;
+  }
+
+  bool _looksLikeNetworkIssue(String lowerCaseMessage) {
+    return lowerCaseMessage.contains('socketexception') ||
+        lowerCaseMessage.contains('failed host lookup') ||
+        lowerCaseMessage.contains('network') ||
+        lowerCaseMessage.contains('connection') ||
+        lowerCaseMessage.contains('timed out') ||
+        lowerCaseMessage.contains('timeout') ||
+        lowerCaseMessage.contains('dns') ||
+        lowerCaseMessage.contains('handshakeexception');
+  }
+
+  String _friendlyApiError(ApiException e) {
+    final raw = e.message.trim();
+    final lower = raw.toLowerCase();
+
+    if (e.statusCode == 0 || _looksLikeNetworkIssue(lower)) {
+      return 'Unable to connect right now. Please check your internet connection and try again.';
+    }
+
+    if (e.statusCode == 409 && lower.contains('already registered as')) {
+      final roleLabel = _extractRoleLabelFromMessage(lower) ?? 'another role';
+      return 'This phone number is already registered as $roleLabel. Please choose $roleLabel on the role selection screen, or use a different phone number.';
+    }
+
+    if (e.statusCode == 403 &&
+        lower.contains('signups are currently disabled')) {
+      final roleLabel = _extractRoleLabelFromMessage(lower) ?? 'partner';
+      return 'New $roleLabel sign-ups are temporarily unavailable. Please try a different role or contact support.';
+    }
+
+    if (e.statusCode == 401) {
+      return 'Your session has expired. Please sign in again.';
+    }
+
+    if (e.statusCode == 429) {
+      return 'Too many attempts. Please wait a few minutes and try again.';
+    }
+
+    if (e.statusCode >= 500) {
+      return 'Our servers are temporarily unavailable. Please try again in a moment.';
+    }
+
+    if (raw.isEmpty || lower == 'request failed') {
+      return 'We could not complete your request. Please try again.';
+    }
+
+    return raw;
+  }
+
+  String _friendlyAppwriteError(AppwriteException e, {required String action}) {
+    final raw = (e.message ?? '').trim();
+    final lower = raw.toLowerCase();
+    final code = e.code ?? 0;
+
+    if (_looksLikeNetworkIssue(lower)) {
+      return 'Unable to connect right now. Please check your internet connection and try again.';
+    }
+
+    final isRateLimited =
+        code == 429 ||
+        lower.contains('too many') ||
+        lower.contains('rate limit');
+    if (isRateLimited) {
+      if (action == 'verifyOtp') {
+        return 'Too many OTP verification attempts. Please wait a few minutes and request a new OTP.';
+      }
+      return 'Too many requests right now. Please wait a few minutes and try again.';
+    }
+
+    if (action == 'sendOtp') {
+      if (code == 400 || lower.contains('phone') || lower.contains('invalid')) {
+        return 'Please enter a valid 10-digit mobile number (for example, 9876543210).';
+      }
+      return 'We could not send an OTP right now. Please try again.';
+    }
+
+    if (action == 'verifyOtp') {
+      if (code == 401 ||
+          code == 403 ||
+          lower.contains('invalid') ||
+          lower.contains('otp') ||
+          lower.contains('secret') ||
+          lower.contains('expired')) {
+        return 'Incorrect or expired OTP. Please enter the latest 6-digit code and try again.';
+      }
+      if (code == 404 ||
+          lower.contains('session') ||
+          lower.contains('not found')) {
+        return 'Your login session expired. Please request a new OTP and try again.';
+      }
+      return 'We could not verify the OTP. Please try again.';
+    }
+
+    if (action == 'emailLogin') {
+      if (code == 401 ||
+          lower.contains('invalid credentials') ||
+          lower.contains('password')) {
+        return 'Incorrect email or password. Please try again.';
+      }
+      return 'Unable to sign in with email right now. Please try again.';
+    }
+
+    if (action == 'oauthLogin') {
+      if (lower.contains('cancel')) {
+        return 'Sign-in was cancelled. Please try again when you are ready.';
+      }
+      return 'Unable to complete social sign-in right now. Please try again.';
+    }
+
+    if (action == 'register') {
+      if (code == 409 || lower.contains('already')) {
+        return 'An account with this email already exists. Please sign in instead.';
+      }
+      return 'We could not create your account right now. Please try again.';
+    }
+
+    if (raw.isNotEmpty) {
+      return raw;
+    }
+    return 'Something went wrong. Please try again.';
+  }
+
+  Future<String?> _checkPhoneRoleConflict(String phone) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/auth/check-phone',
+        body: {'phone': phone},
+      );
+      final data = response.data;
+      if (data == null || data['exists'] != true) {
+        return null;
+      }
+
+      final registeredRole = (data['role'] as String?)?.trim();
+      if (registeredRole == null || registeredRole.isEmpty) {
+        return null;
+      }
+
+      if (registeredRole == state.selectedRole) {
+        return null;
+      }
+
+      final registeredRoleLabel = _roleDisplayName(registeredRole);
+      final selectedRoleLabel = _roleDisplayName(state.selectedRole);
+      return 'This phone number is already registered as $registeredRoleLabel. You selected $selectedRoleLabel. Please go back and continue as $registeredRoleLabel, or use a different phone number.';
+    } on ApiException {
+      // Pre-check is non-blocking. If unavailable, continue normal OTP flow.
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   AuthNotifier(this._account, this._apiClient) : super(const AuthState()) {
     // Set up forced-logout callback: when token refresh fails unrecoverably
     _apiClient.setAuthFailureCallback(() {
@@ -279,14 +460,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on AppwriteException catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: e.message ?? 'Login failed',
+        error: _friendlyAppwriteError(e, action: 'emailLogin'),
       );
     } on ApiException catch (e) {
       if (kDebugMode) debugPrint('[Auth] Login failed (exchange): $e');
       try {
         await _account.deleteSession(sessionId: 'current');
       } catch (_) {}
-      state = state.copyWith(isLoading: false, error: e.message);
+      state = state.copyWith(isLoading: false, error: _friendlyApiError(e));
     } catch (e) {
       if (kDebugMode) debugPrint('[Auth] Login failed (exchange): $e');
       // Clean up the Appwrite session since we can't complete login
@@ -317,18 +498,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on AppwriteException catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: e.message ?? 'Registration failed',
+        error: _friendlyAppwriteError(e, action: 'register'),
       );
     }
   }
 
   /// Login with phone OTP — Step 1: Send OTP
-  Future<String?> sendPhoneOTP(String phone) async {
+  Future<String?> sendPhoneOTP(String phone, {String? userId}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      final roleConflictError = await _checkPhoneRoleConflict(phone);
+      if (roleConflictError != null) {
+        state = state.copyWith(isLoading: false, error: roleConflictError);
+        return null;
+      }
+
       if (kDebugMode) debugPrint('[Auth] sendPhoneOTP: sending OTP to $phone');
       final token = await _account.createPhoneToken(
-        userId: ID.unique(),
+        userId: userId ?? ID.unique(),
         phone: phone,
       );
       if (kDebugMode) {
@@ -342,7 +529,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
       state = state.copyWith(
         isLoading: false,
-        error: e.message ?? 'Failed to send OTP',
+        error: _friendlyAppwriteError(e, action: 'sendOtp'),
+      );
+      return null;
+    } on ApiException catch (e) {
+      state = state.copyWith(isLoading: false, error: _friendlyApiError(e));
+      return null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Auth] sendPhoneOTP: unexpected error — $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'We could not send an OTP right now. Please try again.',
       );
       return null;
     }
@@ -373,14 +570,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
       state = state.copyWith(
         isLoading: false,
-        error: e.message ?? 'Invalid OTP',
+        error: _friendlyAppwriteError(e, action: 'verifyOtp'),
       );
     } on ApiException catch (e) {
       if (kDebugMode) debugPrint('[Auth] verifyPhoneOTP exchange failed: $e');
       try {
         await _account.deleteSession(sessionId: 'current');
       } catch (_) {}
-      state = state.copyWith(isLoading: false, error: e.message);
+      state = state.copyWith(isLoading: false, error: _friendlyApiError(e));
     } catch (e) {
       if (kDebugMode) debugPrint('[Auth] verifyPhoneOTP exchange failed: $e');
       // Clean up the Appwrite session since we can't complete login
@@ -408,14 +605,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on AppwriteException catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: e.message ?? 'OAuth login failed',
+        error: _friendlyAppwriteError(e, action: 'oauthLogin'),
       );
     } on ApiException catch (e) {
       if (kDebugMode) debugPrint('[Auth] OAuth login exchange failed: $e');
       try {
         await _account.deleteSession(sessionId: 'current');
       } catch (_) {}
-      state = state.copyWith(isLoading: false, error: e.message);
+      state = state.copyWith(isLoading: false, error: _friendlyApiError(e));
     } catch (e) {
       if (kDebugMode) debugPrint('[Auth] OAuth login exchange failed: $e');
       try { await _account.deleteSession(sessionId: 'current'); } catch (_) {}

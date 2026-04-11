@@ -4,13 +4,11 @@ import type { LiveStats, LiveRider, LiveOrder } from "@/types";
 
 const BASE_URL =
   typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_API_URL ?? "https://api.devdeepak.me/api/v1")
+    ? (process.env.NEXT_PUBLIC_API_URL ??
+      (process.env.NODE_ENV === "production"
+        ? "https://api.devdeepak.me/api/v1"
+        : "http://localhost:8080/api/v1"))
     : "";
-
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("chizze_admin_token");
-}
 
 /** Unwrap backend { success, data } envelope */
 function unwrap<T>(body: unknown): T {
@@ -34,11 +32,9 @@ export function usePolling<T>(
 
   const fetchData = useCallback(async () => {
     if (!enabled) return;
-    const token = getToken();
-    if (!token) return;
     try {
       const res = await fetch(`${BASE_URL}${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (!res.ok) { setConnected(false); return; }
       const body = await res.json();

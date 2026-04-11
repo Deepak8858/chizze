@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -26,9 +27,30 @@ type AuthHandler struct {
 	cfg      *config.Config
 }
 
+const (
+	authCookieName          = "chizze_auth_token"
+	authCookieMaxAgeSeconds = 90 * 24 * 60 * 60
+)
+
 // NewAuthHandler creates an auth handler
 func NewAuthHandler(aw *services.AppwriteService, redis *redispkg.Client, cfg *config.Config) *AuthHandler {
 	return &AuthHandler{appwrite: aw, redis: redis, cfg: cfg}
+}
+
+func (h *AuthHandler) setAuthCookie(c *gin.Context, token string) {
+	isHTTPS := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	secure := h.cfg.IsProduction() || isHTTPS
+
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(authCookieName, token, authCookieMaxAgeSeconds, "/", "", secure, true)
+}
+
+func (h *AuthHandler) clearAuthCookie(c *gin.Context) {
+	isHTTPS := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	secure := h.cfg.IsProduction() || isHTTPS
+
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(authCookieName, "", -1, "/", "", secure, true)
 }
 
 // issueJWT creates a signed JWT for internal use
@@ -87,15 +109,15 @@ func (h *AuthHandler) isPartnerSignupAllowed(role string) bool {
 		appwrite.QueryLimit(1),
 	})
 	if err != nil || settings == nil || len(settings.Documents) == 0 {
-		// Safe default: allow signup when settings are unavailable.
-		return true
+		// Safe default: disallow signup when settings are unavailable.
+		return false
 	}
 
 	doc := settings.Documents[0]
 	if role == "restaurant_owner" {
-		return boolFromSetting(doc["allow_restaurant_partner_signup"], true)
+		return boolFromSetting(doc["allow_restaurant_partner_signup"], false)
 	}
-	return boolFromSetting(doc["allow_delivery_partner_signup"], true)
+	return boolFromSetting(doc["allow_delivery_partner_signup"], false)
 }
 
 func partnerSignupDisabledMessage(role string) string {
@@ -283,6 +305,8 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 		return
 	}
 
+	h.setAuthCookie(c, token)
+
 	utils.Success(c, gin.H{
 		"token":   token,
 		"user_id": appwriteUserID,
@@ -404,6 +428,8 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		return
 	}
 
+	h.setAuthCookie(c, token)
+
 	utils.Success(c, gin.H{
 		"message": "OTP verified",
 		"token":   token,
@@ -447,6 +473,8 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
+	h.setAuthCookie(c, token)
+
 	utils.Success(c, gin.H{
 		"token":   token,
 		"user_id": userID,
@@ -463,6 +491,8 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 // @Success 200 {object} map[string]interface{} "message"
 // @Router /api/v1/auth/logout [delete]
 func (h *AuthHandler) Logout(c *gin.Context) {
+	h.clearAuthCookie(c)
+
 	userID := middleware.GetUserID(c)
 	if userID == "" {
 		utils.Success(c, gin.H{"message": "Logged out"})

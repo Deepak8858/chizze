@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"strings"
 	"time"
 
@@ -76,6 +77,7 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 		appwrite.QueryLimit(1),
 	})
 	if err != nil {
+		log.Printf("[ReviewHandler.CreateReview] Failed to check duplicate reviews for order %s: %v", orderID, err)
 		utils.InternalError(c, "Failed to validate existing reviews")
 		return
 	}
@@ -106,6 +108,7 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 
 	doc, err := h.appwrite.CreateReview("unique()", reviewData)
 	if err != nil {
+		log.Printf("[ReviewHandler.CreateReview] Failed to create review for order %s: %v", orderID, err)
 		utils.InternalError(c, "Failed to submit review")
 		return
 	}
