@@ -89,9 +89,10 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		// We don't really need to broadcast messages from clients in this app,
-		// but we can log them or handle specific commands if needed.
-		log.Printf("Received message from %s: %s", c.UserID, string(message))
+		// Dispatch to the hub's incoming handler (chat routing, etc.). If
+		// no handler is set, the message is silently dropped — matching the
+		// pre-existing "log only" behaviour.
+		c.hub.handleIncoming(c, message)
 	}
 }
 

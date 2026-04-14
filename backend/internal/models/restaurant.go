@@ -23,6 +23,20 @@ type Restaurant struct {
 	IsPromoted         bool     `json:"is_promoted"`
 	OpeningTime        string   `json:"opening_time"`
 	ClosingTime        string   `json:"closing_time"`
+	// Payout / bank details (partner-owned, mirror of delivery_partner fields)
+	BankAccountID     string  `json:"bank_account_id"`
+	BankAccountHolder string  `json:"bank_account_holder"`
+	IFSC              string  `json:"ifsc"`
+	UpiID             string  `json:"upi_id"`
+	TotalEarnings     float64 `json:"total_earnings"`
+}
+
+// UpdatePartnerBankRequest is the DTO for restaurant partner bank detail updates
+type UpdatePartnerBankRequest struct {
+	BankAccountID     string `json:"bank_account_id"`
+	BankAccountHolder string `json:"bank_account_holder"`
+	IFSC              string `json:"ifsc"`
+	UpiID             string `json:"upi_id"`
 }
 
 // MenuCategory groups menu items

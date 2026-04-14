@@ -71,6 +71,9 @@ class ApiConfig {
   static const String partnerRestaurant = '/partner/restaurant';
   static const String partnerRestaurantStatus = '/partner/restaurant/status';
   static const String partnerPerformance = '/partner/performance';
+  static const String partnerBankDetails = '/partner/bank-details';
+  static const String partnerPayouts = '/partner/payouts';
+  static const String partnerPayoutRequest = '/partner/payouts/request';
 
   // Delivery
   static const String deliveryDashboard = '/delivery/dashboard';

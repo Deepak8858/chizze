@@ -1120,3 +1120,89 @@ func TestUpdateStatus_RestaurantCancels(t *testing.T) {
 		t.Errorf("expected cancellation_reason to match, got %v", doc["cancellation_reason"])
 	}
 }
+
+// ─── Coupon edge cases ───
+
+// TestPlaceOrder_UnlimitedCoupon verifies that a coupon with usage_limit=0
+// (unlimited) applies the discount instead of being spuriously rejected by
+// the Redis counter ceiling check. Regression test for the coupon counter
+// "over-limit" bug when UsageLimit == 0.
+func TestPlaceOrder_UnlimitedCoupon(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+	seedOrderData(te)
+
+	now := time.Now()
+	te.SeedCoupon("FREEBIE", map[string]interface{}{
+		"code":            "FREEBIE",
+		"discount_type":   "flat",
+		"discount_value":  25.0,
+		"min_order_value": 100.0,
+		"max_discount":    25.0,
+		"usage_limit":     0.0, // 0 = unlimited
+		"used_count":      0.0,
+		"is_active":       true,
+		"valid_from":      now.Add(-24 * time.Hour).Format(time.RFC3339),
+		"valid_until":     now.Add(24 * time.Hour).Format(time.RFC3339),
+	})
+
+	body := placeOrderBody()
+	body["coupon_code"] = "FREEBIE"
+
+	rec := te.AuthRequest("POST", "/api/v1/orders", body, "cust_1", "customer")
+	if rec.Code != 201 {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := te.ParseResponse(rec)
+	data, _ := resp["data"].(map[string]interface{})
+	discount, _ := data["discount"].(float64)
+	if discount <= 0 {
+		t.Errorf("unlimited coupon should apply discount, got %v", discount)
+	}
+}
+
+// TestPlaceOrder_CouponUsageLimitEnforced verifies that finite-limit coupons
+// are blocked once the Redis counter exceeds the limit.
+func TestPlaceOrder_CouponUsageLimitEnforced(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+	seedOrderData(te)
+
+	now := time.Now()
+	te.SeedCoupon("ONESHOT", map[string]interface{}{
+		"code":            "ONESHOT",
+		"discount_type":   "flat",
+		"discount_value":  10.0,
+		"min_order_value": 100.0,
+		"max_discount":    10.0,
+		"usage_limit":     1.0,
+		"used_count":      0.0,
+		"is_active":       true,
+		"valid_from":      now.Add(-24 * time.Hour).Format(time.RFC3339),
+		"valid_until":     now.Add(24 * time.Hour).Format(time.RFC3339),
+	})
+
+	// First redemption — should get the discount.
+	body1 := placeOrderBody()
+	body1["coupon_code"] = "ONESHOT"
+	rec1 := te.AuthRequest("POST", "/api/v1/orders", body1, "cust_1", "customer")
+	if rec1.Code != 201 {
+		t.Fatalf("first redemption: expected 201, got %d", rec1.Code)
+	}
+	data1, _ := te.ParseResponse(rec1)["data"].(map[string]interface{})
+	if d, _ := data1["discount"].(float64); d <= 0 {
+		t.Errorf("first redemption should apply discount, got %v", d)
+	}
+
+	// Second redemption — should silently drop discount (limit exceeded).
+	body2 := placeOrderBody()
+	body2["coupon_code"] = "ONESHOT"
+	rec2 := te.AuthRequest("POST", "/api/v1/orders", body2, "cust_1", "customer")
+	if rec2.Code != 201 {
+		t.Fatalf("second redemption: expected 201, got %d", rec2.Code)
+	}
+	data2, _ := te.ParseResponse(rec2)["data"].(map[string]interface{})
+	if d, _ := data2["discount"].(float64); d != 0 {
+		t.Errorf("second redemption should be rejected (discount=0), got %v", d)
+	}
+}

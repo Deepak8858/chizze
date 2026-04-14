@@ -23,6 +23,7 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
   final _ifscCtrl = TextEditingController();
   final _upiCtrl = TextEditingController();
   bool _isEditing = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -64,7 +65,9 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
         title: const Text('Bank Details'),
         actions: [
           TextButton.icon(
-            onPressed: () => setState(() => _isEditing = !_isEditing),
+            onPressed: _isSaving
+                ? null
+                : () => setState(() => _isEditing = !_isEditing),
             icon: Icon(
               _isEditing ? Icons.close_rounded : Icons.edit_rounded,
               size: 18,
@@ -188,9 +191,12 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
               icon: Icons.person_outline_rounded,
               enabled: _isEditing,
               hint: 'Enter account holder name',
-              validator: (v) => (v == null || v.trim().isEmpty)
-                  ? 'Account holder name is required'
-                  : null,
+              validator: (v) {
+                if (!_isEditing) return null;
+                return (v == null || v.trim().isEmpty)
+                    ? 'Account holder name is required'
+                    : null;
+              },
             ),
             const SizedBox(height: AppSpacing.md),
             _buildField(
@@ -202,6 +208,7 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               validator: (v) {
+                if (!_isEditing) return null;
                 if (v == null || v.trim().isEmpty) {
                   return 'Account number is required';
                 }
@@ -220,6 +227,7 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
               hint: 'e.g. SBIN0001234',
               textCapitalization: TextCapitalization.characters,
               validator: (v) {
+                if (!_isEditing) return null;
                 if (v == null || v.trim().isEmpty) {
                   return 'IFSC code is required';
                 }
@@ -438,6 +446,8 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
   Future<void> _saveBankDetails() async {
     if (!_formKey.currentState!.validate()) return;
 
+    setState(() => _isSaving = true);
+
     final accountId = _accountNumberCtrl.text.trim();
     final holderName = _accountHolderCtrl.text.trim();
     final ifsc = _ifscCtrl.text.trim().toUpperCase();
@@ -451,7 +461,10 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
         upiId: upiId.isNotEmpty ? upiId : null,
       );
       if (mounted) {
-        setState(() => _isEditing = false);
+        setState(() {
+          _isEditing = false;
+          _isSaving = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Bank details saved successfully'),
@@ -464,6 +477,7 @@ class _BankDetailsScreenState extends ConsumerState<BankDetailsScreen> {
         debugPrint('[BankDetailsScreen] Failed to save: $e\n$stackTrace');
       }
       if (mounted) {
+        setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to save changes. Please try again.'),

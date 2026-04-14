@@ -47,6 +47,108 @@ func (h *AdminHandler) safeList(collection string, queries []string) ([]map[stri
 	return result.Documents, result.Total
 }
 
+// normalizeAdminOrder augments a raw Appwrite order document with the canonical
+// field names the admin web app expects (both new admin-contract fields and
+// legacy passthrough fields are preserved). Mutates and returns the same map.
+//
+// Admin web expects: order_id, customer_lat, customer_lng, restaurant_lat,
+// restaurant_lng — while backend stores $id, delivery_latitude/longitude,
+// restaurant_latitude/longitude. This helper ensures both are present.
+func normalizeAdminOrder(doc map[string]interface{}) map[string]interface{} {
+	if doc == nil {
+		return doc
+	}
+	if id, ok := doc["$id"].(string); ok && id != "" {
+		if _, exists := doc["order_id"]; !exists {
+			doc["order_id"] = id
+		}
+	}
+	if lat, ok := doc["delivery_latitude"].(float64); ok {
+		if _, exists := doc["customer_lat"]; !exists {
+			doc["customer_lat"] = lat
+		}
+	}
+	if lng, ok := doc["delivery_longitude"].(float64); ok {
+		if _, exists := doc["customer_lng"]; !exists {
+			doc["customer_lng"] = lng
+		}
+	}
+	if lat, ok := doc["restaurant_latitude"].(float64); ok {
+		if _, exists := doc["restaurant_lat"]; !exists {
+			doc["restaurant_lat"] = lat
+		}
+	}
+	if lng, ok := doc["restaurant_longitude"].(float64); ok {
+		if _, exists := doc["restaurant_lng"]; !exists {
+			doc["restaurant_lng"] = lng
+		}
+	}
+	return doc
+}
+
+// enrichAdminOrders fills customer_name, customer_phone, customer_email, and
+// delivery_partner_name/phone for a slice of orders, using a per-call user
+// cache to avoid N+1 lookups when multiple orders share a customer or rider.
+func (h *AdminHandler) enrichAdminOrders(orders []map[string]interface{}) {
+	if len(orders) == 0 {
+		return
+	}
+	userCache := make(map[string]map[string]interface{})
+	getUser := func(id string) map[string]interface{} {
+		if id == "" {
+			return nil
+		}
+		if cached, ok := userCache[id]; ok {
+			return cached
+		}
+		u, err := h.appwrite.GetUser(id)
+		if err != nil || u == nil {
+			userCache[id] = nil
+			return nil
+		}
+		userCache[id] = u
+		return u
+	}
+
+	for _, order := range orders {
+		normalizeAdminOrder(order)
+
+		if _, has := order["customer_name"]; !has {
+			if custID, _ := order["customer_id"].(string); custID != "" {
+				if user := getUser(custID); user != nil {
+					if name, _ := user["name"].(string); name != "" {
+						order["customer_name"] = name
+					}
+					if phone, _ := user["phone"].(string); phone != "" {
+						order["customer_phone"] = phone
+					}
+					if email, _ := user["email"].(string); email != "" {
+						order["customer_email"] = email
+					}
+				}
+			}
+		}
+		if dpID, _ := order["delivery_partner_id"].(string); dpID != "" {
+			existingName, _ := order["delivery_partner_name"].(string)
+			existingPhone, _ := order["delivery_partner_phone"].(string)
+			if existingName == "" || existingPhone == "" {
+				if user := getUser(dpID); user != nil {
+					if existingName == "" {
+						if name, _ := user["name"].(string); name != "" {
+							order["delivery_partner_name"] = name
+						}
+					}
+					if existingPhone == "" {
+						if phone, _ := user["phone"].(string); phone != "" {
+							order["delivery_partner_phone"] = phone
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 func defaultPlatformSettings() gin.H {
 	return gin.H{
 		"platform_name":                   "Chizze",
@@ -1204,6 +1306,7 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 		utils.InternalError(c, "Failed to list orders")
 		return
 	}
+	h.enrichAdminOrders(result.Documents)
 	utils.Paginated(c, result.Documents, p.Page, p.PerPage, result.Total)
 }
 
@@ -1350,22 +1453,11 @@ func (h *AdminHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	customerID := stringFromAny(doc["customer_id"], "")
-	if customerID != "" {
-		user, userErr := h.appwrite.GetUser(customerID)
-		if userErr == nil && user != nil {
-			if name := stringFromAny(user["name"], ""); name != "" {
-				doc["customer_name"] = name
-			}
-			if phone := stringFromAny(user["phone"], ""); phone != "" {
-				doc["customer_phone"] = phone
-			}
-			if email := stringFromAny(user["email"], ""); email != "" {
-				doc["customer_email"] = email
-			}
-		}
-	}
+	// enrichAdminOrders handles customer/delivery partner name/phone/email.
+	h.enrichAdminOrders([]map[string]interface{}{doc})
 
+	// Overlay canonical address data from the addresses collection when it
+	// differs from the order's denormalized snapshot.
 	addressID := stringFromAny(doc["delivery_address_id"], "")
 	if addressID != "" {
 		address, addressErr := h.appwrite.GetAddress(addressID)
@@ -1376,17 +1468,19 @@ func (h *AdminHandler) GetOrder(c *gin.Context) {
 			if city := stringFromAny(address["city"], ""); city != "" {
 				doc["delivery_city"] = city
 			}
-
 			if lat, ok := address["latitude"]; ok {
 				doc["delivery_latitude"] = floatFromAny(lat, 0)
+				doc["customer_lat"] = floatFromAny(lat, 0)
 			} else if lat, ok := address["lat"]; ok {
 				doc["delivery_latitude"] = floatFromAny(lat, 0)
+				doc["customer_lat"] = floatFromAny(lat, 0)
 			}
-
 			if lng, ok := address["longitude"]; ok {
 				doc["delivery_longitude"] = floatFromAny(lng, 0)
+				doc["customer_lng"] = floatFromAny(lng, 0)
 			} else if lng, ok := address["lng"]; ok {
 				doc["delivery_longitude"] = floatFromAny(lng, 0)
+				doc["customer_lng"] = floatFromAny(lng, 0)
 			}
 		}
 	}
@@ -1441,7 +1535,9 @@ func (h *AdminHandler) ActiveOrders(c *gin.Context) {
 		end = total
 	}
 
-	utils.Paginated(c, allOrders[start:end], p.Page, p.PerPage, total)
+	page := allOrders[start:end]
+	h.enrichAdminOrders(page)
+	utils.Paginated(c, page, p.Page, p.PerPage, total)
 }
 
 func (h *AdminHandler) CancelOrder(c *gin.Context) {
@@ -1474,13 +1570,40 @@ func (h *AdminHandler) ReassignOrder(c *gin.Context) {
 		utils.BadRequest(c, "Rider ID is required")
 		return
 	}
-	doc, err := h.appwrite.UpdateOrder(c.Param("id"), map[string]interface{}{
-		"delivery_partner_id": body.RiderID,
-	})
+	orderID := c.Param("id")
+
+	// Resolve the new rider's name/phone so the denormalized order fields
+	// stay consistent. Without this, the admin UI shows the previous
+	// rider's contact info after reassignment — operational & privacy risk.
+	newName := ""
+	newPhone := ""
+	if user, uErr := h.appwrite.GetUser(body.RiderID); uErr == nil && user != nil {
+		newName, _ = user["name"].(string)
+		newPhone, _ = user["phone"].(string)
+	}
+
+	update := map[string]interface{}{
+		"delivery_partner_id":    body.RiderID,
+		"delivery_partner_name":  newName,
+		"delivery_partner_phone": newPhone,
+	}
+
+	doc, err := h.appwrite.UpdateOrder(orderID, update)
 	if err != nil {
 		utils.InternalError(c, "Failed to reassign order")
 		return
 	}
+
+	// Clear per-order Redis locks so the matcher/rider cycle restarts cleanly
+	// for the new rider instead of inheriting stale state from the old one.
+	if h.redis != nil {
+		rCtx := c.Request.Context()
+		_ = h.redis.Del(rCtx, "pending_delivery:"+orderID)
+		_ = h.redis.Del(rCtx, "rejected_riders:"+orderID)
+		_ = h.redis.Del(rCtx, "delivery_lock:"+orderID)
+	}
+
+	normalizeAdminOrder(doc)
 	utils.Success(c, doc)
 }
 
@@ -2343,6 +2466,9 @@ func (h *AdminHandler) LiveOrders(c *gin.Context) {
 	if result != nil {
 		docs = result.Documents
 	}
+	// Enrich + normalize so the admin live board/map get consistent
+	// field names (order_id, customer_lat/lng, restaurant_lat/lng).
+	h.enrichAdminOrders(docs)
 	utils.Success(c, docs)
 }
 

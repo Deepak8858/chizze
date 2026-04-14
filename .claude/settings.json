@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/hp/.claude/projects/h--chizze//**)",
+      "Bash(flutter --version)",
+      "Bash(go vet:*)",
+      "Read(//home/user/chizze/backend/internal/handlers/**)"
+    ]
+  }
+}

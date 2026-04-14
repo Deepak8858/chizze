@@ -265,23 +265,18 @@ func (h *DeliveryHandler) UpdateLocation(c *gin.Context) {
 	}
 
 	// Broadcast live location to customers tracking this rider's deliveries.
-	// Include both picked_up (rider heading to restaurant / just picked up)
-	// and out_for_delivery (rider heading to customer) so the customer gets
-	// continuous tracking from pickup to delivery.
-	if h.broadcaster != nil {
-		for _, trackStatus := range []string{models.OrderStatusPickedUp, models.OrderStatusOutForDelivery} {
-			activeOrders, err := h.appwrite.ListOrders([]string{
-				appwrite.QueryEqual("delivery_partner_id", userID),
-				appwrite.QueryEqual("status", trackStatus),
-			})
-			if err == nil && activeOrders != nil {
-				for _, o := range activeOrders.Documents {
-					custID, _ := o["customer_id"].(string)
-					oID, _ := o["$id"].(string)
-					if custID != "" {
-						h.broadcaster.BroadcastDeliveryLocation(custID, oID, req.Latitude, req.Longitude, req.Heading)
-					}
-				}
+	// Previously this looped ListOrders twice per ping (O(800 riders × 5s × 2) =
+	// 320 rps of Appwrite list calls just for tracking). Now we use the
+	// `rider_track:<riderID>` Redis hash populated on AcceptOrder/PickUp and
+	// cleared on Delivered/Cancelled — O(1) Redis lookup, zero Appwrite calls.
+	if h.broadcaster != nil && h.redis != nil {
+		tracks, trackErr := h.redis.HGetAll(c.Request.Context(), "rider_track:"+userID)
+		if trackErr != nil {
+			log.Printf("[delivery] UpdateLocation: rider_track lookup failed for %s: %v", userID, trackErr)
+		}
+		for orderID, customerID := range tracks {
+			if customerID != "" {
+				h.broadcaster.BroadcastDeliveryLocation(customerID, orderID, req.Latitude, req.Longitude, req.Heading)
 			}
 		}
 	}
@@ -393,20 +388,26 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 
 	// Update Redis state for multi-order tracking (up to 5 simultaneous orders)
 	if h.redis != nil {
-		ctx := context.Background()
-		h.redis.Del(ctx, "pending_delivery:"+orderID)
-		h.redis.Del(ctx, "rejected_riders:"+orderID)
+		ctx := c.Request.Context()
+		_ = h.redis.Del(ctx, "pending_delivery:"+orderID)
+		_ = h.redis.Del(ctx, "rejected_riders:"+orderID)
 		// Remove from pending state so rider can receive new delivery requests
-		h.redis.SRem(ctx, "pending_riders", userID)
-		h.redis.Del(ctx, "pending_rider:"+userID)
+		_, _ = h.redis.SRem(ctx, "pending_riders", userID)
+		_ = h.redis.Del(ctx, "pending_rider:"+userID)
 		// Increment active order count and track this specific order
 		count, _ := h.redis.Incr(ctx, "rider_order_count:"+userID)
-		h.redis.Expire(ctx, "rider_order_count:"+userID, 24*time.Hour)
-		h.redis.SAdd(ctx, "rider_active_orders:"+userID, orderID)
-		h.redis.Expire(ctx, "rider_active_orders:"+userID, 24*time.Hour)
+		_ = h.redis.Expire(ctx, "rider_order_count:"+userID, 24*time.Hour)
+		_, _ = h.redis.SAdd(ctx, "rider_active_orders:"+userID, orderID)
+		_ = h.redis.Expire(ctx, "rider_active_orders:"+userID, 24*time.Hour)
+		// Populate the rider_track hash so UpdateLocation can broadcast live
+		// GPS to this order's customer without hitting Appwrite.
+		if customerID, _ := order["customer_id"].(string); customerID != "" {
+			_, _ = h.redis.HSet(ctx, "rider_track:"+userID, orderID, customerID)
+			_ = h.redis.Expire(ctx, "rider_track:"+userID, 24*time.Hour)
+		}
 		// Only block from new orders when at max capacity (5 simultaneous orders)
 		if count >= 5 {
-			h.redis.SAdd(ctx, "busy_riders", userID)
+			_, _ = h.redis.SAdd(ctx, "busy_riders", userID)
 			log.Printf("[delivery] AcceptOrder: rider %s at max capacity (%d orders) — added to busy_riders", userID, count)
 		} else {
 			log.Printf("[delivery] AcceptOrder: rider %s accepted order %s (active orders: %d/5)", userID, orderID, count)
@@ -1289,8 +1290,44 @@ func (h *DeliveryHandler) RequestPayout(c *gin.Context) {
 		return
 	}
 
+	// Required account/UPI info for the chosen method
+	switch req.Method {
+	case "bank_transfer":
+		if stringOr(partner, "bank_account_id") == "" ||
+			stringOr(partner, "ifsc") == "" ||
+			stringOr(partner, "bank_account_holder") == "" {
+			utils.BadRequest(c, "Add bank account holder, number, and IFSC before requesting a bank payout")
+			return
+		}
+	case "upi":
+		if stringOr(partner, "upi_id") == "" {
+			utils.BadRequest(c, "Add a UPI ID before requesting a UPI payout")
+			return
+		}
+	default:
+		utils.BadRequest(c, "Method must be bank_transfer or upi")
+		return
+	}
+
+	// Acquire per-partner distributed lock to prevent concurrent payout double-spend
+	lockKey := fmt.Sprintf("payout_lock:delivery:%s", partnerID)
+	lockCtx := context.Background()
+	locked, lockErr := h.redis.SetNX(lockCtx, lockKey, "1", 15*time.Second)
+	if lockErr != nil || !locked {
+		utils.BadRequest(c, "A payout is already being processed. Please try again.")
+		return
+	}
+	defer h.redis.Del(lockCtx, lockKey)
+
+	// Re-read balance inside the lock to prevent TOCTOU race
+	freshPartner, freshPartnerID, ok := h.getDeliveryPartnerProfile(c)
+	if !ok {
+		return
+	}
+	_ = freshPartnerID
+
 	// Check that partner has sufficient balance
-	totalEarnings := getFloat(partner, "total_earnings")
+	totalEarnings := getFloat(freshPartner, "total_earnings")
 	if req.Amount > totalEarnings {
 		utils.BadRequest(c, "Insufficient earnings balance")
 		return
@@ -1334,17 +1371,24 @@ func (h *DeliveryHandler) RequestPayout(c *gin.Context) {
 		return
 	}
 
-	// Deduct from partner's total_earnings (available balance)
+	// Deduct from partner's total_earnings — if this fails, roll back the payout document
 	newBalance := totalEarnings - req.Amount
-	_, _ = h.appwrite.UpdateDeliveryPartner(partnerID, map[string]interface{}{
+	if _, balErr := h.appwrite.UpdateDeliveryPartner(partnerID, map[string]interface{}{
 		"total_earnings": newBalance,
-	})
+	}); balErr != nil {
+		payoutID, _ := payout["$id"].(string)
+		if payoutID != "" {
+			_ = h.appwrite.DeletePayout(payoutID)
+		}
+		utils.InternalError(c, "Failed to deduct balance; payout cancelled")
+		return
+	}
 
 	// Create notification for partner
 	_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
 		"user_id": userID,
 		"title":   "Payout Requested",
-		"body":    "Your payout of ₹" + fmt.Sprintf("%.0f", req.Amount) + " is being processed",
+		"body":    fmt.Sprintf("Your payout of ₹%.0f is being processed", req.Amount),
 		"type":    "payout",
 		"is_read": false,
 	})

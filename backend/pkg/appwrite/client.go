@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -15,6 +16,47 @@ import (
 	"github.com/chizze/backend/internal/config"
 	"github.com/sony/gobreaker"
 )
+
+// Sentinel errors returned by Appwrite client methods so callers can distinguish
+// "not found" and "conflict" from transient/server errors. Use errors.Is to check.
+var (
+	ErrNotFound = errors.New("appwrite: document not found")
+	ErrConflict = errors.New("appwrite: document conflict")
+	ErrForbidden = errors.New("appwrite: forbidden")
+)
+
+// HTTPError carries the raw Appwrite HTTP failure. It unwraps to a sentinel
+// for common status codes so `errors.Is(err, appwrite.ErrNotFound)` works.
+type HTTPError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("appwrite error %d: %s", e.StatusCode, e.Body)
+}
+
+func (e *HTTPError) Unwrap() error {
+	switch e.StatusCode {
+	case http.StatusNotFound:
+		return ErrNotFound
+	case http.StatusConflict:
+		return ErrConflict
+	case http.StatusForbidden:
+		return ErrForbidden
+	}
+	return nil
+}
+
+// IsNotFound reports whether err represents an Appwrite 404.
+func IsNotFound(err error) bool {
+	return errors.Is(err, ErrNotFound)
+}
+
+// IsConflict reports whether err represents an Appwrite 409.
+func IsConflict(err error) bool {
+	return errors.Is(err, ErrConflict)
+}
 
 // Client wraps Appwrite REST API calls with production-grade HTTP settings
 type Client struct {
@@ -66,6 +108,21 @@ func NewClient(cfg *config.Config) *Client {
 				// Trip if ≥5 failures in the window OR failure ratio >50% with ≥10 requests
 				return counts.ConsecutiveFailures >= 5 ||
 					(counts.Requests >= 10 && float64(counts.TotalFailures)/float64(counts.Requests) > 0.5)
+			},
+			IsSuccessful: func(err error) bool {
+				// 4xx responses (not found, conflict, bad request) are not server
+				// problems — treat them as "successful" for circuit-breaker accounting
+				// so a noisy 404 stream doesn't trip the breaker. The error is still
+				// returned to the caller.
+				if err == nil {
+					return true
+				}
+				var he *HTTPError
+				if errors.As(err, &he) && he.StatusCode >= 400 && he.StatusCode < 500 {
+					return true
+				}
+				var nce *nonCircuitError
+				return errors.As(err, &nce)
 			},
 			OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
 				fmt.Printf("[circuit-breaker] %s: %s → %s\n", name, from.String(), to.String())
@@ -161,7 +218,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("appwrite error %d: %s", resp.StatusCode, string(respBody))
+		return nil, &HTTPError{StatusCode: resp.StatusCode, Body: string(respBody)}
 	}
 
 	return respBody, nil

@@ -70,46 +70,30 @@ func (w *DeliveryMatcher) Start(ctx context.Context) {
 // Process runs the matching logic. Exported so it can be called on-demand
 // (e.g. immediately when an order status changes to "ready").
 func (w *DeliveryMatcher) Process(ctx context.Context) {
-	// 1. Find orders with status "ready" and no delivery_partner_id (null or empty)
-	queriesNull := []string{
+	// Single query for ready orders with a bounded page size. Post-filter in
+	// memory for unassigned (null OR empty string delivery_partner_id) so we
+	// only hit Appwrite once per tick instead of twice.
+	queries := []string{
 		appwrite.QueryEqual("status", "ready"),
-		appwrite.QueryIsNull("delivery_partner_id"),
+		appwrite.QueryOrderAsc("placed_at"),
+		appwrite.QueryLimit(50),
 	}
-
-	resultNull, err := w.awService.ListOrders(queriesNull)
+	result, err := w.awService.ListOrders(queries)
 	if err != nil {
-		log.Printf("[worker] DeliveryMatcher error listing orders (null): %v", err)
+		log.Printf("[worker] DeliveryMatcher error listing orders: %v", err)
+		return
+	}
+	if result == nil || len(result.Documents) == 0 {
 		return
 	}
 
-	queriesEmpty := []string{
-		appwrite.QueryEqual("status", "ready"),
-		appwrite.QueryEqual("delivery_partner_id", ""),
-	}
-	resultEmpty, errE := w.awService.ListOrders(queriesEmpty)
-	if errE != nil {
-		log.Printf("[worker] DeliveryMatcher error listing orders (empty): %v", errE)
-	}
-
-	// Merge and deduplicate
-	seen := make(map[string]bool)
 	var docs []map[string]interface{}
-	if resultNull != nil {
-		for _, d := range resultNull.Documents {
-			id, _ := d["$id"].(string)
-			if !seen[id] {
-				seen[id] = true
-				docs = append(docs, d)
-			}
-		}
-	}
-	if resultEmpty != nil {
-		for _, d := range resultEmpty.Documents {
-			id, _ := d["$id"].(string)
-			if !seen[id] {
-				seen[id] = true
-				docs = append(docs, d)
-			}
+	for _, d := range result.Documents {
+		// Unassigned = nil or empty string. Presence of a non-empty string
+		// means the order is already assigned and should be skipped.
+		dpID, _ := d["delivery_partner_id"].(string)
+		if dpID == "" {
+			docs = append(docs, d)
 		}
 	}
 
@@ -119,6 +103,42 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 
 	log.Printf("[worker] DeliveryMatcher: found %d ready orders to match", len(docs))
 
+	// Per-tick caches to avoid repeated Appwrite lookups when multiple orders
+	// share a restaurant or customer. Short-lived (dropped at function return).
+	restaurantCache := make(map[string]map[string]interface{})
+	userCache := make(map[string]map[string]interface{})
+	addressCache := make(map[string]map[string]interface{})
+
+	getRestaurant := func(id string) (map[string]interface{}, error) {
+		if cached, ok := restaurantCache[id]; ok {
+			return cached, nil
+		}
+		r, err := w.awService.GetRestaurant(id)
+		if err == nil && r != nil {
+			restaurantCache[id] = r
+		}
+		return r, err
+	}
+	getUser := func(id string) (map[string]interface{}, error) {
+		if cached, ok := userCache[id]; ok {
+			return cached, nil
+		}
+		u, err := w.awService.GetUser(id)
+		if err == nil && u != nil {
+			userCache[id] = u
+		}
+		return u, err
+	}
+	getAddress := func(id string) (map[string]interface{}, error) {
+		if cached, ok := addressCache[id]; ok {
+			return cached, nil
+		}
+		a, err := w.awService.GetAddress(id)
+		if err == nil && a != nil {
+			addressCache[id] = a
+		}
+		return a, err
+	}
 	for _, doc := range docs {
 		orderID, _ := doc["$id"].(string)
 		restaurantID, _ := doc["restaurant_id"].(string)
@@ -135,8 +155,8 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 			continue
 		}
 
-		// 3. Get restaurant details
-		restaurant, err := w.awService.GetRestaurant(restaurantID)
+		// 3. Get restaurant details (cached per tick)
+		restaurant, err := getRestaurant(restaurantID)
 		if err != nil {
 			log.Printf("[worker] DeliveryMatcher: can't get restaurant %s: %v", restaurantID, err)
 			_ = w.redisClient.Del(ctx, pendingKey)
@@ -152,7 +172,7 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		// Fall back to the restaurant owner's phone if restaurant has no direct phone
 		if restPhone == "" {
 			if ownerID, _ := restaurant["owner_id"].(string); ownerID != "" {
-				if owner, oErr := w.awService.GetUser(ownerID); oErr == nil && owner != nil {
+				if owner, oErr := getUser(ownerID); oErr == nil && owner != nil {
 					restPhone, _ = owner["phone"].(string)
 				}
 			}
@@ -273,14 +293,14 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 
 		log.Printf("[worker] DeliveryMatcher: %d eligible riders for order %s, assigning to %s", len(riderIDs), orderID, riderIDs[0])
 
-		// 5. Get customer delivery address info
+		// 5. Get customer delivery address info (cached per tick)
 		addrID, _ := doc["delivery_address_id"].(string)
 		custName := "Customer"
 		custAddr := ""
 		custLat := 0.0
 		custLng := 0.0
 		if addrID != "" {
-			if addr, aErr := w.awService.GetAddress(addrID); aErr == nil && addr != nil {
+			if addr, aErr := getAddress(addrID); aErr == nil && addr != nil {
 				custAddr, _ = addr["full_address"].(string)
 				custLat, _ = addr["latitude"].(float64)
 				custLng, _ = addr["longitude"].(float64)
@@ -289,7 +309,7 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		// Try to get customer name and phone from user doc
 		custPhone := ""
 		if customerID != "" {
-			if user, uErr := w.awService.GetUser(customerID); uErr == nil && user != nil {
+			if user, uErr := getUser(customerID); uErr == nil && user != nil {
 				if n, _ := user["name"].(string); n != "" {
 					custName = n
 				}

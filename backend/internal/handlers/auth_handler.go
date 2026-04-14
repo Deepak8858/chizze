@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +18,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// safeIDSuffix returns a short, filesystem-safe suffix derived from a user ID.
+// Safe against IDs shorter than the requested length (no slice panic).
+func safeIDSuffix(id string, n int) string {
+	if len(id) <= n {
+		return id
+	}
+	return id[:n]
+}
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
@@ -108,8 +116,13 @@ func (h *AuthHandler) isPartnerSignupAllowed(role string) bool {
 	settings, err := h.appwrite.ListDocuments(models.CollectionSettings, []string{
 		appwrite.QueryLimit(1),
 	})
-	if err != nil || settings == nil || len(settings.Documents) == 0 {
-		// Safe default: disallow signup when settings are unavailable.
+	if err != nil {
+		// Transient lookup failure shouldn't permanently lock partner signup —
+		// default-deny is safer for the role gate, but log so ops can alert.
+		log.Printf("[WARN] isPartnerSignupAllowed: ListDocuments(settings) failed, default-deny: %v", err)
+		return false
+	}
+	if settings == nil || len(settings.Documents) == 0 {
 		return false
 	}
 
@@ -146,8 +159,10 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 		return
 	}
 
+	ctx := c.Request.Context()
+
 	// Validate the Appwrite JWT by calling Appwrite GET /account
-	account, err := h.appwrite.Client().VerifyJWT(req.AppwriteJWT)
+	account, err := h.appwrite.Client().VerifyJWTCtx(ctx, req.AppwriteJWT)
 	if err != nil {
 		log.Printf("Appwrite JWT verification failed: %v", err)
 		utils.Unauthorized(c, "Invalid or expired Appwrite session")
@@ -160,14 +175,46 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 		return
 	}
 
-	// Check if user exists in our users collection
-	user, err := h.appwrite.GetUser(appwriteUserID)
-	role := "customer" // default role
-	isNew := false
 	phone, _ := account["phone"].(string)
 
-	if err != nil {
-		// No doc for this Appwrite user ID.
+	// ─── Check if user exists in our users collection ───
+	// Use typed errors to distinguish "not found" from transient Appwrite failures.
+	// Returning a generic error on transient failures is critical: swallowing them
+	// would cause the returning-user path to mis-fire as new-user creation.
+	user, err := h.appwrite.GetUser(appwriteUserID)
+	if err != nil && !appwrite.IsNotFound(err) {
+		log.Printf("[ERROR] Exchange: GetUser(%s) transient failure: %v", appwriteUserID, err)
+		utils.Error(c, http.StatusServiceUnavailable, "Our servers are temporarily unavailable. Please try again in a moment.")
+		return
+	}
+
+	role := "customer" // default role
+	isNew := false
+
+	if user == nil {
+		// Acquire a short Redis lock keyed on phone to prevent two concurrent
+		// Exchange calls for the same phone from both migrating/creating docs
+		// and racing each other into a corrupted state.
+		if phone != "" && h.redis != nil {
+			lockKey := "auth_phone_lock:" + phone
+			acquired, lockErr := h.redis.SetNX(ctx, lockKey, "1", 10*time.Second)
+			if lockErr == nil && !acquired {
+				utils.Error(c, http.StatusConflict, "Another sign-in is in progress for this number. Please try again in a moment.")
+				return
+			}
+			if lockErr == nil {
+				defer func() { _ = h.redis.Del(ctx, lockKey) }()
+			}
+		}
+
+		// Re-check after acquiring the lock: the other winner may have just created the doc.
+		if recheck, rerr := h.appwrite.GetUser(appwriteUserID); rerr == nil && recheck != nil {
+			user = recheck
+		}
+	}
+
+	if user == nil {
+		// Still no doc for this Appwrite user ID.
 		// Appwrite may create a new user account (new ID) on each phone login,
 		// so check if there's an existing doc for this phone number.
 		var existingDoc map[string]interface{}
@@ -176,7 +223,12 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 				appwrite.QueryEqual("phone", phone),
 				appwrite.QueryLimit(1),
 			})
-			if lookupErr == nil && existingUsers != nil && existingUsers.Total > 0 {
+			if lookupErr != nil {
+				log.Printf("[ERROR] Exchange: ListUsers(phone=%s) failed: %v", phone, lookupErr)
+				utils.Error(c, http.StatusServiceUnavailable, "Our servers are temporarily unavailable. Please try again in a moment.")
+				return
+			}
+			if existingUsers != nil && existingUsers.Total > 0 {
 				existingDoc = existingUsers.Documents[0]
 			}
 		}
@@ -194,9 +246,9 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 				return
 			}
 
-			// Migrate: delete old doc and create new one with current Appwrite user ID.
-
-			// Copy fields from old doc
+			// Migrate: create new doc FIRST with current Appwrite user ID, then delete old.
+			// Creating-then-deleting means a crash mid-migration leaves a duplicate
+			// (recoverable) instead of deleting the only copy (unrecoverable data loss).
 			migratedData := map[string]interface{}{
 				"phone": phone,
 				"role":  role,
@@ -220,16 +272,22 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 				migratedData["email"] = email
 			}
 
-			// Delete old doc
-			if deleteErr := h.appwrite.DeleteUser(oldID); deleteErr != nil {
-				log.Printf("Failed to delete old user doc %s: %v", oldID, deleteErr)
-			}
-			// Create new doc with current Appwrite user ID
 			if _, createErr := h.appwrite.CreateUser(appwriteUserID, migratedData); createErr != nil {
-				log.Printf("Failed to create migrated user doc %s: %v", appwriteUserID, createErr)
-			} else {
-				log.Printf("Migrated user doc from %s to %s (phone=%s)", oldID, appwriteUserID, phone)
+				// If the new doc already exists (conflict), treat as success — we raced
+				// another Exchange call and it already migrated the doc.
+				if !appwrite.IsConflict(createErr) {
+					log.Printf("[ERROR] Exchange: migration create failed for %s (phone=%s): %v", appwriteUserID, phone, createErr)
+					utils.InternalError(c, "Failed to create user profile. Please try again.")
+					return
+				}
+				log.Printf("Exchange: migration create conflict for %s — another request completed the migration", appwriteUserID)
 			}
+			// Delete old doc only after new doc is safely persisted.
+			if deleteErr := h.appwrite.DeleteUser(oldID); deleteErr != nil && !appwrite.IsNotFound(deleteErr) {
+				// Non-fatal: the new doc is valid. Log and continue.
+				log.Printf("[WARN] Exchange: delete old migrated doc %s failed: %v", oldID, deleteErr)
+			}
+			log.Printf("Exchange: migrated user doc from %s to %s (phone=%s)", oldID, appwriteUserID, phone)
 			isNew = false
 		} else {
 			// Truly new user — no existing doc for this phone
@@ -253,9 +311,21 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 			if email != "" {
 				userData["email"] = email
 			}
-			_, createErr := h.appwrite.CreateUser(appwriteUserID, userData)
-			if createErr != nil {
-				log.Printf("Failed to create user doc: %v", createErr)
+			if _, createErr := h.appwrite.CreateUser(appwriteUserID, userData); createErr != nil {
+				// Conflict means the doc was just created by a concurrent Exchange — ok.
+				if !appwrite.IsConflict(createErr) {
+					log.Printf("[ERROR] Exchange: CreateUser(%s) failed: %v", appwriteUserID, createErr)
+					utils.InternalError(c, "Failed to create user profile. Please try again.")
+					return
+				}
+				log.Printf("Exchange: CreateUser conflict for %s — treating as returning user", appwriteUserID)
+				// Fetch the just-created doc so we return its role
+				if refetched, ferr := h.appwrite.GetUser(appwriteUserID); ferr == nil && refetched != nil {
+					if r, ok := refetched["role"].(string); ok && r != "" {
+						role = r
+					}
+					isNew = false
+				}
 			}
 		}
 	} else {
@@ -277,13 +347,15 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 		needsOnboarding := false
 		switch role {
 		case "restaurant_owner":
-			existing, _ := h.appwrite.GetRestaurantByOwner(appwriteUserID)
-			if existing == nil || existing.Total == 0 {
+			existing, lookupErr := h.appwrite.GetRestaurantByOwner(appwriteUserID)
+			// Only flag as missing when we confirmed empty; transient errors are ignored
+			// (prevents spurious re-onboarding when Appwrite is flaky).
+			if lookupErr == nil && (existing == nil || existing.Total == 0) {
 				needsOnboarding = true
 			}
 		case "delivery_partner":
-			existing, _ := h.appwrite.GetDeliveryPartner(appwriteUserID)
-			if existing == nil || existing.Total == 0 {
+			existing, lookupErr := h.appwrite.GetDeliveryPartner(appwriteUserID)
+			if lookupErr == nil && (existing == nil || existing.Total == 0) {
 				needsOnboarding = true
 			}
 		}
@@ -295,8 +367,9 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 
 	// Clear any previous token blacklist so the new session works.
 	// Logout blacklists by userID — re-login must clear it.
-	ctx := context.Background()
-	h.redis.Del(ctx, "token_blacklist:"+appwriteUserID)
+	if err := h.redis.Del(ctx, "token_blacklist:"+appwriteUserID); err != nil {
+		log.Printf("[WARN] Exchange: failed to clear blacklist for %s: %v", appwriteUserID, err)
+	}
 
 	// Issue our JWT (valid for 90 days — users stay logged in until explicit logout)
 	token, err := h.issueJWT(appwriteUserID, role, 90*24*time.Hour)
@@ -341,7 +414,7 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 	}
 
 	// Rate limit: max 3 OTP requests per phone per 10 minutes (atomic)
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	rateLimitKey := "otp_limit:" + req.Phone
 	allowed, _, _ := h.redis.RateLimitCheck(ctx, rateLimitKey, 3, 10*time.Minute)
 	if !allowed {
@@ -380,8 +453,10 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		return
 	}
 
+	ctx := c.Request.Context()
+
 	// Validate the Appwrite JWT to prove OTP was actually verified on client
-	account, err := h.appwrite.Client().VerifyJWT(req.AppwriteJWT)
+	account, err := h.appwrite.Client().VerifyJWTCtx(ctx, req.AppwriteJWT)
 	if err != nil {
 		log.Printf("OTP verify: Appwrite JWT validation failed: %v", err)
 		utils.Unauthorized(c, "Invalid or expired session. Please verify OTP again.")
@@ -401,17 +476,30 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		return
 	}
 
-	// Check if user exists or create
+	// Check if user exists — must distinguish not-found from transient failure,
+	// otherwise an Appwrite blip silently creates a duplicate user with default role.
 	user, err := h.appwrite.GetUser(appwriteUserID)
+	if err != nil && !appwrite.IsNotFound(err) {
+		log.Printf("[ERROR] VerifyOTP: GetUser(%s) transient failure: %v", appwriteUserID, err)
+		utils.Error(c, http.StatusServiceUnavailable, "Our servers are temporarily unavailable. Please try again in a moment.")
+		return
+	}
+
 	role := "customer"
-	if err != nil {
-		// Create user with all required fields
+	if user == nil {
+		// Create user with all required fields. We MUST surface failures — if
+		// we silently ignore them, the client receives a JWT but every subsequent
+		// /users/me etc. request will 404 because no user doc exists.
 		userData := map[string]interface{}{
 			"name":  "",
 			"phone": req.Phone,
 			"role":  "customer",
 		}
-		h.appwrite.CreateUser(appwriteUserID, userData)
+		if _, createErr := h.appwrite.CreateUser(appwriteUserID, userData); createErr != nil && !appwrite.IsConflict(createErr) {
+			log.Printf("[ERROR] VerifyOTP: CreateUser(%s) failed: %v", appwriteUserID, createErr)
+			utils.InternalError(c, "Failed to create user profile. Please try again.")
+			return
+		}
 	} else {
 		if r, ok := user["role"].(string); ok && r != "" {
 			role = r
@@ -419,8 +507,9 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	}
 
 	// Clear any previous token blacklist so the new session works
-	ctx := context.Background()
-	h.redis.Del(ctx, "token_blacklist:"+appwriteUserID)
+	if err := h.redis.Del(ctx, "token_blacklist:"+appwriteUserID); err != nil {
+		log.Printf("[WARN] VerifyOTP: failed to clear blacklist for %s: %v", appwriteUserID, err)
+	}
 
 	token, err := h.issueJWT(appwriteUserID, role, 90*24*time.Hour)
 	if err != nil {
@@ -459,7 +548,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 
 	// Check if token is blacklisted
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	blacklisted, _ := h.redis.Exists(ctx, "token_blacklist:"+userID)
 	if blacklisted {
 		utils.Unauthorized(c, "Token has been revoked")
@@ -500,8 +589,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	// Blacklist the user's tokens for the remainder of the JWT TTL (90 days)
-	ctx := context.Background()
-	h.redis.Set(ctx, "token_blacklist:"+userID, "1", 90*24*time.Hour)
+	ctx := c.Request.Context()
+	if err := h.redis.Set(ctx, "token_blacklist:"+userID, "1", 90*24*time.Hour); err != nil {
+		log.Printf("[WARN] Logout: failed to blacklist token for %s: %v", userID, err)
+	}
 
 	utils.Success(c, gin.H{"message": "Logged out successfully"})
 }
@@ -513,7 +604,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body object true "JSON with phone (string, required)"
-// @Success 200 {object} map[string]interface{} "exists (bool), user_name (string, if exists)"
+// @Success 200 {object} map[string]interface{} "exists (bool), role (string, if exists)"
 // @Failure 400 {object} map[string]interface{}
 // @Router /api/v1/auth/check-phone [post]
 func (h *AuthHandler) CheckPhone(c *gin.Context) {
@@ -543,12 +634,10 @@ func (h *AuthHandler) CheckPhone(c *gin.Context) {
 	}
 
 	if result != nil && result.Total > 0 {
-		name, _ := result.Documents[0]["name"].(string)
 		role, _ := result.Documents[0]["role"].(string)
 		utils.Success(c, gin.H{
-			"exists":    true,
-			"user_name": name,
-			"role":      role,
+			"exists": true,
+			"role":   role,
 		})
 		return
 	}
@@ -599,6 +688,13 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 		return
 	}
 
+	// Customers must share their current location to receive deliveries.
+	// We enforce this on the backend so it cannot be bypassed by a modified client.
+	if role == "customer" && (latitude == 0 || longitude == 0) {
+		utils.BadRequest(c, "Your current location is required to set up your account. Please enable location access and try again.")
+		return
+	}
+
 	// Update user profile
 	userUpdate := map[string]interface{}{
 		"name": name,
@@ -624,9 +720,17 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 	}
 
 	_, err := h.appwrite.UpdateUser(userID, userUpdate)
+	if err != nil && !appwrite.IsNotFound(err) {
+		// Transient/Appwrite error (not a clean 404). Don't fall into the
+		// create-if-missing branch because we'd silently overwrite an existing
+		// user's phone with "" if the error was not really a not-found.
+		log.Printf("[ERROR] Onboard: UpdateUser(%s) transient failure: %v", userID, err)
+		utils.Error(c, http.StatusServiceUnavailable, "Our servers are temporarily unavailable. Please try again in a moment.")
+		return
+	}
 	if err != nil {
-		log.Printf("Onboard: UpdateUser failed for %s: %v — attempting create", userID, err)
-		// User doc may not exist (e.g. if creation failed during login).
+		log.Printf("Onboard: UpdateUser not-found for %s — attempting create", userID)
+		// User doc is genuinely missing (e.g. if creation failed during login).
 		// Build a complete user doc with all required fields and create it.
 		createData := map[string]interface{}{
 			"name":  name,
@@ -652,9 +756,9 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 			createData["dark_mode"] = darkMode
 		}
 		_, createErr := h.appwrite.CreateUser(userID, createData)
-		if createErr != nil {
-			log.Printf("Onboard: CreateUser also failed for %s: %v", userID, createErr)
-			utils.InternalError(c, "Failed to update profile")
+		if createErr != nil && !appwrite.IsConflict(createErr) {
+			log.Printf("[ERROR] Onboard: CreateUser(%s) failed: %v", userID, createErr)
+			utils.InternalError(c, "Failed to update profile. Please try again.")
 			return
 		}
 		log.Printf("Onboard: created user doc for %s (was missing)", userID)
@@ -678,8 +782,15 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 			city = "Unknown"
 		}
 
-		// Check if restaurant already exists for this owner
-		existing, _ := h.appwrite.GetRestaurantByOwner(userID)
+		// Check if restaurant already exists for this owner. A transient lookup
+		// failure must not silently fall through to create-new — that would leave
+		// the owner with duplicate restaurants.
+		existing, lookupErr := h.appwrite.GetRestaurantByOwner(userID)
+		if lookupErr != nil && !appwrite.IsNotFound(lookupErr) {
+			log.Printf("[ERROR] Onboard: GetRestaurantByOwner(%s) failed: %v", userID, lookupErr)
+			utils.Error(c, http.StatusServiceUnavailable, "Our servers are temporarily unavailable. Please try again in a moment.")
+			return
+		}
 		if existing != nil && existing.Total > 0 {
 			// Update existing restaurant
 			restID, _ := existing.Documents[0]["$id"].(string)
@@ -697,7 +808,11 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 			if longitude != 0 {
 				restUpdate["longitude"] = longitude
 			}
-			h.appwrite.UpdateRestaurant(restID, restUpdate)
+			if _, updateErr := h.appwrite.UpdateRestaurant(restID, restUpdate); updateErr != nil {
+				log.Printf("[ERROR] Onboard: UpdateRestaurant(%s) failed: %v", restID, updateErr)
+				utils.InternalError(c, "Failed to update restaurant. Please try again.")
+				return
+			}
 			log.Printf("Onboard: updated existing restaurant %s for user %s", restID, userID)
 		} else {
 			// Create new restaurant
@@ -719,11 +834,11 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 				restData["longitude"] = longitude
 			}
 
-			restID := fmt.Sprintf("rest_%s", userID[:8])
+			restID := fmt.Sprintf("rest_%s", safeIDSuffix(userID, 8))
 			_, createErr := h.appwrite.CreateRestaurant(restID, restData)
-			if createErr != nil {
-				log.Printf("Onboard: failed to create restaurant: %v", createErr)
-				utils.InternalError(c, "Failed to create restaurant")
+			if createErr != nil && !appwrite.IsConflict(createErr) {
+				log.Printf("[ERROR] Onboard: CreateRestaurant(%s) failed: %v", restID, createErr)
+				utils.InternalError(c, "Failed to create restaurant. Please try again.")
 				return
 			}
 			log.Printf("Onboard: created restaurant %s for user %s", restID, userID)
@@ -734,7 +849,12 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 		vehicleNumber, _ := req["vehicle_number"].(string)
 
 		// Check if delivery partner profile exists
-		existing, _ := h.appwrite.GetDeliveryPartner(userID)
+		existing, lookupErr := h.appwrite.GetDeliveryPartner(userID)
+		if lookupErr != nil && !appwrite.IsNotFound(lookupErr) {
+			log.Printf("[ERROR] Onboard: GetDeliveryPartner(%s) failed: %v", userID, lookupErr)
+			utils.Error(c, http.StatusServiceUnavailable, "Our servers are temporarily unavailable. Please try again in a moment.")
+			return
+		}
 		if existing != nil && existing.Total > 0 {
 			// Update existing profile
 			partnerID, _ := existing.Documents[0]["$id"].(string)
@@ -745,15 +865,18 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 			if vehicleNumber != "" {
 				partnerUpdate["vehicle_number"] = vehicleNumber
 			}
-			h.appwrite.UpdateDeliveryPartner(partnerID, partnerUpdate)
+			if len(partnerUpdate) > 0 {
+				if _, updateErr := h.appwrite.UpdateDeliveryPartner(partnerID, partnerUpdate); updateErr != nil {
+					log.Printf("[ERROR] Onboard: UpdateDeliveryPartner(%s) failed: %v", partnerID, updateErr)
+					utils.InternalError(c, "Failed to update delivery partner profile. Please try again.")
+					return
+				}
+			}
 			log.Printf("Onboard: updated delivery partner %s for user %s", partnerID, userID)
 		} else {
-			// Create new delivery partner profile
-			// Only use fields that exist in the actual Appwrite delivery_partners collection:
-			// user_id, vehicle_type, vehicle_number, license_number, is_online, is_on_delivery,
-			// current_latitude, current_longitude, last_location_update, rating, total_ratings,
-			// total_deliveries, total_earnings, bank_account_id, documents_verified, created_at, updated_at
-			// NOTE: name and phone are stored in the users collection, NOT here
+			// Create new delivery partner profile. Stored fields mirror the
+			// delivery_partners collection schema (user_id, vehicle_type, etc.);
+			// name/phone live in users.
 			partnerData := map[string]interface{}{
 				"user_id":        userID,
 				"is_online":      false,
@@ -769,11 +892,11 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 				partnerData["vehicle_number"] = vehicleNumber
 			}
 
-			partnerID := fmt.Sprintf("dp_%s", userID[:8])
+			partnerID := fmt.Sprintf("dp_%s", safeIDSuffix(userID, 8))
 			_, createErr := h.appwrite.CreateDeliveryPartner(partnerID, partnerData)
-			if createErr != nil {
-				log.Printf("Onboard: failed to create delivery partner: %v", createErr)
-				utils.InternalError(c, "Failed to create delivery partner profile")
+			if createErr != nil && !appwrite.IsConflict(createErr) {
+				log.Printf("[ERROR] Onboard: CreateDeliveryPartner(%s) failed: %v", partnerID, createErr)
+				utils.InternalError(c, "Failed to create delivery partner profile. Please try again.")
 				return
 			}
 			log.Printf("Onboard: created delivery partner %s for user %s", partnerID, userID)

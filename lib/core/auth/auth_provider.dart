@@ -220,6 +220,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return 'Something went wrong. Please try again.';
   }
 
+  /// Checks whether the phone is already registered and, if so, whether the
+  /// registered role matches the selected role.
+  ///
+  /// Returns null when the caller may proceed, or an error string to surface.
   Future<String?> _checkPhoneRoleConflict(String phone) async {
     try {
       final response = await _apiClient.post<Map<String, dynamic>>(
@@ -227,22 +231,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
         body: {'phone': phone},
       );
       final data = response.data;
-      if (data == null || data['exists'] != true) {
-        return null;
-      }
+      if (data == null || data['exists'] != true) return null;
 
       final registeredRole = (data['role'] as String?)?.trim();
-      if (registeredRole == null || registeredRole.isEmpty) {
-        return null;
-      }
-
-      if (registeredRole == state.selectedRole) {
+      if (registeredRole == null ||
+          registeredRole.isEmpty ||
+          registeredRole == state.selectedRole) {
         return null;
       }
 
       final registeredRoleLabel = _roleDisplayName(registeredRole);
       final selectedRoleLabel = _roleDisplayName(state.selectedRole);
-      return 'This phone number is already registered as $registeredRoleLabel. You selected $selectedRoleLabel. Please go back and continue as $registeredRoleLabel, or use a different phone number.';
+      return 'This phone number is already registered as $registeredRoleLabel. '
+          'You selected $selectedRoleLabel. Please go back and continue as '
+          '$registeredRoleLabel, or use a different phone number.';
     } on ApiException {
       // Pre-check is non-blocking. If unavailable, continue normal OTP flow.
       return null;
@@ -736,8 +738,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _secureStorage.write(key: _kOnboardedKey, value: 'true');
       state = state.copyWith(isNewUser: false);
       if (kDebugMode) debugPrint('[Auth] Onboarding complete');
+    } on ApiException catch (e) {
+      if (kDebugMode) debugPrint('[Auth] Onboarding save failed (API): $e');
+      // Convert to a friendly message so callers don't see raw exception text.
+      throw Exception(_friendlyApiError(e));
     } catch (e) {
       if (kDebugMode) debugPrint('[Auth] Onboarding save failed: $e');
+      final msg = e.toString();
+      // If already a converted Exception with a friendly message, pass through.
+      // Otherwise check for known error patterns.
+      if (_looksLikeNetworkIssue(msg.toLowerCase())) {
+        throw Exception(
+          'Unable to connect right now. Please check your internet connection and try again.',
+        );
+      }
       rethrow; // Let caller show error — do NOT mark as onboarded
     }
   }

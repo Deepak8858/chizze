@@ -1,8 +1,10 @@
 package handlers_test
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chizze/backend/internal/testutil"
 )
@@ -438,8 +440,12 @@ func TestCheckPhone_Exists(t *testing.T) {
 	if data["exists"] != true {
 		t.Errorf("expected exists=true, got %v", data["exists"])
 	}
-	if data["user_name"] != "Phone User" {
-		t.Errorf("expected user_name=Phone User, got %v", data["user_name"])
+	if data["role"] != "customer" {
+		t.Errorf("expected role=customer, got %v", data["role"])
+	}
+	// user_name must NOT be returned (PII disclosure on unauthenticated endpoint)
+	if _, hasName := data["user_name"]; hasName {
+		t.Errorf("user_name should not be returned on unauthenticated endpoint")
 	}
 }
 
@@ -698,8 +704,10 @@ func TestOnboard_CustomerSuccess(t *testing.T) {
 	})
 
 	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
-		"name":  "Test Customer",
-		"email": "test@example.com",
+		"name":      "Test Customer",
+		"email":     "test@example.com",
+		"latitude":  12.9716,
+		"longitude": 77.5946,
 	}, "onb_cust", "customer")
 
 	if rec.Code != 200 {
@@ -718,9 +726,28 @@ func TestOnboard_CustomerSuccess(t *testing.T) {
 	}
 }
 
+func TestOnboard_CustomerMissingLocationRejected(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	te.SeedUser("cust_noloc", map[string]interface{}{
+		"phone": "+919876543211", "role": "customer",
+	})
+
+	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
+		"name": "No Location",
+		// latitude and longitude intentionally omitted
+	}, "cust_noloc", "customer")
+
+	if rec.Code != 400 {
+		t.Fatalf("expected 400 when customer omits location, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestOnboard_RestaurantOwnerCreatesRestaurant(t *testing.T) {
 	te := testutil.NewTestEnv(t)
 	defer te.Close()
+	te.SeedPartnerSignupEnabled()
 
 	te.SeedUser("rest_owner_1", map[string]interface{}{
 		"phone": "+919876543210", "role": "restaurant_owner",
@@ -754,6 +781,7 @@ func TestOnboard_RestaurantOwnerCreatesRestaurant(t *testing.T) {
 func TestOnboard_RestaurantOwnerMissingRestaurantName(t *testing.T) {
 	te := testutil.NewTestEnv(t)
 	defer te.Close()
+	te.SeedPartnerSignupEnabled()
 
 	te.SeedUser("rest_owner_2", map[string]interface{}{
 		"phone": "+919876543210", "role": "restaurant_owner",
@@ -771,6 +799,7 @@ func TestOnboard_RestaurantOwnerMissingRestaurantName(t *testing.T) {
 func TestOnboard_DeliveryPartnerCreatesProfile(t *testing.T) {
 	te := testutil.NewTestEnv(t)
 	defer te.Close()
+	te.SeedPartnerSignupEnabled()
 
 	te.SeedUser("dp_onb_user", map[string]interface{}{
 		"phone": "+919876543210", "role": "delivery_partner",
@@ -794,6 +823,7 @@ func TestOnboard_DeliveryPartnerCreatesProfile(t *testing.T) {
 func TestOnboard_DeliveryPartnerDefaultsVehicleToBike(t *testing.T) {
 	te := testutil.NewTestEnv(t)
 	defer te.Close()
+	te.SeedPartnerSignupEnabled()
 
 	te.SeedUser("dp_onb_def", map[string]interface{}{
 		"phone": "+919876543210", "role": "delivery_partner",
@@ -845,6 +875,7 @@ func TestOnboard_NoAuth(t *testing.T) {
 func TestOnboard_RestaurantOwnerUpdatesExisting(t *testing.T) {
 	te := testutil.NewTestEnv(t)
 	defer te.Close()
+	te.SeedPartnerSignupEnabled()
 
 	te.SeedUser("rest_upd_1", map[string]interface{}{
 		"phone": "+919876543210", "role": "restaurant_owner",
@@ -882,6 +913,8 @@ func TestOnboard_PreferencesStored(t *testing.T) {
 		"name":      "Pref User",
 		"is_veg":    true,
 		"dark_mode": true,
+		"latitude":  12.9716,
+		"longitude": 77.5946,
 	}, "pref_user", "customer")
 
 	if rec.Code != 200 {
@@ -1011,6 +1044,7 @@ func TestVerifyOTP_ClearsBlacklist(t *testing.T) {
 func TestOnboard_RestaurantDefaultCity(t *testing.T) {
 	te := testutil.NewTestEnv(t)
 	defer te.Close()
+	te.SeedPartnerSignupEnabled()
 
 	te.SeedUser("rest_def_city", map[string]interface{}{
 		"phone": "+919876543210", "role": "restaurant_owner",
@@ -1039,5 +1073,96 @@ func TestOnboard_RestaurantDefaultCity(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected restaurant to be created")
+	}
+}
+
+// ─── Edge cases: P0 production hardening ───
+
+// TestOnboard_ShortUserID_NoPanic verifies the safeIDSuffix helper prevents
+// panics when an Appwrite user ID is shorter than the 8-char slice we used to
+// blindly index into. Regression test for a crash that would surface as a 500.
+func TestOnboard_ShortUserID_NoPanic(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+	te.SeedPartnerSignupEnabled()
+
+	// 5-char user ID — would panic under userID[:8] before the fix.
+	te.SeedUser("abc12", map[string]interface{}{
+		"phone": "+919876543210", "role": "restaurant_owner",
+	})
+
+	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
+		"name":               "Owner",
+		"restaurant_name":    "Tiny ID Restaurant",
+		"restaurant_address": "1 Short St",
+		"city":               "Bangalore",
+	}, "abc12", "restaurant_owner")
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200 (no panic), got %d: %s", rec.Code, rec.Body.String())
+	}
+	if te.FakeAW.DocumentCount("restaurants") == 0 {
+		t.Error("expected restaurant created with short-ID suffix")
+	}
+}
+
+// TestOnboard_ShortDeliveryUserID_NoPanic is the delivery-partner analog.
+func TestOnboard_ShortDeliveryUserID_NoPanic(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+	te.SeedPartnerSignupEnabled()
+
+	te.SeedUser("xy7", map[string]interface{}{
+		"phone": "+919876543210", "role": "delivery_partner",
+	})
+
+	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
+		"name":         "Rider",
+		"vehicle_type": "bike",
+	}, "xy7", "delivery_partner")
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200 (no panic), got %d: %s", rec.Code, rec.Body.String())
+	}
+	if te.FakeAW.DocumentCount("delivery_partners") == 0 {
+		t.Error("expected delivery partner created with short-ID suffix")
+	}
+}
+
+// TestExchange_PhoneMigration_ConcurrentLock verifies only one of two parallel
+// Exchange calls for the same phone performs the migration; the loser gets a
+// 409 instead of racing into a corrupted state. Regression test for the
+// phone-migration race.
+func TestExchange_PhoneMigration_ConcurrentLock(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	// Old user doc with the phone (different ID from Appwrite account)
+	te.SeedUser("old_lock_id", map[string]interface{}{
+		"phone": "+919876543211",
+		"name":  "Existing",
+		"role":  "customer",
+	})
+
+	te.FakeAW.RegisterJWT("lock-jwt", map[string]interface{}{
+		"$id":   "new_lock_id",
+		"phone": "+919876543211",
+		"name":  "Existing",
+	})
+
+	// Pre-acquire the phone lock so the next Exchange call hits the conflict
+	// branch and proves the lock is actually consulted.
+	ctx := context.Background()
+	ok, _ := te.RedisClient.SetNX(ctx, "auth_phone_lock:+919876543211", "1", 10*time.Second)
+	if !ok {
+		t.Fatal("failed to pre-acquire phone lock")
+	}
+	defer te.RedisClient.Del(ctx, "auth_phone_lock:+919876543211")
+
+	rec := te.Request("POST", "/api/v1/auth/exchange", map[string]interface{}{
+		"jwt": "lock-jwt",
+	})
+	if rec.Code != 409 {
+		t.Fatalf("expected 409 conflict when phone lock is held, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

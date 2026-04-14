@@ -93,6 +93,12 @@ func main() {
 	go hub.Run()
 	broadcaster := websocket.NewEventBroadcaster(hub)
 
+	// Route inbound WebSocket messages (chat between customer ↔ rider ↔ restaurant).
+	// The handler validates the sender is a participant of the order before
+	// forwarding the message to the counterparty, so chat can't be used to
+	// deliver arbitrary payloads to arbitrary users.
+	hub.SetIncomingHandler(handlers.NewChatRouter(awService, broadcaster))
+
 	// ─── Initialize Handlers ───
 	authHandler := handlers.NewAuthHandler(awService, redisClient, cfg)
 	userHandler := handlers.NewUserHandler(awService, cacheService)
@@ -104,7 +110,7 @@ func main() {
 	reviewHandler := handlers.NewReviewHandler(awService)
 	couponHandler := handlers.NewCouponHandler(awService, cacheService)
 	notifHandler := handlers.NewNotificationHandler(awService)
-	partnerHandler := handlers.NewPartnerHandler(awService)
+	partnerHandler := handlers.NewPartnerHandler(awService, redisClient)
 	favoriteHandler := handlers.NewFavoriteHandler(awService)
 	goldHandler := handlers.NewGoldHandler(awService)
 	referralHandler := handlers.NewReferralHandler(awService)
@@ -122,7 +128,10 @@ func main() {
 	r.Use(middleware.CORS(cfg))                             // CORS
 	r.Use(middleware.MaxBodySize(2 << 20))                  // 2MB max request body
 	r.Use(middleware.Gzip())                                // Response compression
-	r.Use(middleware.RedisRateLimit(redisClient, 200, 500)) // 200 req/s, burst 500 (Redis-backed)
+	// Per-IP rate limit (sliding 1s window, 500 req/s per IP). Prevents a
+	// single abusive client from exhausting the server; is generous enough
+	// that legitimate users behind NAT/corp networks are not affected.
+	r.Use(middleware.RedisRateLimit(redisClient, 500, 500))
 
 	// Health check — liveness probe (always 200 if server is running)
 	r.GET("/health", func(c *gin.Context) {
@@ -217,9 +226,11 @@ func main() {
 	// ─── API v1 Routes ───
 	v1 := r.Group("/api/v1")
 
-	// Auth (public) — stricter rate limit
+	// Auth (public) — stricter rate limit. 30 req/s per IP is enough for
+	// concurrent signups from a shared NAT but still throttles brute force.
+	// Per-phone OTP rate limit (3 per 10min) is enforced inside SendOTP.
 	auth := v1.Group("/auth")
-	auth.Use(middleware.RedisRateLimit(redisClient, 10, 20)) // 10 req/s for auth (Redis-backed)
+	auth.Use(middleware.RedisRateLimit(redisClient, 30, 30))
 	{
 		auth.POST("/send-otp", authHandler.SendOTP)
 		auth.POST("/verify-otp", authHandler.VerifyOTP)
@@ -243,6 +254,10 @@ func main() {
 	// ─── Authenticated Routes ───
 	authenticated := v1.Group("")
 	authenticated.Use(middleware.Auth(cfg, redisClient))
+	// Per-user rate limit: a single authenticated account cannot exceed 100
+	// requests per second regardless of how many IPs they spread across.
+	// Protects the order/menu/WS endpoints from runaway clients and script abuse.
+	authenticated.Use(middleware.PerUserRateLimit(redisClient, 100))
 	{
 		// WebSocket
 		authenticated.GET("/ws", func(c *gin.Context) {
@@ -272,6 +287,7 @@ func main() {
 			orders.POST("", orderHandler.PlaceOrder)
 			orders.GET("", orderHandler.ListOrders)
 			orders.GET("/:id", orderHandler.GetOrder)
+			orders.GET("/:id/tracking", orderHandler.GetTracking)
 			orders.PUT("/:id/cancel", orderHandler.CancelOrder)
 			orders.POST("/:id/review", reviewHandler.CreateReview)
 		}
@@ -329,6 +345,7 @@ func main() {
 	// ─── Partner Routes (restaurant_owner) ───
 	partner := v1.Group("/partner")
 	partner.Use(middleware.Auth(cfg, redisClient))
+	partner.Use(middleware.PerUserRateLimit(redisClient, 100))
 	partner.Use(middleware.RequireRole("restaurant_owner"))
 	{
 		// Dashboard & Analytics
@@ -358,11 +375,19 @@ func main() {
 
 		// Reviews
 		partner.POST("/reviews/:id/reply", reviewHandler.ReplyToReview)
+
+		// Bank details & payouts
+		partner.GET("/bank-details", partnerHandler.GetBankDetails)
+		partner.PUT("/bank-details", partnerHandler.UpdateBankDetails)
+		partner.GET("/payouts", partnerHandler.ListPayouts)
+		partner.POST("/payouts/request", partnerHandler.RequestPayout)
 	}
 
 	// ─── Delivery Routes (delivery_partner) ───
+	// Higher per-user limit (200/s) because rider apps ping location frequently.
 	delivery := v1.Group("/delivery")
 	delivery.Use(middleware.Auth(cfg, redisClient))
+	delivery.Use(middleware.PerUserRateLimit(redisClient, 200))
 	delivery.Use(middleware.RequireRole("delivery_partner"))
 	{
 		delivery.GET("/dashboard", deliveryHandler.Dashboard)

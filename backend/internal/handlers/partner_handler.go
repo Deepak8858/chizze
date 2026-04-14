@@ -1,27 +1,35 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/pkg/appwrite"
+	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/chizze/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
 
+// upiVPARegex validates UPI Virtual Payment Address format (localpart@provider)
+var upiVPARegex = regexp.MustCompile(`^[a-zA-Z0-9._-]+@[a-zA-Z][a-zA-Z0-9]+$`)
+
 // PartnerHandler handles restaurant partner-specific endpoints
 type PartnerHandler struct {
 	appwrite *services.AppwriteService
+	redis    *redispkg.Client
 }
 
 // NewPartnerHandler creates a partner handler
-func NewPartnerHandler(aw *services.AppwriteService) *PartnerHandler {
-	return &PartnerHandler{appwrite: aw}
+func NewPartnerHandler(aw *services.AppwriteService, redis *redispkg.Client) *PartnerHandler {
+	return &PartnerHandler{appwrite: aw, redis: redis}
 }
 
 // getPartnerRestaurant looks up the restaurant owned by the current user
@@ -689,4 +697,304 @@ func boolToStatus(b bool) string {
 		return "online"
 	}
 	return "offline"
+}
+
+// ─── Bank Details & Payouts ───
+
+// GetBankDetails returns the partner's saved bank details and available balance.
+// @Summary      Get partner bank details
+// @Description  Returns saved bank/UPI details and available earnings balance for the authenticated restaurant partner
+// @Tags         Partners
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/bank-details [get]
+func (h *PartnerHandler) GetBankDetails(c *gin.Context) {
+	restaurant, _, ok := h.getPartnerRestaurant(c)
+	if !ok {
+		return
+	}
+	utils.Success(c, gin.H{
+		"bank_account_id":     stringOr(restaurant, "bank_account_id"),
+		"bank_account_holder": stringOr(restaurant, "bank_account_holder"),
+		"ifsc":                stringOr(restaurant, "ifsc"),
+		"upi_id":              stringOr(restaurant, "upi_id"),
+		"total_earnings":      getFloat(restaurant, "total_earnings"),
+	})
+}
+
+// UpdateBankDetails updates the partner's bank account / UPI details.
+// @Summary      Update partner bank details
+// @Description  Updates bank account or UPI details for the authenticated restaurant partner. IFSC must match Indian bank format.
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        body  body  models.UpdatePartnerBankRequest  true  "Bank details payload"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/bank-details [put]
+func (h *PartnerHandler) UpdateBankDetails(c *gin.Context) {
+	_, restID, ok := h.getPartnerRestaurant(c)
+	if !ok {
+		return
+	}
+
+	var req models.UpdatePartnerBankRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "Invalid request body")
+		return
+	}
+
+	update := map[string]interface{}{}
+	if req.BankAccountID != "" {
+		if len(req.BankAccountID) < 9 {
+			utils.BadRequest(c, "Account number must be at least 9 digits")
+			return
+		}
+		update["bank_account_id"] = req.BankAccountID
+	}
+	if req.BankAccountHolder != "" {
+		update["bank_account_holder"] = req.BankAccountHolder
+	}
+	if req.IFSC != "" {
+		ifsc := strings.ToUpper(strings.TrimSpace(req.IFSC))
+		if !isValidIFSC(ifsc) {
+			utils.BadRequest(c, "Enter a valid IFSC code (e.g. SBIN0001234)")
+			return
+		}
+		update["ifsc"] = ifsc
+	}
+	if req.UpiID != "" {
+		upi := strings.TrimSpace(req.UpiID)
+		if !upiVPARegex.MatchString(upi) {
+			utils.BadRequest(c, "Enter a valid UPI ID (e.g. name@upi)")
+			return
+		}
+		update["upi_id"] = upi
+	}
+
+	if len(update) == 0 {
+		utils.BadRequest(c, "No fields to update")
+		return
+	}
+
+	updated, err := h.appwrite.UpdateRestaurant(restID, update)
+	if err != nil {
+		utils.InternalError(c, "Failed to save bank details")
+		return
+	}
+	// Return a clean shape consistent with GetBankDetails
+	utils.Success(c, gin.H{
+		"bank_account_id":     stringOr(updated, "bank_account_id"),
+		"bank_account_holder": stringOr(updated, "bank_account_holder"),
+		"ifsc":                stringOr(updated, "ifsc"),
+		"upi_id":              stringOr(updated, "upi_id"),
+		"total_earnings":      getFloat(updated, "total_earnings"),
+	})
+}
+
+// ListPayouts returns the partner's payout history.
+// @Summary      List partner payouts
+// @Description  Returns paginated payout history for the authenticated restaurant partner
+// @Tags         Partners
+// @Produce      json
+// @Param        page     query  int  false  "Page number"     default(1)
+// @Param        per_page query  int  false  "Items per page"  default(20)
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/payouts [get]
+func (h *PartnerHandler) ListPayouts(c *gin.Context) {
+	_, restID, ok := h.getPartnerRestaurant(c)
+	if !ok {
+		return
+	}
+	pg := models.ParsePagination(c)
+
+	queries := []string{
+		appwrite.QueryEqual("partner_id", restID),
+		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryLimit(pg.PerPage),
+		appwrite.QueryOffset(pg.Offset()),
+	}
+
+	result, err := h.appwrite.ListPayouts(queries)
+	if err != nil {
+		utils.InternalError(c, "Failed to fetch payouts")
+		return
+	}
+	utils.Paginated(c, result.Documents, pg.Page, pg.PerPage, result.Total)
+}
+
+// RequestPayout creates a new payout request for the partner.
+// @Summary      Request a partner payout
+// @Description  Creates a new payout request for the restaurant partner. Minimum ₹100, one pending/processing at a time, requires saved bank or UPI details.
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        request  body  models.RequestPayoutRequest  true  "Payout amount and method"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/payouts/request [post]
+func (h *PartnerHandler) RequestPayout(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var req models.RequestPayoutRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "Amount (>0) and method (bank_transfer|upi) are required")
+		return
+	}
+
+	restaurant, restID, ok := h.getPartnerRestaurant(c)
+	if !ok {
+		return
+	}
+
+	// Minimum payout
+	if req.Amount < 100 {
+		utils.BadRequest(c, "Minimum payout amount is ₹100")
+		return
+	}
+
+	// Required account/UPI info for the chosen method
+	switch req.Method {
+	case "bank_transfer":
+		if stringOr(restaurant, "bank_account_id") == "" ||
+			stringOr(restaurant, "ifsc") == "" ||
+			stringOr(restaurant, "bank_account_holder") == "" {
+			utils.BadRequest(c, "Add bank account holder, number, and IFSC before requesting a bank payout")
+			return
+		}
+	case "upi":
+		if stringOr(restaurant, "upi_id") == "" {
+			utils.BadRequest(c, "Add a UPI ID before requesting a UPI payout")
+			return
+		}
+	default:
+		utils.BadRequest(c, "Method must be bank_transfer or upi")
+		return
+	}
+
+	// Acquire per-partner distributed lock to prevent concurrent payout double-spend
+	lockKey := fmt.Sprintf("payout_lock:partner:%s", restID)
+	ctx := context.Background()
+	locked, err := h.redis.SetNX(ctx, lockKey, "1", 15*time.Second)
+	if err != nil || !locked {
+		utils.BadRequest(c, "A payout is already being processed. Please try again.")
+		return
+	}
+	defer h.redis.Del(ctx, lockKey)
+
+	// Re-read balance inside the lock to prevent TOCTOU race
+	freshRestaurant, freshRestID, ok := h.getPartnerRestaurant(c)
+	if !ok {
+		return
+	}
+	_ = freshRestID
+
+	// Sufficient balance
+	totalEarnings := getFloat(freshRestaurant, "total_earnings")
+	if req.Amount > totalEarnings {
+		utils.BadRequest(c, "Insufficient earnings balance")
+		return
+	}
+
+	// One pending/processing at a time
+	pendingQueries := []string{
+		appwrite.QueryEqual("partner_id", restID),
+		appwrite.QueryEqual("status", models.PayoutStatusPending),
+		appwrite.QueryLimit(1),
+	}
+	if pending, _ := h.appwrite.ListPayouts(pendingQueries); pending != nil && pending.Total > 0 {
+		utils.BadRequest(c, "You already have a pending payout request")
+		return
+	}
+	processingQueries := []string{
+		appwrite.QueryEqual("partner_id", restID),
+		appwrite.QueryEqual("status", models.PayoutStatusProcessing),
+		appwrite.QueryLimit(1),
+	}
+	if processing, _ := h.appwrite.ListPayouts(processingQueries); processing != nil && processing.Total > 0 {
+		utils.BadRequest(c, "A payout is already being processed")
+		return
+	}
+
+	payout, err := h.appwrite.CreatePayout("unique()", map[string]interface{}{
+		"partner_id": restID,
+		"user_id":    userID,
+		"amount":     req.Amount,
+		"status":     models.PayoutStatusPending,
+		"method":     req.Method,
+		"reference":  "",
+		"note":       "",
+		"created_at": time.Now().Format(time.RFC3339),
+		"updated_at": time.Now().Format(time.RFC3339),
+	})
+	if err != nil {
+		utils.InternalError(c, "Failed to create payout request")
+		return
+	}
+
+	// Deduct from available balance — if this fails, roll back the payout document
+	newBalance := totalEarnings - req.Amount
+	if _, balErr := h.appwrite.UpdateRestaurant(restID, map[string]interface{}{
+		"total_earnings": newBalance,
+	}); balErr != nil {
+		payoutID, _ := payout["$id"].(string)
+		if payoutID != "" {
+			_ = h.appwrite.DeletePayout(payoutID)
+		}
+		utils.InternalError(c, "Failed to deduct balance; payout cancelled")
+		return
+	}
+
+	// Notify partner
+	_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
+		"user_id": userID,
+		"title":   "Payout Requested",
+		"body":    fmt.Sprintf("Your payout of ₹%.0f is being processed", req.Amount),
+		"type":    "payout",
+		"is_read": false,
+	})
+
+	utils.Created(c, payout)
+}
+
+// stringOr reads a string field from a map-backed Appwrite document.
+func stringOr(doc map[string]interface{}, key string) string {
+	if v, ok := doc[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// isValidIFSC returns true if s matches Indian IFSC format (4 letters + 0 + 6 alphanumeric).
+func isValidIFSC(s string) bool {
+	if len(s) != 11 {
+		return false
+	}
+	for i, ch := range s {
+		switch {
+		case i < 4:
+			if !(ch >= 'A' && ch <= 'Z') {
+				return false
+			}
+		case i == 4:
+			if ch != '0' {
+				return false
+			}
+		default:
+			if !((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) {
+				return false
+			}
+		}
+	}
+	return true
 }

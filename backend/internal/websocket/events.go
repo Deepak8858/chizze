@@ -17,6 +17,7 @@ const (
 	EventNotification      EventType = "notification"
 	EventRiderStatusChange EventType = "rider_status_change"
 	EventRestaurantUpdate  EventType = "restaurant_update"
+	EventChatMessage       EventType = "chat_message"
 )
 
 // Event represents a real-time event to be sent via WebSocket
@@ -108,6 +109,18 @@ func (b *EventBroadcaster) BroadcastRiderStatusChange(riderID string, isOnline b
 	b.sendToUser(riderID, EventRiderStatusChange, map[string]interface{}{
 		"rider_id":  riderID,
 		"is_online": isOnline,
+	})
+}
+
+// BroadcastChatMessage delivers a chat message to a specific recipient user.
+// Payload fields: order_id, sender_id, sender_role, message, ts (ms).
+func (b *EventBroadcaster) BroadcastChatMessage(recipientID, orderID, senderID, senderRole, message string) {
+	b.sendToUser(recipientID, EventChatMessage, map[string]interface{}{
+		"order_id":    orderID,
+		"sender_id":   senderID,
+		"sender_role": senderRole,
+		"message":     message,
+		"ts":          time.Now().UTC().UnixMilli(),
 	})
 }
 

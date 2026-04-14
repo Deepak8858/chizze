@@ -437,8 +437,8 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     }
   }
 
-  /// Toggle restaurant online/offline
-  Future<void> toggleOnline() async {
+  /// Toggle restaurant online/offline. Returns false if the API call failed.
+  Future<bool> toggleOnline() async {
     final newState = !state.isOnline;
     state = state.copyWith(isOnline: newState);
     try {
@@ -446,10 +446,12 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
         ApiConfig.partnerRestaurantStatus,
         body: {'is_online': newState},
       );
+      return true;
     } catch (e) {
       if (kDebugMode) debugPrint('[PartnerNotifier] toggleOnline error: $e');
       // Revert on failure
       state = state.copyWith(isOnline: !newState);
+      return false;
     }
   }
 

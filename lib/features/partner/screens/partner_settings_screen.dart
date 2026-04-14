@@ -88,6 +88,12 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
 
             // ─── Menu Items ───
             _buildSettingsItem(
+              Icons.account_balance_rounded,
+              'Bank Details & Payouts',
+              subtitle: 'Manage bank/UPI and request payouts',
+              onTap: () => context.push('/partner/bank-details'),
+            ),
+            _buildSettingsItem(
               Icons.support_agent_rounded,
               'Help & Support',
               subtitle: 'Contact us for assistance',
@@ -97,11 +103,7 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
               Icons.description_rounded,
               'Terms & Conditions',
               subtitle: 'View legal information',
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Coming soon')),
-                );
-              },
+              onTap: () => context.push('/terms'),
             ),
             _buildSettingsItem(
               Icons.privacy_tip_rounded,
@@ -320,8 +322,17 @@ class _PartnerSettingsScreenState extends ConsumerState<PartnerSettingsScreen> {
             value: pState.isOnline,
             activeTrackColor: AppColors.primary.withValues(alpha: 0.5),
             activeThumbColor: AppColors.primary,
-            onChanged: (_) =>
-                ref.read(partnerProvider.notifier).toggleOnline(),
+            onChanged: (_) async {
+              final ok =
+                  await ref.read(partnerProvider.notifier).toggleOnline();
+              if (!ok && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Failed to update restaurant status'),
+                  ),
+                );
+              }
+            },
           ),
         ],
       ),

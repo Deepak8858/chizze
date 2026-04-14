@@ -27,7 +27,9 @@ type ValidateCouponRequest struct {
 	OrderTotal float64 `json:"order_total" binding:"required,gt=0"`
 }
 
-// IsValid checks if the coupon can be used
+// IsValid checks if the coupon can be used.
+// A UsageLimit of 0 (or negative) is treated as unlimited — admins can issue
+// evergreen promo codes without a ceiling.
 func (c *Coupon) IsValid(orderTotal float64) (bool, string) {
 	if !c.IsActive {
 		return false, "Coupon is not active"
@@ -39,7 +41,7 @@ func (c *Coupon) IsValid(orderTotal float64) (bool, string) {
 	if now.After(c.ValidUntil) {
 		return false, "Coupon has expired"
 	}
-	if c.UsedCount >= c.UsageLimit {
+	if c.UsageLimit > 0 && c.UsedCount >= c.UsageLimit {
 		return false, "Coupon usage limit reached"
 	}
 	if orderTotal < c.MinOrderValue {

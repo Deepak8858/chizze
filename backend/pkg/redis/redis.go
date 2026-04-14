@@ -229,6 +229,28 @@ func (c *Client) SIsMember(ctx context.Context, key string, member interface{}) 
 	return c.rdb.SIsMember(ctx, key, member)
 }
 
+// ─── Hash Helpers ───
+
+// HSet sets field/value pairs on a hash. Pass pairs as alternating k,v,k,v...
+func (c *Client) HSet(ctx context.Context, key string, values ...interface{}) (int64, error) {
+	return c.rdb.HSet(ctx, key, values...).Result()
+}
+
+// HDel removes one or more fields from a hash.
+func (c *Client) HDel(ctx context.Context, key string, fields ...string) (int64, error) {
+	return c.rdb.HDel(ctx, key, fields...).Result()
+}
+
+// HGetAll returns all field/value pairs in a hash.
+func (c *Client) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	return c.rdb.HGetAll(ctx, key).Result()
+}
+
+// HLen returns the number of fields in a hash.
+func (c *Client) HLen(ctx context.Context, key string) (int64, error) {
+	return c.rdb.HLen(ctx, key).Result()
+}
+
 // ─── List Helpers (for notification queue) ───
 
 // LPush prepends one or more values to a list.

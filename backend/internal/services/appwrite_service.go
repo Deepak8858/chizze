@@ -294,6 +294,10 @@ func (s *AppwriteService) ListPayouts(queries []string) (*appwrite.DocumentList,
 	return s.client.ListDocuments(models.CollectionPayouts, queries)
 }
 
+func (s *AppwriteService) DeletePayout(id string) error {
+	return s.client.DeleteDocument(models.CollectionPayouts, id)
+}
+
 // ─── Addresses (single fetch) ───
 
 func (s *AppwriteService) GetAddress(id string) (map[string]interface{}, error) {

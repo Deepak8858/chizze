@@ -599,12 +599,15 @@ func TestRequestPayout_Success(t *testing.T) {
 
 	te.SeedUser("dp_rp", map[string]interface{}{"phone": "+919876543212", "name": "Rider", "role": "delivery_partner"})
 	te.FakeAW.SeedDocument("delivery_partners", "dp_rp1", map[string]interface{}{
-		"user_id":          "dp_rp",
-		"is_online":        true,
-		"total_earnings":   1000.0,
-		"total_deliveries": 50,
-		"vehicle_type":     "bike",
-		"rating":           4.5,
+		"user_id":              "dp_rp",
+		"is_online":            true,
+		"total_earnings":       1000.0,
+		"total_deliveries":     50,
+		"vehicle_type":         "bike",
+		"rating":               4.5,
+		"bank_account_id":      "123456789012",
+		"bank_account_holder":  "Test Rider",
+		"ifsc":                 "SBIN0001234",
 	})
 
 	rec := te.AuthRequest("POST", "/api/v1/delivery/payouts/request", map[string]interface{}{

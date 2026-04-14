@@ -422,3 +422,154 @@ func TestAdminDeleteStuckOrders(t *testing.T) {
 		t.Fatal("expected fresh cancelled order to remain because it is not stale")
 	}
 }
+
+// TestAdminListOrders_Enriched verifies that ListOrders enriches orders with
+// customer name/phone and normalizes field names (order_id, customer_lat/lng,
+// restaurant_lat/lng) so the admin list page and live board see consistent
+// contracts. Regression test for the raw Appwrite passthrough bug.
+func TestAdminListOrders_Enriched(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	adminHandler := handlers.NewAdminHandler(te.AWService, te.RedisClient, te.Hub)
+	v1 := te.Router.Group("/api/v1")
+	admin := v1.Group("/admin")
+	admin.Use(middleware.Auth(te.Config, te.RedisClient))
+	admin.Use(middleware.RequireRole("admin", "super_admin"))
+	admin.GET("/orders", adminHandler.ListOrders)
+
+	te.SeedUser("cust_en", map[string]interface{}{
+		"name":  "Bob Customer",
+		"phone": "+911111111111",
+		"email": "bob@example.com",
+		"role":  "customer",
+	})
+	te.SeedOrder("order_en_1", map[string]interface{}{
+		"order_number":          "CHZ-EN-1",
+		"customer_id":           "cust_en",
+		"restaurant_id":         "rest_en",
+		"restaurant_latitude":   12.97,
+		"restaurant_longitude":  77.59,
+		"delivery_latitude":     12.98,
+		"delivery_longitude":    77.60,
+		"status":                "placed",
+		"placed_at":             time.Now().UTC().Format(time.RFC3339),
+	})
+
+	rec := te.AuthRequest("GET", "/api/v1/admin/orders?per_page=20", nil, "admin_1", "admin")
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := te.ParseResponse(rec)
+	data, ok := resp["data"].([]interface{})
+	if !ok || len(data) == 0 {
+		t.Fatalf("expected orders array, got %#v", resp["data"])
+	}
+	order := data[0].(map[string]interface{})
+
+	// Enriched customer fields
+	if order["customer_name"] != "Bob Customer" {
+		t.Errorf("expected customer_name enriched, got %v", order["customer_name"])
+	}
+	if order["customer_phone"] != "+911111111111" {
+		t.Errorf("expected customer_phone enriched, got %v", order["customer_phone"])
+	}
+	// Normalized admin DTO fields
+	if order["order_id"] != "order_en_1" {
+		t.Errorf("expected order_id mirrors $id, got %v", order["order_id"])
+	}
+	if _, ok := order["customer_lat"]; !ok {
+		t.Error("expected customer_lat normalized from delivery_latitude")
+	}
+	if _, ok := order["restaurant_lat"]; !ok {
+		t.Error("expected restaurant_lat normalized from restaurant_latitude")
+	}
+}
+
+// TestAdminListOrders_PaginationLimitCompat verifies that the admin can
+// still pass the legacy `limit` query param (instead of `per_page`) and get
+// the correct page size. Regression test for the admin-web param drift.
+func TestAdminListOrders_PaginationLimitCompat(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	adminHandler := handlers.NewAdminHandler(te.AWService, te.RedisClient, te.Hub)
+	v1 := te.Router.Group("/api/v1")
+	admin := v1.Group("/admin")
+	admin.Use(middleware.Auth(te.Config, te.RedisClient))
+	admin.Use(middleware.RequireRole("admin", "super_admin"))
+	admin.GET("/orders", adminHandler.ListOrders)
+
+	// Seed 5 orders
+	for i := 0; i < 5; i++ {
+		te.SeedOrder(fmt.Sprintf("order_pg_%d", i), map[string]interface{}{
+			"order_number": fmt.Sprintf("CHZ-PG-%d", i),
+			"status":       "placed",
+			"placed_at":    time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+
+	// Admin sends limit=3 (legacy) — backend should respect it.
+	rec := te.AuthRequest("GET", "/api/v1/admin/orders?limit=3", nil, "admin_1", "admin")
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := te.ParseResponse(rec)
+	data, _ := resp["data"].([]interface{})
+	if len(data) > 3 {
+		t.Errorf("expected at most 3 orders with limit=3, got %d", len(data))
+	}
+}
+
+// TestAdminReassignOrder_RefreshesPartnerFields verifies that reassigning an
+// order clears the stale partner name/phone from the previous rider and
+// repopulates them with the new rider's data. Regression test for the
+// denormalized partner-data privacy leak.
+func TestAdminReassignOrder_RefreshesPartnerFields(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	adminHandler := handlers.NewAdminHandler(te.AWService, te.RedisClient, te.Hub)
+	v1 := te.Router.Group("/api/v1")
+	admin := v1.Group("/admin")
+	admin.Use(middleware.Auth(te.Config, te.RedisClient))
+	admin.Use(middleware.RequireRole("admin", "super_admin"))
+	admin.PUT("/orders/:id/reassign", adminHandler.ReassignOrder)
+
+	te.SeedUser("old_rider", map[string]interface{}{
+		"name":  "Old Rider",
+		"phone": "+915555555555",
+		"role":  "delivery_partner",
+	})
+	te.SeedUser("new_rider", map[string]interface{}{
+		"name":  "New Rider",
+		"phone": "+916666666666",
+		"role":  "delivery_partner",
+	})
+	te.SeedOrder("order_reassign", map[string]interface{}{
+		"order_number":           "CHZ-REA-1",
+		"customer_id":            "cust_anon",
+		"status":                 "ready",
+		"delivery_partner_id":    "old_rider",
+		"delivery_partner_name":  "Old Rider",
+		"delivery_partner_phone": "+915555555555",
+		"placed_at":              time.Now().UTC().Format(time.RFC3339),
+	})
+
+	rec := te.AuthRequest("PUT", "/api/v1/admin/orders/order_reassign/reassign",
+		map[string]interface{}{"rider_id": "new_rider"}, "admin_1", "admin")
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc := te.FakeAW.GetDocument("orders", "order_reassign")
+	if doc["delivery_partner_id"] != "new_rider" {
+		t.Errorf("expected delivery_partner_id=new_rider, got %v", doc["delivery_partner_id"])
+	}
+	if doc["delivery_partner_name"] != "New Rider" {
+		t.Errorf("expected delivery_partner_name=New Rider (old was 'Old Rider'), got %v", doc["delivery_partner_name"])
+	}
+	if doc["delivery_partner_phone"] != "+916666666666" {
+		t.Errorf("expected delivery_partner_phone refreshed, got %v", doc["delivery_partner_phone"])
+	}
+}

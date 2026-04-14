@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -72,13 +71,10 @@ class DeliveryProfileScreen extends ConsumerWidget {
               onTap: () => context.push('/support'),
             ),
             _buildMenuItem(
-              Icons.info_outline_rounded,
-              'About Chizze',
-              subtitle: 'Terms, privacy & version',
-              onTap: () => launchUrl(
-                Uri.parse('https://chizze.com/about'),
-                mode: LaunchMode.externalApplication,
-              ),
+              Icons.description_rounded,
+              'Terms & Conditions',
+              subtitle: 'View legal information',
+              onTap: () => context.push('/terms'),
             ),
             _buildMenuItem(
               Icons.privacy_tip_rounded,
@@ -256,7 +252,9 @@ class DeliveryProfileScreen extends ConsumerWidget {
         : type == 'bicycle'
         ? '🚲'
         : '🚗';
-    final label = type[0].toUpperCase() + type.substring(1);
+    final label = type.isNotEmpty
+        ? '${type[0].toUpperCase()}${type.substring(1)}'
+        : 'Unknown';
 
     return GlassCard(
       child: Row(

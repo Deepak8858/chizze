@@ -45,6 +45,7 @@ type TestEnv struct {
 	OrderHandler    *handlers.OrderHandler
 	DeliveryHandler *handlers.DeliveryHandler
 	AuthHandler     *handlers.AuthHandler
+	PartnerHandler  *handlers.PartnerHandler
 	Router          *gin.Engine
 
 	// MatcherCalled is set to true when the matcherCallback fires.
@@ -94,6 +95,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	orderHandler := handlers.NewOrderHandler(awService, orderService, geoService, redisClient, broadcaster)
 	deliveryHandler := handlers.NewDeliveryHandler(awService, geoService, redisClient, broadcaster)
 	authHandler := handlers.NewAuthHandler(awService, redisClient, cfg)
+	partnerHandler := handlers.NewPartnerHandler(awService, redisClient)
 
 	te := &TestEnv{
 		T:               t,
@@ -111,6 +113,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		OrderHandler:    orderHandler,
 		DeliveryHandler: deliveryHandler,
 		AuthHandler:     authHandler,
+		PartnerHandler:  partnerHandler,
 	}
 
 	// Wire matcher callback so tests can verify it fires.
@@ -123,6 +126,17 @@ func NewTestEnv(t *testing.T) *TestEnv {
 
 	te.SetupRouter()
 	return te
+}
+
+// SeedPartnerSignupEnabled seeds a platform_settings doc that allows both
+// restaurant and delivery partner signup. Tests that exercise the Onboard or
+// Exchange partner paths should call this before making requests.
+func (te *TestEnv) SeedPartnerSignupEnabled() {
+	te.T.Helper()
+	te.FakeAW.SeedDocument("settings", "platform_settings", map[string]interface{}{
+		"allow_restaurant_partner_signup": true,
+		"allow_delivery_partner_signup":   true,
+	})
 }
 
 // Close tears down all test infrastructure.
@@ -268,6 +282,7 @@ func (te *TestEnv) SetupRouter() {
 			orders.POST("", te.OrderHandler.PlaceOrder)
 			orders.GET("", te.OrderHandler.ListOrders)
 			orders.GET("/:id", te.OrderHandler.GetOrder)
+			orders.GET("/:id/tracking", te.OrderHandler.GetTracking)
 			orders.PUT("/:id/cancel", te.OrderHandler.CancelOrder)
 		}
 	}
@@ -278,6 +293,10 @@ func (te *TestEnv) SetupRouter() {
 	partner.Use(middleware.RequireRole("restaurant_owner"))
 	{
 		partner.PUT("/orders/:id/status", te.OrderHandler.UpdateStatus)
+		partner.GET("/bank-details", te.PartnerHandler.GetBankDetails)
+		partner.PUT("/bank-details", te.PartnerHandler.UpdateBankDetails)
+		partner.GET("/payouts", te.PartnerHandler.ListPayouts)
+		partner.POST("/payouts/request", te.PartnerHandler.RequestPayout)
 	}
 
 	// Delivery routes

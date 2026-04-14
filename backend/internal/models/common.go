@@ -22,13 +22,19 @@ func (p Pagination) Offset() int {
 	return (p.Page - 1) * p.PerPage
 }
 
-// ParsePagination extracts pagination from query parameters
+// ParsePagination extracts pagination from query parameters.
+// Accepts both `per_page` (canonical) and `limit` (admin web legacy) so
+// frontend drift doesn't silently fall back to the default page size.
 func ParsePagination(c *gin.Context) Pagination {
 	p := DefaultPagination()
 	if page, err := strconv.Atoi(c.Query("page")); err == nil && page > 0 {
 		p.Page = page
 	}
-	if perPage, err := strconv.Atoi(c.Query("per_page")); err == nil && perPage > 0 && perPage <= 100 {
+	perPageRaw := c.Query("per_page")
+	if perPageRaw == "" {
+		perPageRaw = c.Query("limit")
+	}
+	if perPage, err := strconv.Atoi(perPageRaw); err == nil && perPage > 0 && perPage <= 100 {
 		p.PerPage = perPage
 	}
 	return p

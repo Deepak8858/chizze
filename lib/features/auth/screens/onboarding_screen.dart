@@ -40,6 +40,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   double? _latitude;
   double? _longitude;
   String? _city;
+  String? _locationError;
 
   static const _cuisineTypes = [
     'Indian',
@@ -80,7 +81,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _autoDetectLocation() async {
-    setState(() => _isLoadingLocation = true);
+    setState(() {
+      _isLoadingLocation = true;
+      _locationError = null;
+    });
     try {
       final locationService = ref.read(locationServiceProvider);
       final position = await locationService.getCurrentPosition();
@@ -109,8 +113,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           }
         }
       } catch (_) {}
-    } catch (_) {}
-    finally {
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _locationError =
+              'Could not detect your location. Please tap "Detect" to try again, '
+              'or check that location access is enabled in your phone settings.';
+        });
+      }
+    } finally {
       if (mounted) setState(() => _isLoadingLocation = false);
     }
   }
@@ -138,6 +149,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (role == 'delivery_partner') {
       if (_vehicleNumberController.text.trim().isEmpty) {
         _showError('Please enter your vehicle number');
+        return;
+      }
+    }
+
+    // Customers must share their current location — it is required to find
+    // nearby restaurants and to set a delivery address.
+    if (role == 'customer') {
+      if (_latitude == null || _longitude == null) {
+        _showError(
+          'Your current location is required to continue. '
+          'Please tap "Detect My Location" and allow location access.',
+        );
         return;
       }
     }
@@ -179,7 +202,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       // GoRouter's refreshListenable will auto-redirect to the correct dashboard
       // when isNewUser changes to false (set by completeOnboarding).
     } catch (e) {
-      if (mounted) _showError('Failed to save: $e');
+      if (mounted) {
+        // Strip the "Exception: " prefix that Dart adds when rethrowing.
+        String msg = e.toString();
+        if (msg.startsWith('Exception: ')) msg = msg.substring(11);
+        if (msg.isEmpty) msg = 'Failed to save profile. Please try again.';
+        _showError(msg);
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -313,6 +342,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Widget _buildLocationCard() {
+    final hasLocation = _latitude != null && _longitude != null;
     return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,44 +350,97 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           Row(
             children: [
               Text('Your Location', style: AppTypography.caption),
+              Text(
+                ' *',
+                style: AppTypography.caption.copyWith(color: AppColors.error),
+              ),
               const Spacer(),
-              if (_isLoadingLocation)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.primary,
-                  ),
-                )
-              else
-                GestureDetector(
-                  onTap: _autoDetectLocation,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.my_location_rounded,
-                          size: 16, color: AppColors.primary),
-                      const SizedBox(width: 4),
-                      Text('Detect',
-                          style: AppTypography.caption
-                              .copyWith(color: AppColors.primary)),
-                    ],
-                  ),
-                ),
+              if (hasLocation)
+                Icon(Icons.check_circle_rounded,
+                    size: 16, color: AppColors.success),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
-          TextField(
-            controller: _addressController,
-            style: AppTypography.body1,
-            maxLines: 2,
-            decoration: const InputDecoration(
-              hintText: 'Your address will appear here...',
-              prefixIcon: Icon(Icons.location_on_outlined),
+
+          // Show error banner if detection failed
+          if (_locationError != null) ...[
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: AppColors.error.withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.error.withAlpha(60)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.location_off_rounded,
+                      size: 16, color: AppColors.error),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _locationError!,
+                      style: AppTypography.caption
+                          .copyWith(color: AppColors.error),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+
+          // Detect button — prominent when no location, subtle when detected
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isLoadingLocation ? null : _autoDetectLocation,
+              icon: _isLoadingLocation
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
+                    )
+                  : Icon(
+                      hasLocation
+                          ? Icons.my_location_rounded
+                          : Icons.location_searching_rounded,
+                      size: 18,
+                    ),
+              label: Text(
+                _isLoadingLocation
+                    ? 'Detecting…'
+                    : hasLocation
+                        ? 'Location detected — tap to refresh'
+                        : 'Detect My Location (Required)',
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor:
+                    hasLocation ? AppColors.success : AppColors.primary,
+                side: BorderSide(
+                  color: hasLocation
+                      ? AppColors.success
+                      : _locationError != null
+                          ? AppColors.error
+                          : AppColors.primary,
+                ),
+              ),
             ),
           ),
-          if (_latitude != null) ...[
+
+          if (hasLocation) ...[
+            const SizedBox(height: AppSpacing.sm),
+            TextField(
+              controller: _addressController,
+              style: AppTypography.body1,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                hintText: 'Your address (auto-filled from GPS)',
+                prefixIcon: Icon(Icons.location_on_outlined),
+              ),
+            ),
             const SizedBox(height: AppSpacing.sm),
             Text(
               'GPS: ${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)}',
@@ -471,7 +554,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               prefixIcon: Icon(Icons.location_on_outlined),
             ),
           ),
-          if (_latitude != null) ...[
+          if (_latitude != null && _longitude != null) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(
               'GPS: ${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)}',

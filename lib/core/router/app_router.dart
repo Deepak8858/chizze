@@ -39,6 +39,8 @@ import '../../features/delivery/screens/documents_screen.dart';
 import '../../features/delivery/screens/availability_screen.dart';
 import '../../shared/screens/support_screen.dart';
 import '../../shared/screens/privacy_policy_screen.dart';
+import '../../shared/screens/terms_and_conditions_screen.dart';
+import '../../features/partner/screens/partner_bank_details_screen.dart';
 import '../../features/chat/screens/chat_screen.dart';
 
 /// Notifier that bridges Riverpod auth state → GoRouter refreshListenable.
@@ -111,6 +113,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           state.uri.path == '/referral' ||
           state.uri.path == '/support' ||
           state.uri.path == '/privacy-policy' ||
+          state.uri.path == '/terms' ||
           state.uri.path.startsWith('/chat') ||
           state.uri.path.startsWith('/order') ||
           state.uri.path.startsWith('/review') ||
@@ -299,6 +302,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/privacy-policy',
         builder: (context, state) => const PrivacyPolicyScreen(),
+      ),
+
+      // ─── Terms & Conditions ───
+      GoRoute(
+        path: '/terms',
+        builder: (context, state) => const TermsAndConditionsScreen(),
+      ),
+
+      // ─── Partner: Bank Details & Payouts ───
+      GoRoute(
+        path: '/partner/bank-details',
+        builder: (context, state) => const PartnerBankDetailsScreen(),
       ),
 
       // ─── In-app Chat ───

@@ -5,6 +5,11 @@ import (
 	"sync"
 )
 
+// IncomingHandler processes a single raw message received from a WebSocket
+// client. Implementations are expected to be concurrency-safe; readPump
+// serializes calls per-client but different clients run in their own goroutines.
+type IncomingHandler func(client *Client, raw []byte)
+
 // Hub maintains the set of active clients and broadcasts messages to the clients.
 type Hub struct {
 	// Registered clients.
@@ -31,7 +36,29 @@ type Hub struct {
 	// stop signals Run() to exit.
 	stop chan struct{}
 
+	// incomingHandler is called by readPump on every client-sent message when set.
+	incomingHandler IncomingHandler
+
 	mu sync.RWMutex
+}
+
+// SetIncomingHandler registers a callback that receives every message sent by
+// connected clients (e.g. for chat message routing). Safe to call once at startup.
+func (h *Hub) SetIncomingHandler(fn IncomingHandler) {
+	h.mu.Lock()
+	h.incomingHandler = fn
+	h.mu.Unlock()
+}
+
+// handleIncoming dispatches a client-sent message to the registered handler.
+// Returns silently when no handler is set.
+func (h *Hub) handleIncoming(client *Client, raw []byte) {
+	h.mu.RLock()
+	fn := h.incomingHandler
+	h.mu.RUnlock()
+	if fn != nil {
+		fn(client, raw)
+	}
 }
 
 func NewHub() *Hub {

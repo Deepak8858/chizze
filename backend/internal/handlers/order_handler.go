@@ -1,9 +1,9 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
@@ -85,11 +85,11 @@ func NewOrderHandler(aw *services.AppwriteService, os *services.OrderService, ge
 // @Router /api/v1/orders [post]
 func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	ctx := c.Request.Context()
 
 	// --- Idempotency key check ---
 	idempotencyKey := c.GetHeader("X-Idempotency-Key")
 	if idempotencyKey != "" && h.redis != nil {
-		ctx := context.Background()
 		cacheKey := "idempotency:" + userID + ":" + idempotencyKey
 		cached, err := h.redis.Get(ctx, cacheKey)
 		if err == nil && cached != "" {
@@ -99,6 +99,14 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 				utils.Created(c, cachedResp)
 				return
 			}
+		}
+		// Also acquire a short order-placement lock so two parallel clicks on
+		// "Place Order" with the same key don't both hit CreateOrder concurrently.
+		lockKey := "place_order_lock:" + userID + ":" + idempotencyKey
+		acquired, lockErr := h.redis.SetNX(ctx, lockKey, "1", 15*time.Second)
+		if lockErr == nil && !acquired {
+			utils.Error(c, http.StatusConflict, "An identical order is already being placed. Please wait a moment.")
+			return
 		}
 	}
 
@@ -164,6 +172,10 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	itemTotal := 0.0
 	verifiedItems := make([]map[string]interface{}, 0, len(req.Items))
 	for _, item := range req.Items {
+		if item.Quantity <= 0 {
+			utils.BadRequest(c, "Item quantity must be at least 1")
+			return
+		}
 		menuItem, ok := menuByID[item.ItemID]
 		if !ok {
 			utils.BadRequest(c, "Menu item not found: "+item.ItemID)
@@ -219,51 +231,63 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		coupon, err := h.appwrite.GetCoupon(req.CouponCode)
 		if err == nil && coupon != nil {
 			// Parse coupon
-			var c models.Coupon
-			c.Code, _ = coupon["code"].(string)
-			c.DiscountType, _ = coupon["discount_type"].(string)
-			c.DiscountValue, _ = coupon["discount_value"].(float64)
-			c.MinOrderValue, _ = coupon["min_order_value"].(float64)
-			c.MaxDiscount, _ = coupon["max_discount"].(float64)
-			c.UsedCount = int(getFloat(coupon, "used_count"))
-			c.UsageLimit = int(getFloat(coupon, "usage_limit"))
+			var cp models.Coupon
+			cp.Code, _ = coupon["code"].(string)
+			cp.DiscountType, _ = coupon["discount_type"].(string)
+			cp.DiscountValue, _ = coupon["discount_value"].(float64)
+			cp.MinOrderValue, _ = coupon["min_order_value"].(float64)
+			cp.MaxDiscount, _ = coupon["max_discount"].(float64)
+			cp.UsedCount = int(getFloat(coupon, "used_count"))
+			cp.UsageLimit = int(getFloat(coupon, "usage_limit"))
 
 			// Parse dates as strings from Appwrite
 			validFromStr, _ := coupon["valid_from"].(string)
 			validUntilStr, _ := coupon["valid_until"].(string)
 			if validFromStr != "" {
-				c.ValidFrom, _ = time.Parse(time.RFC3339, validFromStr)
+				cp.ValidFrom, _ = time.Parse(time.RFC3339, validFromStr)
 			}
 			if validUntilStr != "" {
-				c.ValidUntil, _ = time.Parse(time.RFC3339, validUntilStr)
+				cp.ValidUntil, _ = time.Parse(time.RFC3339, validUntilStr)
 			}
 			isActive, _ := coupon["is_active"].(bool)
-			c.IsActive = isActive
+			cp.IsActive = isActive
 
-			if valid, _ := c.IsValid(itemTotal); valid {
-				discount = c.CalculateDiscount(itemTotal)
+			if valid, _ := cp.IsValid(itemTotal); valid {
+				discount = cp.CalculateDiscount(itemTotal)
 				couponID, _ := coupon["$id"].(string)
-				// Atomic increment via Redis to prevent race condition
+				// Atomic increment via Redis to prevent race condition.
+				// UsageLimit <= 0 means unlimited — skip the ceiling check entirely
+				// so the counter never spuriously rejects valid uses.
 				if h.redis != nil {
-					ctx := context.Background()
 					lockKey := "coupon_usage:" + couponID
-					newCount, _ := h.redis.Incr(ctx, lockKey)
-					if newCount == 1 {
-						_ = h.redis.Expire(ctx, lockKey, 30*24*time.Hour)
-					}
-					if int(newCount) > c.UsageLimit {
-						// Rolled past limit — revert counter and reject coupon
-						h.redis.Decr(ctx, lockKey)
-						discount = 0
+					newCount, incrErr := h.redis.Incr(ctx, lockKey)
+					if incrErr != nil {
+						log.Printf("[WARN] coupon Redis incr failed (allowing coupon): %v", incrErr)
 					} else {
-						_, _ = h.appwrite.UpdateCoupon(couponID, map[string]interface{}{
-							"used_count": int(newCount),
-						})
+						if newCount == 1 {
+							_ = h.redis.Expire(ctx, lockKey, 30*24*time.Hour)
+						}
+						if cp.UsageLimit > 0 && int(newCount) > cp.UsageLimit {
+							// Rolled past limit — revert counter and reject coupon
+							_, _ = h.redis.Decr(ctx, lockKey)
+							discount = 0
+						} else {
+							// Persist counter asynchronously so Appwrite write
+							// latency/failure doesn't block the order path.
+							// Redis holds the authoritative count.
+							go func(id string, count int64) {
+								if _, err := h.appwrite.UpdateCoupon(id, map[string]interface{}{
+									"used_count": int(count),
+								}); err != nil {
+									log.Printf("[WARN] coupon %s persist used_count=%d failed: %v", id, count, err)
+								}
+							}(couponID, newCount)
+						}
 					}
 				} else {
 					// Fallback without Redis — original behavior
 					_, _ = h.appwrite.UpdateCoupon(couponID, map[string]interface{}{
-						"used_count": c.UsedCount + 1,
+						"used_count": cp.UsedCount + 1,
 					})
 				}
 			}
@@ -365,7 +389,6 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 
 	// Cache idempotency response (24h TTL)
 	if idempotencyKey != "" && h.redis != nil {
-		ctx := context.Background()
 		cacheKey := "idempotency:" + userID + ":" + idempotencyKey
 		if respJSON, err := json.Marshal(doc); err == nil {
 			_ = h.redis.Set(ctx, cacheKey, string(respJSON), 24*time.Hour)
@@ -373,6 +396,135 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	}
 
 	utils.Created(c, doc)
+}
+
+// GetTracking returns a minimal tracking payload for an order: current rider
+// position (from Redis geo), rider identity, order status, restaurant + delivery
+// coordinates, and an ETA estimate. Intended to hydrate the customer's live
+// tracking map on first load — WebSocket `delivery_location` events keep it
+// fresh after that.
+//
+// @Summary Get live tracking snapshot for an order
+// @Description Returns rider position, status, waypoints, and ETA; only accessible by the order's customer or assigned rider.
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/orders/{id}/tracking [get]
+func (h *OrderHandler) GetTracking(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	role := middleware.GetUserRole(c)
+	orderID := c.Param("id")
+
+	order, err := h.appwrite.GetOrder(orderID)
+	if err != nil {
+		utils.NotFound(c, "Order not found")
+		return
+	}
+
+	// Ownership: only customer / assigned rider / (restaurant owner) can view.
+	custID, _ := order["customer_id"].(string)
+	riderID, _ := order["delivery_partner_id"].(string)
+	restID, _ := order["restaurant_id"].(string)
+
+	switch role {
+	case "customer":
+		if custID != userID {
+			utils.Forbidden(c, "Access denied")
+			return
+		}
+	case "delivery_partner":
+		if riderID != userID {
+			utils.Forbidden(c, "Access denied")
+			return
+		}
+	case "restaurant_owner":
+		if restID != "" {
+			result, lookupErr := h.appwrite.GetRestaurantByOwner(userID)
+			if lookupErr != nil || result == nil || len(result.Documents) == 0 {
+				utils.Forbidden(c, "Access denied")
+				return
+			}
+			myRestID, _ := result.Documents[0]["$id"].(string)
+			if restID != myRestID {
+				utils.Forbidden(c, "Access denied")
+				return
+			}
+		}
+	case "admin", "super_admin":
+		// Allowed.
+	default:
+		utils.Forbidden(c, "Access denied")
+		return
+	}
+
+	status, _ := order["status"].(string)
+	restLat, _ := order["restaurant_latitude"].(float64)
+	restLng, _ := order["restaurant_longitude"].(float64)
+	custLat, _ := order["delivery_latitude"].(float64)
+	custLng, _ := order["delivery_longitude"].(float64)
+
+	// Read rider's current position from Redis geo set. Falls back to
+	// (0, 0) when the rider has no reported location yet — the client
+	// treats 0/0 as "no signal" and hides the marker.
+	var riderLat, riderLng float64
+	if riderID != "" && h.redis != nil {
+		positions, gErr := h.redis.GeoPos(c.Request.Context(), "rider_locations", riderID)
+		if gErr == nil && len(positions) > 0 && positions[0] != nil {
+			riderLat = positions[0].Latitude
+			riderLng = positions[0].Longitude
+		}
+	}
+
+	// Pick the "next waypoint" that ETA should target — restaurant if the
+	// rider is still picking up, customer if they're out for delivery.
+	var targetLat, targetLng float64
+	switch status {
+	case models.OrderStatusPickedUp, models.OrderStatusOutForDelivery:
+		targetLat, targetLng = custLat, custLng
+	default:
+		targetLat, targetLng = restLat, restLng
+	}
+
+	// ETA in minutes based on straight-line distance when we have both
+	// rider position and target. We use the same GeoService heuristic as
+	// order placement so customers see consistent numbers.
+	etaMinutes := 0
+	if riderLat != 0 && riderLng != 0 && targetLat != 0 && targetLng != 0 {
+		distKm := h.geo.Distance(riderLat, riderLng, targetLat, targetLng)
+		etaMinutes = h.geo.EstimateDeliveryTime(distKm, 0)
+	}
+
+	// Resolve rider display details once so the client can render the
+	// tracking card without a second round-trip.
+	riderName, riderPhone := "", ""
+	if riderID != "" {
+		riderName, riderPhone = h.resolveDeliveryPartnerDetails(riderID)
+	}
+
+	utils.Success(c, gin.H{
+		"order_id":                 orderID,
+		"status":                   status,
+		"restaurant_lat":           restLat,
+		"restaurant_lng":           restLng,
+		"customer_lat":             custLat,
+		"customer_lng":             custLng,
+		"rider_id":                 riderID,
+		"rider_name":               riderName,
+		"rider_phone":              riderPhone,
+		"rider_lat":                riderLat,
+		"rider_lng":                riderLng,
+		"eta_minutes":              etaMinutes,
+		"estimated_delivery_min":   getFloat(order, "estimated_delivery_min"),
+		"placed_at":                order["placed_at"],
+		"picked_up_at":             order["picked_up_at"],
+		"delivered_at":             order["delivered_at"],
+	})
 }
 
 // GetOrder returns order details with ownership check
@@ -604,18 +756,17 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	}
 
 	// Clear Redis delivery state so the assigned rider doesn't stay in busy_riders
-	// forever (Bug Fix: CancelOrder never cleared busy_riders, causing permanent lockout)
+	// forever (CancelOrder used to leak entries, causing permanent lockout).
 	if h.redis != nil {
+		rCtx := c.Request.Context()
 		if dpUserID, _ := order["delivery_partner_id"].(string); dpUserID != "" {
-			rCtx := context.Background()
-			h.redis.SRem(rCtx, "busy_riders", dpUserID)
-			h.redis.Del(rCtx, "pending_rider:"+dpUserID)
+			_, _ = h.redis.SRem(rCtx, "busy_riders", dpUserID)
+			_ = h.redis.Del(rCtx, "pending_rider:"+dpUserID)
+			_, _ = h.redis.HDel(rCtx, "rider_track:"+dpUserID, orderID)
 		}
-		// Also clear order-level delivery locks
-		rCtx := context.Background()
-		h.redis.Del(rCtx, "pending_delivery:"+orderID)
-		h.redis.Del(rCtx, "rejected_riders:"+orderID)
-		h.redis.Del(rCtx, "delivery_lock:"+orderID)
+		_ = h.redis.Del(rCtx, "pending_delivery:"+orderID)
+		_ = h.redis.Del(rCtx, "rejected_riders:"+orderID)
+		_ = h.redis.Del(rCtx, "delivery_lock:"+orderID)
 	}
 
 	// Broadcast cancellation via WebSocket
@@ -750,19 +901,22 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	// Clear Redis delivery state when order is cancelled.
 	// Without this, the assigned rider stays in busy_riders forever.
 	if req.Status == models.OrderStatusCancelled && h.redis != nil {
+		rCtx := c.Request.Context()
 		if dpUserID, _ := order["delivery_partner_id"].(string); dpUserID != "" {
-			rCtx := context.Background()
-			h.redis.Del(rCtx, "pending_rider:"+dpUserID)
+			_ = h.redis.Del(rCtx, "pending_rider:"+dpUserID)
+			// Remove from the tracking hash so UpdateLocation stops broadcasting
+			// this rider's GPS to the cancelled order's customer.
+			_, _ = h.redis.HDel(rCtx, "rider_track:"+dpUserID, orderID)
 			// Decrement active order count (multi-order support)
 			count, _ := h.redis.Decr(rCtx, "rider_order_count:"+dpUserID)
-			h.redis.SRem(rCtx, "rider_active_orders:"+dpUserID, orderID)
+			_, _ = h.redis.SRem(rCtx, "rider_active_orders:"+dpUserID, orderID)
 			if count < 0 {
-				h.redis.Set(rCtx, "rider_order_count:"+dpUserID, 0, 24*time.Hour)
+				_ = h.redis.Set(rCtx, "rider_order_count:"+dpUserID, 0, 24*time.Hour)
 				count = 0
 			}
 			// Remove from busy only when below max capacity
 			if count < 5 {
-				h.redis.SRem(rCtx, "busy_riders", dpUserID)
+				_, _ = h.redis.SRem(rCtx, "busy_riders", dpUserID)
 			}
 			// Only clear is_on_delivery if this is the rider's last active order
 			// (check Redis count which was decremented above)
@@ -776,10 +930,9 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 				}
 			}
 		}
-		rCtx := context.Background()
-		h.redis.Del(rCtx, "pending_delivery:"+orderID)
-		h.redis.Del(rCtx, "rejected_riders:"+orderID)
-		h.redis.Del(rCtx, "delivery_lock:"+orderID)
+		_ = h.redis.Del(rCtx, "pending_delivery:"+orderID)
+		_ = h.redis.Del(rCtx, "rejected_riders:"+orderID)
+		_ = h.redis.Del(rCtx, "delivery_lock:"+orderID)
 	}
 
 	// Trigger delivery matching immediately AFTER persisting status="ready"
@@ -812,18 +965,21 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 			// Update Redis for multi-order support
 			var deliveredOrderCount int64
 			if h.redis != nil {
-				rCtx := context.Background()
+				rCtx := c.Request.Context()
+				// Clear the rider_track hash entry so location pings stop being
+				// broadcast to this order's customer.
+				_, _ = h.redis.HDel(rCtx, "rider_track:"+dpUserID, orderID)
 				// Decrement active order count
 				count, _ := h.redis.Decr(rCtx, "rider_order_count:"+dpUserID)
-				h.redis.SRem(rCtx, "rider_active_orders:"+dpUserID, orderID)
+				_, _ = h.redis.SRem(rCtx, "rider_active_orders:"+dpUserID, orderID)
 				if count < 0 {
-					h.redis.Set(rCtx, "rider_order_count:"+dpUserID, 0, 24*time.Hour)
+					_ = h.redis.Set(rCtx, "rider_order_count:"+dpUserID, 0, 24*time.Hour)
 					count = 0
 				}
 				deliveredOrderCount = count
 				// Remove from busy set only when below max capacity
 				if count < 5 {
-					h.redis.SRem(rCtx, "busy_riders", dpUserID)
+					_, _ = h.redis.SRem(rCtx, "busy_riders", dpUserID)
 				}
 			}
 			// Clear is_on_delivery in Appwrite when all orders are done

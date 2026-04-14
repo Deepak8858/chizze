@@ -20,6 +20,7 @@ enum WsEventType {
   notification,
   riderStatusChange,
   restaurantUpdate,
+  chatMessage,
   unknown;
 
   static WsEventType fromString(String s) {
@@ -38,6 +39,8 @@ enum WsEventType {
         return riderStatusChange;
       case 'restaurant_update':
         return restaurantUpdate;
+      case 'chat_message':
+        return chatMessage;
       default:
         return unknown;
     }

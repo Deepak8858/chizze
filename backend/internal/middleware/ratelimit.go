@@ -107,7 +107,8 @@ func RateLimit(ratePerSec float64, burst int) gin.HandlerFunc {
 }
 
 // RedisRateLimit returns a Gin middleware that uses Redis for distributed
-// rate limiting via a sliding-window counter. Falls back to allow on Redis errors.
+// rate limiting via a sliding-window counter. Keyed by client IP with a
+// 1-second window. Falls back to allow on Redis errors.
 func RedisRateLimit(redisClient *redispkg.Client, ratePerSec float64, burst int) gin.HandlerFunc {
 	window := time.Second
 	limit := int64(burst)
@@ -131,6 +132,47 @@ func RedisRateLimit(redisClient *redispkg.Client, ratePerSec float64, burst int)
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"success": false,
 				"error":   "Rate limit exceeded. Please try again later.",
+			})
+			return
+		}
+		c.Next()
+	}
+}
+
+// PerUserRateLimit returns a Gin middleware that rate-limits per authenticated
+// user ID (keyed `rl:user:<id>`), with a sliding 1-second window. Must be
+// registered AFTER the Auth middleware so the user ID is populated. When no
+// user is in context (e.g. unauthenticated request), the middleware is a no-op
+// and falls through to IP-level limits.
+//
+// This complements RedisRateLimit: IP limits stop a single abusive client;
+// per-user limits stop a single abusive account even if it rotates IPs.
+func PerUserRateLimit(redisClient *redispkg.Client, limitPerSec int) gin.HandlerFunc {
+	window := time.Second
+	limit := int64(limitPerSec)
+
+	return func(c *gin.Context) {
+		userID, _ := c.Get(ContextUserID)
+		uid, ok := userID.(string)
+		if !ok || uid == "" {
+			c.Next()
+			return
+		}
+
+		key := fmt.Sprintf("rl:user:%s", uid)
+		allowed, remaining, retryAfter := redisClient.RateLimitCheck(c.Request.Context(), key, limit, window)
+		c.Header("X-RateLimit-User-Limit", strconv.FormatInt(limit, 10))
+		c.Header("X-RateLimit-User-Remaining", strconv.FormatInt(remaining, 10))
+
+		if !allowed {
+			retrySeconds := int(retryAfter.Seconds())
+			if retrySeconds < 1 {
+				retrySeconds = 1
+			}
+			c.Header("Retry-After", strconv.Itoa(retrySeconds))
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"success": false,
+				"error":   "Too many requests. Please slow down and try again in a moment.",
 			})
 			return
 		}
