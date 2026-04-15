@@ -85,7 +85,7 @@ class PushNotificationService {
           showLocalNotification(
             title: notification.title ?? 'Chizze',
             body: notification.body ?? '',
-            payload: message.data['route'],
+            payload: _extractRoute(message.data),
           );
         }
       });
@@ -97,7 +97,7 @@ class PushNotificationService {
         if (msgType == 'delivery_request') {
           _onDeliveryRequestPush(message.data);
         } else {
-          _handleNotificationRoute(message.data['route']);
+          _handleNotificationRoute(_extractRoute(message.data));
         }
       });
 
@@ -107,7 +107,7 @@ class PushNotificationService {
         if (kDebugMode) debugPrint('[Push] App launched from notification: ${initial.data}');
         // Delay to let the router initialise
         Future.delayed(const Duration(milliseconds: 500), () {
-          _handleNotificationRoute(initial.data['route']);
+          _handleNotificationRoute(_extractRoute(initial.data));
         });
       }
 
@@ -154,8 +154,27 @@ class PushNotificationService {
     }
   }
 
+  /// Extract a navigation route from a notification's data payload.
+  /// Backend uses `deep_link` for explicit routes (e.g. /review/{id} on
+  /// delivered notifications). Falls back to `route` for legacy payloads,
+  /// then derives a sensible default from `type` + `order_id`.
+  String? _extractRoute(Map<String, dynamic> data) {
+    final deepLink = data['deep_link'] as String?;
+    if (deepLink != null && deepLink.isNotEmpty) return deepLink;
+    final route = data['route'] as String?;
+    if (route != null && route.isNotEmpty) return route;
+    // Derive: order_status updates → tracking screen for that order
+    final type = data['type'] as String? ?? '';
+    final orderId = data['order_id'] as String? ?? '';
+    if (orderId.isNotEmpty &&
+        (type == 'order_status' || type == 'delivery_update')) {
+      return '/order-tracking/$orderId';
+    }
+    return null;
+  }
+
   /// Navigate to the route encoded in a notification payload.
-  /// Supported routes: /order-tracking/:id, /orders, /notifications, etc.
+  /// Supported routes: /order-tracking/:id, /review/:id, /orders, etc.
   void _handleNotificationRoute(String? route) {
     if (route == null || route.isEmpty) return;
     final context = rootNavigatorKey.currentContext;

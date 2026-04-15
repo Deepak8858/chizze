@@ -165,7 +165,12 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
       }
     }
 
-    if (payload is Map && payload['order_id'] != null) {
+    if (payload is! Map) return null;
+    // Backend writes deep_link for explicit destinations (e.g. /review/{id}
+    // on delivery). Honor it before falling back to derived routes.
+    final deepLink = payload['deep_link'];
+    if (deepLink is String && deepLink.isNotEmpty) return deepLink;
+    if (payload['order_id'] != null) {
       return '/order-detail/${payload['order_id']}';
     }
     return null;
