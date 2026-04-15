@@ -343,25 +343,42 @@ func (h *AuthHandler) Exchange(c *gin.Context) {
 
 	// For returning users, verify onboarding was actually completed.
 	// If the role-specific record is missing, force onboarding.
-	if !isNew {
+	// ALL roles must have a non-empty name and phone in users collection — OAuth
+	// providers (Google/Apple/Facebook) frequently omit name, so we cannot trust
+	// the doc just exists. (Fixes signup-without-name bug.)
+	{
 		needsOnboarding := false
-		switch role {
-		case "restaurant_owner":
-			existing, lookupErr := h.appwrite.GetRestaurantByOwner(appwriteUserID)
-			// Only flag as missing when we confirmed empty; transient errors are ignored
-			// (prevents spurious re-onboarding when Appwrite is flaky).
-			if lookupErr == nil && (existing == nil || existing.Total == 0) {
+		// Profile completeness check applies to every role.
+		checkUser := user
+		if checkUser == nil {
+			checkUser, _ = h.appwrite.GetUser(appwriteUserID)
+		}
+		if checkUser != nil {
+			userName, _ := checkUser["name"].(string)
+			userPhone, _ := checkUser["phone"].(string)
+			if userName == "" || userPhone == "" {
 				needsOnboarding = true
 			}
-		case "delivery_partner":
-			existing, lookupErr := h.appwrite.GetDeliveryPartner(appwriteUserID)
-			if lookupErr == nil && (existing == nil || existing.Total == 0) {
-				needsOnboarding = true
+		}
+		if !needsOnboarding && !isNew {
+			switch role {
+			case "restaurant_owner":
+				existing, lookupErr := h.appwrite.GetRestaurantByOwner(appwriteUserID)
+				// Only flag as missing when we confirmed empty; transient errors are ignored
+				// (prevents spurious re-onboarding when Appwrite is flaky).
+				if lookupErr == nil && (existing == nil || existing.Total == 0) {
+					needsOnboarding = true
+				}
+			case "delivery_partner":
+				existing, lookupErr := h.appwrite.GetDeliveryPartner(appwriteUserID)
+				if lookupErr == nil && (existing == nil || existing.Total == 0) {
+					needsOnboarding = true
+				}
 			}
 		}
 		if needsOnboarding {
 			isNew = true
-			log.Printf("User %s (role=%s) missing role-specific record — marking as new for onboarding", appwriteUserID, role)
+			log.Printf("User %s (role=%s) incomplete profile — marking as new for onboarding", appwriteUserID, role)
 		}
 	}
 
@@ -679,6 +696,7 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 	// Extract common fields
 	name, _ := req["name"].(string)
 	email, _ := req["email"].(string)
+	phone, _ := req["phone"].(string)
 	address, _ := req["address"].(string)
 	latitude, _ := req["latitude"].(float64)
 	longitude, _ := req["longitude"].(float64)
@@ -701,6 +719,9 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 	}
 	if email != "" {
 		userUpdate["email"] = email
+	}
+	if phone != "" {
+		userUpdate["phone"] = phone
 	}
 	if address != "" {
 		userUpdate["address"] = address
@@ -734,7 +755,7 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 		// Build a complete user doc with all required fields and create it.
 		createData := map[string]interface{}{
 			"name":  name,
-			"phone": "",
+			"phone": phone,
 			"role":  role,
 		}
 		if email != "" {

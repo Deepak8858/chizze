@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/internal/websocket"
 	"github.com/chizze/backend/pkg/appwrite"
+	"github.com/chizze/backend/pkg/fcm"
 	redispkg "github.com/chizze/backend/pkg/redis"
 	"github.com/chizze/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
@@ -23,7 +26,17 @@ type OrderHandler struct {
 	geo             *services.GeoService
 	redis           *redispkg.Client
 	broadcaster     *websocket.EventBroadcaster
-	matcherCallback func() // called when an order becomes "ready" to trigger instant matching
+	hub             *websocket.Hub // for IsConnected check (FCM fallback)
+	fcmClient       *fcm.Client    // nil if FCM_SERVER_KEY not set
+	matcherCallback func()         // called when an order becomes "ready" to trigger instant matching
+}
+
+// SetPushDependencies wires the WS hub + FCM client so PlaceOrder can push a
+// new-order wake-up notification to the restaurant owner even when their app
+// is backgrounded and the WebSocket is dead. Safe to call with nil values.
+func (h *OrderHandler) SetPushDependencies(hub *websocket.Hub, fcmClient *fcm.Client) {
+	h.hub = hub
+	h.fcmClient = fcmClient
 }
 
 // SetMatcherCallback registers a function to be called when an order becomes
@@ -319,9 +332,23 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	// Get restaurant name for denormalized storage
 	restaurantName, _ := restaurant["name"].(string)
 
+	// Look up customer name and phone once — used both in the order doc and WS broadcast
+	customerName := "Customer"
+	customerPhone := ""
+	if user, uErr := h.appwrite.GetUser(userID); uErr == nil && user != nil {
+		if name, _ := user["name"].(string); name != "" {
+			customerName = name
+		}
+		if ph, _ := user["phone"].(string); ph != "" {
+			customerPhone = ph
+		}
+	}
+
 	orderData := map[string]interface{}{
 		"order_number":           orderNumber,
 		"customer_id":            userID,
+		"customer_name":          customerName,
+		"customer_phone":         customerPhone,
 		"restaurant_id":          req.RestaurantID,
 		"restaurant_name":        restaurantName,
 		"restaurant_latitude":    restLat,
@@ -358,19 +385,14 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		return
 	}
 
-	// Broadcast new order to restaurant owner via WebSocket
+	// Broadcast new order to restaurant owner via WebSocket + FCM push fallback.
+	// Record delivery-attempt flags in Redis so OrderTimeout worker knows whether
+	// the owner was reachable — it skips auto-cancel for orders that never
+	// reached the restaurant (those need a stuck-order alert, not cancellation).
+	orderID, _ := doc["$id"].(string)
 	if h.broadcaster != nil {
 		ownerID, _ := restaurant["owner_id"].(string)
 		if ownerID != "" {
-			orderID, _ := doc["$id"].(string)
-
-			// Get customer name for the broadcast
-			customerName := "Customer"
-			if user, uErr := h.appwrite.GetUser(userID); uErr == nil && user != nil {
-				if name, _ := user["name"].(string); name != "" {
-					customerName = name
-				}
-			}
 
 			h.broadcaster.BroadcastNewOrder(ownerID, orderID, map[string]interface{}{
 				"order_number":       orderNumber,
@@ -384,6 +406,66 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 				"payment_method":     req.PaymentMethod,
 				"special_instructions": req.SpecialInstructions,
 			})
+
+			// Record WS delivery attempt. Hub may be nil in tests.
+			wsDelivered := false
+			if h.hub != nil && h.hub.IsConnected(ownerID) {
+				wsDelivered = true
+			}
+
+			// FCM wake-up: owner's phone could be locked, app backgrounded, or
+			// WS heartbeat expired. Fire async so PlaceOrder latency stays low.
+			// We always attempt FCM (not only on WS miss) because even when a
+			// socket is open, Android may have throttled background tasks — the
+			// high-priority FCM payload is the reliable wake-up path.
+			fcmAttempted := false
+			if h.fcmClient != nil {
+				fcmAttempted = true
+				go func(ownerID, orderID, restName, orderNum, custName string, total float64, itemCount int) {
+					user, err := h.appwrite.GetUser(ownerID)
+					if err != nil || user == nil {
+						log.Printf("[order] FCM: failed to fetch owner %s: %v", ownerID, err)
+						return
+					}
+					token, _ := user["fcm_token"].(string)
+					if token == "" {
+						log.Printf("[order] FCM: owner %s has no fcm_token registered — WS-only delivery for order %s", ownerID, orderID)
+						return
+					}
+					pushErr := h.fcmClient.SendPush(
+						context.Background(),
+						token,
+						"🍽 New Order #"+orderNum,
+						fmt.Sprintf("%s • %d item(s) • ₹%.0f", custName, itemCount, total),
+						map[string]string{
+							"type":               "new_order",
+							"order_id":           orderID,
+							"order_number":       orderNum,
+							"restaurant_name":    restName,
+							"grand_total":        fmt.Sprintf("%.0f", total),
+							"click_action":       "FLUTTER_NOTIFICATION_CLICK",
+							"android_channel_id": "new_orders",
+						},
+					)
+					if pushErr != nil {
+						log.Printf("[order] FCM send failed for owner %s order %s: %v", ownerID, orderID, pushErr)
+					} else {
+						log.Printf("[order] FCM push sent to owner %s for order %s", ownerID, orderID)
+						if h.redis != nil {
+							_ = h.redis.Set(context.Background(), "order_notif:"+orderID+":fcm", "1", 30*time.Minute)
+						}
+					}
+				}(ownerID, orderID, restaurantName, orderNumber, customerName, grandTotal, len(verifiedItems))
+			}
+
+			if h.redis != nil {
+				if wsDelivered {
+					_ = h.redis.Set(ctx, "order_notif:"+orderID+":ws", "1", 30*time.Minute)
+				}
+				if !wsDelivered && !fcmAttempted {
+					log.Printf("[order] WARN: order %s placed but owner %s unreachable (no WS, no FCM configured)", orderID, ownerID)
+				}
+			}
 		}
 	}
 
@@ -583,12 +665,21 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	// Enrich with customer name from users collection
+	// Enrich with customer name and phone from users collection
 	if custID != "" {
-		if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
+		existingName, _ := order["customer_name"].(string)
+		existingPhone, _ := order["customer_phone"].(string)
+		if existingName == "" || existingPhone == "" {
 			if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
-				if name, _ := user["name"].(string); name != "" {
-					order["customer_name"] = name
+				if existingName == "" {
+					if name, _ := user["name"].(string); name != "" {
+						order["customer_name"] = name
+					}
+				}
+				if existingPhone == "" {
+					if phone, _ := user["phone"].(string); phone != "" {
+						order["customer_phone"] = phone
+					}
 				}
 			}
 		}
@@ -665,15 +756,67 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 		return
 	}
 
-	// Enrich orders with customer name/phone and delivery partner name/phone.
-	// delivery_partners collection does not store name/phone — must fall back to users.
+	// Batch-fetch user + delivery_partner docs to avoid N+1 lookups while
+	// enriching the order list with denormalized name/phone. delivery_partners
+	// collection does not store name/phone — users collection is the fallback.
+	userIDSet := make(map[string]struct{})
+	dpUserIDSet := make(map[string]struct{})
 	for _, order := range result.Documents {
 		if custID, _ := order["customer_id"].(string); custID != "" {
-			if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
-				if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
+			existingName, _ := order["customer_name"].(string)
+			existingPhone, _ := order["customer_phone"].(string)
+			if existingName == "" || existingPhone == "" {
+				userIDSet[custID] = struct{}{}
+			}
+		}
+		if dpID, _ := order["delivery_partner_id"].(string); dpID != "" {
+			existingDPName, _ := order["delivery_partner_name"].(string)
+			existingDPPhone, _ := order["delivery_partner_phone"].(string)
+			if existingDPName == "" || existingDPPhone == "" {
+				dpUserIDSet[dpID] = struct{}{}
+				userIDSet[dpID] = struct{}{} // users fallback source
+			}
+		}
+	}
+
+	userByID := make(map[string]map[string]interface{}, len(userIDSet))
+	if len(userIDSet) > 0 {
+		ids := make([]string, 0, len(userIDSet))
+		for id := range userIDSet {
+			ids = append(ids, id)
+		}
+		if userList, uErr := h.appwrite.ListUsersByIDs(ids); uErr == nil && userList != nil {
+			for _, u := range userList.Documents {
+				if uid, _ := u["$id"].(string); uid != "" {
+					userByID[uid] = u
+				}
+			}
+		}
+	}
+	dpByUserID := make(map[string]map[string]interface{}, len(dpUserIDSet))
+	if len(dpUserIDSet) > 0 {
+		ids := make([]string, 0, len(dpUserIDSet))
+		for id := range dpUserIDSet {
+			ids = append(ids, id)
+		}
+		if dpList, dpErr := h.appwrite.ListDeliveryPartnersByUserIDs(ids); dpErr == nil && dpList != nil {
+			for _, dp := range dpList.Documents {
+				if uid, _ := dp["user_id"].(string); uid != "" {
+					dpByUserID[uid] = dp
+				}
+			}
+		}
+	}
+
+	for _, order := range result.Documents {
+		if custID, _ := order["customer_id"].(string); custID != "" {
+			if user, ok := userByID[custID]; ok {
+				if existing, _ := order["customer_name"].(string); existing == "" {
 					if name, _ := user["name"].(string); name != "" {
 						order["customer_name"] = name
 					}
+				}
+				if existing, _ := order["customer_phone"].(string); existing == "" {
 					if phone, _ := user["phone"].(string); phone != "" {
 						order["customer_phone"] = phone
 					}
@@ -684,12 +827,26 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 			existingDPName, _ := order["delivery_partner_name"].(string)
 			existingDPPhone, _ := order["delivery_partner_phone"].(string)
 			if existingDPName == "" || existingDPPhone == "" {
-				dpName, dpPhone := h.resolveDeliveryPartnerDetails(dpID)
-				if dpName != "" {
-					order["delivery_partner_name"] = dpName
+				var name, phone string
+				if dp, ok := dpByUserID[dpID]; ok {
+					name, _ = dp["name"].(string)
+					phone, _ = dp["phone"].(string)
 				}
-				if dpPhone != "" {
-					order["delivery_partner_phone"] = dpPhone
+				if name == "" || phone == "" {
+					if user, ok := userByID[dpID]; ok {
+						if name == "" {
+							name, _ = user["name"].(string)
+						}
+						if phone == "" {
+							phone, _ = user["phone"].(string)
+						}
+					}
+				}
+				if existingDPName == "" && name != "" {
+					order["delivery_partner_name"] = name
+				}
+				if existingDPPhone == "" && phone != "" {
+					order["delivery_partner_phone"] = phone
 				}
 			}
 		}
@@ -757,21 +914,55 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 
 	// Clear Redis delivery state so the assigned rider doesn't stay in busy_riders
 	// forever (CancelOrder used to leak entries, causing permanent lockout).
+	// Mirror the multi-order bookkeeping from UpdateStatus cancellation path so
+	// rider_order_count stays accurate and is_on_delivery gets cleared on the
+	// rider's last active order.
+	dpUserID, _ := order["delivery_partner_id"].(string)
 	if h.redis != nil {
 		rCtx := c.Request.Context()
-		if dpUserID, _ := order["delivery_partner_id"].(string); dpUserID != "" {
-			_, _ = h.redis.SRem(rCtx, "busy_riders", dpUserID)
+		if dpUserID != "" {
 			_ = h.redis.Del(rCtx, "pending_rider:"+dpUserID)
 			_, _ = h.redis.HDel(rCtx, "rider_track:"+dpUserID, orderID)
+			count, _ := h.redis.Decr(rCtx, "rider_order_count:"+dpUserID)
+			_, _ = h.redis.SRem(rCtx, "rider_active_orders:"+dpUserID, orderID)
+			if count < 0 {
+				_ = h.redis.Set(rCtx, "rider_order_count:"+dpUserID, 0, 24*time.Hour)
+				count = 0
+			}
+			if count < 5 {
+				_, _ = h.redis.SRem(rCtx, "busy_riders", dpUserID)
+			}
+			if count == 0 {
+				if dpResult, dpErr := h.appwrite.GetDeliveryPartner(dpUserID); dpErr == nil && dpResult != nil && dpResult.Total > 0 {
+					dpDocID, _ := dpResult.Documents[0]["$id"].(string)
+					_, _ = h.appwrite.UpdateDeliveryPartner(dpDocID, map[string]interface{}{
+						"is_on_delivery": false,
+					})
+				}
+			}
 		}
 		_ = h.redis.Del(rCtx, "pending_delivery:"+orderID)
 		_ = h.redis.Del(rCtx, "rejected_riders:"+orderID)
 		_ = h.redis.Del(rCtx, "delivery_lock:"+orderID)
 	}
 
-	// Broadcast cancellation via WebSocket
+	// Broadcast cancellation via WebSocket to customer, restaurant owner, and
+	// assigned rider. Previously only the customer was notified — restaurant
+	// dashboard kept showing the cancelled order and the rider continued toward
+	// pickup with no signal to stop.
 	if h.broadcaster != nil {
+		orderNumber, _ := order["order_number"].(string)
 		h.broadcaster.BroadcastOrderUpdate(userID, orderID, models.OrderStatusCancelled, "Order cancelled by customer")
+		if restID, _ := order["restaurant_id"].(string); restID != "" {
+			if rest, rErr := h.appwrite.GetRestaurant(restID); rErr == nil && rest != nil {
+				if ownerID, _ := rest["owner_id"].(string); ownerID != "" {
+					h.broadcaster.BroadcastOrderUpdate(ownerID, orderID, models.OrderStatusCancelled, "Order "+orderNumber+" cancelled by customer")
+				}
+			}
+		}
+		if dpUserID != "" {
+			h.broadcaster.BroadcastOrderUpdate(dpUserID, orderID, models.OrderStatusCancelled, "Order "+orderNumber+" cancelled by customer")
+		}
 	}
 
 	utils.Success(c, updated)
@@ -860,7 +1051,16 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	}
 
 	currentStatus, _ := order["status"].(string)
+	// Idempotent: if the order is already at the requested status, return
+	// the existing document instead of erroring. Without this, a spam-clicked
+	// button or an optimistic-update rollback loop fires hundreds of 400s.
+	if currentStatus == req.Status {
+		utils.Success(c, order)
+		return
+	}
 	if err := h.orders.ValidateTransition(currentStatus, req.Status); err != nil {
+		log.Printf("[order] UpdateStatus: invalid transition order=%s role=%s user=%s from=%q to=%q",
+			orderID, role, userID, currentStatus, req.Status)
 		utils.BadRequest(c, err.Error())
 		return
 	}
@@ -873,6 +1073,8 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	switch req.Status {
 	case models.OrderStatusConfirmed:
 		updateData["confirmed_at"] = now
+	case models.OrderStatusPreparing:
+		updateData["preparing_at"] = now
 	case models.OrderStatusReady:
 		updateData["prepared_at"] = now
 	case models.OrderStatusPickedUp:
@@ -1023,7 +1225,7 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 			notifBody = "Your order " + orderNumber + " is on its way!"
 		case models.OrderStatusDelivered:
 			notifTitle = "Order Delivered"
-			notifBody = "Your order " + orderNumber + " has been delivered. Enjoy your meal!"
+			notifBody = "Your order " + orderNumber + " has been delivered. Enjoy your meal! Tap to rate your order."
 		case models.OrderStatusCancelled:
 			notifTitle = "Order Cancelled"
 			notifBody = "Your order " + orderNumber + " was cancelled by the restaurant"
@@ -1032,12 +1234,18 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 			}
 		}
 		if notifTitle != "" {
+			notifData := map[string]interface{}{"order_id": orderID, "status": req.Status}
+			// Deep-link customers straight into the review screen on delivery
+			// so they don't have to hunt through past orders to leave a review.
+			if req.Status == models.OrderStatusDelivered {
+				notifData["deep_link"] = "/review/" + orderID
+			}
 			_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
 				"user_id": customerID,
 				"title":   notifTitle,
 				"body":    notifBody,
 				"type":    "order_status",
-				"data":    map[string]interface{}{"order_id": orderID, "status": req.Status},
+				"data":    notifData,
 				"is_read": false,
 			})
 			// Broadcast via WebSocket for instant updates to customer.

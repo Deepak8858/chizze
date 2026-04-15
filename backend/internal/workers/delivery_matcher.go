@@ -149,7 +149,7 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		pendingKey := "pending_delivery:" + orderID
 		// TTL must be slightly longer than the rider's 30-second countdown
 		// to allow time for accept/reject to arrive. 45s = 30s countdown + 15s buffer.
-		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 12*time.Second)
+		acquired, lockErr := w.redisClient.SetNX(ctx, pendingKey, "1", 45*time.Second)
 		if lockErr != nil || !acquired {
 			// Already pending assignment — skip
 			continue
@@ -261,6 +261,42 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 				log.Printf("[worker] DeliveryMatcher: %d riders filtered out (pending) for order %s: %v", len(pendingList), orderID, pendingList)
 			}
 			riderIDs = notPending
+		}
+
+		// 4d-bis. Auto-skip riders we've assigned this order to several times
+		// without any accept/reject reply. Happens when the rider's WS is
+		// disconnected AND their app polling is broken — they silently ignore
+		// every assignment and the matcher locks onto the closest rider forever.
+		// After 3 attempts we treat them as soft-rejected so another rider gets
+		// a shot. The soft-reject key has its own TTL so riders aren't punished
+		// permanently if they come back online.
+		if w.redisClient != nil && len(riderIDs) > 0 {
+			var responsive []string
+			var soft []string
+			for _, rid := range riderIDs {
+				attemptKey := "order_attempt:" + orderID + ":" + rid
+				count, _ := w.redisClient.Incr(ctx, attemptKey)
+				if count == 1 {
+					_ = w.redisClient.Expire(ctx, attemptKey, 5*time.Minute)
+				}
+				if count > 3 {
+					soft = append(soft, rid)
+					_, _ = w.redisClient.SAdd(ctx, rejectedKey, rid)
+					_ = w.redisClient.Expire(ctx, rejectedKey, 5*time.Minute)
+				} else {
+					responsive = append(responsive, rid)
+				}
+			}
+			if len(soft) > 0 {
+				log.Printf("[worker] DeliveryMatcher: %d riders soft-rejected (no response after 3 attempts) for order %s: %v", len(soft), orderID, soft)
+			}
+			riderIDs = responsive
+		}
+		if len(riderIDs) == 0 {
+			log.Printf("[worker] DeliveryMatcher: all nearby riders unresponsive for order %s — clearing lock + rejected list for fresh retry (attempt counters expire in 5m)", orderID)
+			_ = w.redisClient.Del(ctx, pendingKey)
+			_ = w.redisClient.Del(ctx, rejectedKey)
+			continue
 		}
 		if len(riderIDs) == 0 {
 			log.Printf("[worker] DeliveryMatcher: all nearby riders have pending requests for order %s — clearing lock for retry", orderID)

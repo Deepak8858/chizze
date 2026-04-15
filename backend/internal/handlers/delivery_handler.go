@@ -366,12 +366,12 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 		}
 	}
 
-	// Assign partner to order with name/phone
-	// NOTE: accepted_at is added once the attribute is created in the Appwrite schema
+	// Assign partner to order with name/phone + accept timestamp
 	updateData := map[string]interface{}{
 		"delivery_partner_id":    userID,
 		"delivery_partner_name":  partnerName,
 		"delivery_partner_phone": partnerPhone,
+		"accepted_at":            time.Now().Format(time.RFC3339),
 	}
 	_, err = h.appwrite.UpdateOrder(orderID, updateData)
 	if err != nil {
