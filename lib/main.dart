@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -8,11 +9,13 @@ import 'core/theme/theme.dart';
 import 'core/router/app_router.dart';
 import 'core/services/websocket_service.dart';
 import 'core/services/api_client.dart';
+import 'core/services/push_notification_service.dart';
 import 'features/profile/providers/user_profile_provider.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/services/map_config.dart';
+import 'core/services/facebook_service.dart';
 import 'config/environment.dart';
 
 const _kLocationDisclosureAcceptedKey = 'location_disclosure_accepted_v1';
@@ -44,6 +47,10 @@ void main() async {
   } catch (e) {
     if (kDebugMode) debugPrint('[Firebase] Not available: $e');
   }
+
+  // Initialize Facebook SDK (analytics auto-log + ATT). Non-fatal on error —
+  // missing Client Token will just disable event delivery without crashing.
+  unawaited(FacebookService.instance.init());
 
   // Initialize offline cache (Hive)
   await cacheService.init();
@@ -148,13 +155,61 @@ class ChizzeApp extends ConsumerStatefulWidget {
 
 class _ChizzeAppState extends ConsumerState<ChizzeApp> {
   bool _disclosureFlowStarted = false;
+  bool _pushInitialized = false;
+  ProviderSubscription<AsyncValue<WsEvent>>? _wsNotifSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showFirstLaunchDisclosureIfNeeded();
+      _initPushAndWsNotifications();
     });
+  }
+
+  /// Bootstrap FCM + local notifications and route WS-delivered notification
+  /// events to the system tray so every new notification shows in Android
+  /// notifications regardless of channel (FCM for backgrounded, WS for
+  /// foregrounded-other-screen). Runs once on first frame.
+  void _initPushAndWsNotifications() {
+    if (_pushInitialized) return;
+    _pushInitialized = true;
+
+    final pushService = ref.read(pushNotificationServiceProvider);
+    unawaited(pushService.init());
+
+    _wsNotifSub = ref.listenManual<AsyncValue<WsEvent>>(
+      wsNotificationsProvider,
+      (prev, next) {
+        next.whenData((event) {
+          final payload = event.payload;
+          final title = (payload['title'] as String?) ?? 'Chizze';
+          final body = (payload['body'] as String?) ?? '';
+          if (body.isEmpty && title == 'Chizze') return;
+          final notifType = (payload['type'] as String?) ?? '';
+          String? deepLink;
+          final data = payload['data'];
+          if (data is Map && data['deep_link'] is String) {
+            deepLink = data['deep_link'] as String;
+          } else if (data is Map && data['order_id'] is String &&
+              (notifType == 'order_status' ||
+                  notifType == 'delivery_update')) {
+            deepLink = '/order-tracking/${data['order_id']}';
+          }
+          pushService.showLocalNotification(
+            title: title,
+            body: body,
+            payload: deepLink,
+          );
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _wsNotifSub?.close();
+    super.dispose();
   }
 
   Future<void> _showFirstLaunchDisclosureIfNeeded() async {

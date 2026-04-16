@@ -81,6 +81,11 @@ func main() {
 	}
 	// Note: Redis is closed explicitly in the graceful shutdown block below
 
+	// ─── Schema Drift Check ───
+	// Verifies the Appwrite collections have every attribute the code writes.
+	// Runs in the background so a slow Appwrite call doesn't delay server start.
+	go services.ValidateCollectionSchemas(awClient)
+
 	// ─── Initialize Services ───
 	awService := services.NewAppwriteService(awClient)
 	orderService := services.NewOrderService(awService)
@@ -107,7 +112,7 @@ func main() {
 	orderHandler := handlers.NewOrderHandler(awService, orderService, geoService, redisClient, broadcaster)
 	paymentHandler := handlers.NewPaymentHandler(awService, paymentService)
 	deliveryHandler := handlers.NewDeliveryHandler(awService, geoService, redisClient, broadcaster)
-	reviewHandler := handlers.NewReviewHandler(awService)
+	reviewHandler := handlers.NewReviewHandler(awService, broadcaster)
 	couponHandler := handlers.NewCouponHandler(awService, cacheService)
 	notifHandler := handlers.NewNotificationHandler(awService)
 	partnerHandler := handlers.NewPartnerHandler(awService, redisClient)
@@ -545,13 +550,23 @@ func main() {
 	// ─── Start Background Workers ───
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 
-	// FCM client for push notifications when WS is down (riders backgrounded)
+	// FCM client for push notifications when WS is down (owners + riders backgrounded)
 	fcmClient := fcm.NewClient(cfg.FCMServerKey)
 	if fcmClient != nil {
 		log.Printf("[startup] FCM push notifications enabled")
 	} else {
-		log.Printf("[startup] FCM disabled (set FCM_SERVER_KEY to enable push to backgrounded riders)")
+		log.Printf("[startup] FCM disabled (set FCM_SERVER_KEY to enable push to backgrounded users)")
 	}
+
+	// Wire FCM into AppwriteService so every CreateNotification call also fires
+	// a push, ensuring Android tray notifications reach users whose app is
+	// backgrounded or whose WS channel has dropped.
+	awService.SetFCMClient(fcmClient)
+
+	// Wire FCM + hub into OrderHandler so PlaceOrder can wake a backgrounded
+	// restaurant owner with a push notification (prior to this fix, a dead WS
+	// meant new orders were silently dropped and auto-cancelled in 5 min).
+	orderHandler.SetPushDependencies(hub, fcmClient)
 
 	// 8s interval: with 10s pending_rider TTL, same rider gets the order
 	// re-sent within 10-18s if they don't respond (Bug Fix: was 15s + 20s = 35s)
@@ -594,7 +609,10 @@ func main() {
 		deliveryMatcher.Process(context.Background())
 	})
 
-	orderTimeout := workers.NewOrderTimeout(awService, hub, 30*time.Second, 5*time.Minute)
+	// 10-minute timeout (was 5m): restaurants on flaky connections or with
+	// tablets that sleep briefly deserve grace — 5m caused false-cancels of
+	// orders the partner app was about to pick up.
+	orderTimeout := workers.NewOrderTimeout(awService, hub, redisClient, 30*time.Second, 10*time.Minute)
 	go orderTimeout.Start(workerCtx)
 
 	scheduledOrderProcessor := workers.NewScheduledOrderProcessor(awService, hub, 30*time.Second)

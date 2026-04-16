@@ -8,6 +8,7 @@ import (
 	"github.com/chizze/backend/internal/middleware"
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/internal/services"
+	"github.com/chizze/backend/internal/websocket"
 	"github.com/chizze/backend/pkg/appwrite"
 	"github.com/chizze/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
@@ -15,12 +16,13 @@ import (
 
 // ReviewHandler handles review endpoints
 type ReviewHandler struct {
-	appwrite *services.AppwriteService
+	appwrite    *services.AppwriteService
+	broadcaster *websocket.EventBroadcaster
 }
 
 // NewReviewHandler creates a review handler
-func NewReviewHandler(aw *services.AppwriteService) *ReviewHandler {
-	return &ReviewHandler{appwrite: aw}
+func NewReviewHandler(aw *services.AppwriteService, broadcaster *websocket.EventBroadcaster) *ReviewHandler {
+	return &ReviewHandler{appwrite: aw, broadcaster: broadcaster}
 }
 
 // CreateReview submits a review for an order with ownership/duplicate/status checks
@@ -116,7 +118,47 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 	// Update restaurant average rating asynchronously (best-effort)
 	go h.updateRestaurantRating(restaurantID)
 
+	// Notify the restaurant owner so the partner dashboard surfaces new reviews
+	// without polling. Fire-and-forget; failure here must not fail the request.
+	go h.notifyRestaurantOwner(restaurantID, orderID, req.FoodRating)
+
 	utils.Created(c, doc)
+}
+
+// notifyRestaurantOwner sends an in-app notification + WS broadcast to the
+// owner of `restaurantID` informing them of a new review on the given order.
+func (h *ReviewHandler) notifyRestaurantOwner(restaurantID, orderID string, rating int) {
+	if restaurantID == "" {
+		return
+	}
+	restaurant, err := h.appwrite.GetRestaurant(restaurantID)
+	if err != nil || restaurant == nil {
+		return
+	}
+	ownerID, _ := restaurant["owner_id"].(string)
+	if ownerID == "" {
+		return
+	}
+	title := "New review"
+	body := "A customer just rated your restaurant"
+	if rating > 0 {
+		body = "A customer rated their order " + strings.Repeat("⭐", rating)
+	}
+	_, _ = h.appwrite.CreateNotification("unique()", map[string]interface{}{
+		"user_id": ownerID,
+		"title":   title,
+		"body":    body,
+		"type":    "review",
+		"data": map[string]interface{}{
+			"order_id":      orderID,
+			"restaurant_id": restaurantID,
+			"deep_link":     "/partner/reviews",
+		},
+		"is_read": false,
+	})
+	if h.broadcaster != nil {
+		h.broadcaster.BroadcastNotification(ownerID, title, body, "review")
+	}
 }
 
 // updateRestaurantRating recalculates restaurant average from all reviews

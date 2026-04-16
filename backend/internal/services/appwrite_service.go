@@ -1,18 +1,71 @@
 package services
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+
 	"github.com/chizze/backend/internal/models"
 	"github.com/chizze/backend/pkg/appwrite"
+	"github.com/chizze/backend/pkg/fcm"
 )
 
 // AppwriteService wraps Appwrite client with domain-specific methods
 type AppwriteService struct {
 	client *appwrite.Client
+	fcm    *fcm.Client
 }
 
 // NewAppwriteService creates an Appwrite service
 func NewAppwriteService(client *appwrite.Client) *AppwriteService {
 	return &AppwriteService{client: client}
+}
+
+// SetFCMClient wires the FCM client so CreateNotification can also push to
+// the user's device. Called once at startup from main after the FCM client
+// is constructed. Safe to pass nil — pushes become a no-op.
+func (s *AppwriteService) SetFCMClient(client *fcm.Client) {
+	s.fcm = client
+}
+
+// sendPushToUser fetches the user's fcm_token and sends a push. Best-effort;
+// logs failures so a bad token doesn't block the caller.
+func (s *AppwriteService) sendPushToUser(userID, title, body, notifType string, data map[string]interface{}) {
+	if s.fcm == nil || userID == "" {
+		return
+	}
+	user, err := s.GetUser(userID)
+	if err != nil || user == nil {
+		return
+	}
+	token, _ := user["fcm_token"].(string)
+	if token == "" {
+		return
+	}
+	pushData := map[string]string{
+		"type":               notifType,
+		"click_action":       "FLUTTER_NOTIFICATION_CLICK",
+		"android_channel_id": "chizze_main",
+	}
+	for k, v := range data {
+		if v == nil {
+			continue
+		}
+		switch val := v.(type) {
+		case string:
+			pushData[k] = val
+		case bool, int, int32, int64, float32, float64:
+			pushData[k] = fmt.Sprint(val)
+		default:
+			if b, err := json.Marshal(val); err == nil {
+				pushData[k] = string(b)
+			}
+		}
+	}
+	if err := s.fcm.SendPush(context.Background(), token, title, body, pushData); err != nil {
+		log.Printf("[AppwriteService] FCM push to %s failed: %v", userID, err)
+	}
 }
 
 // Client exposes the underlying Appwrite client (for JWT verification, etc.)
@@ -44,6 +97,22 @@ func (s *AppwriteService) GetUser(userID string) (map[string]interface{}, error)
 
 func (s *AppwriteService) ListUsers(queries []string) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionUsers, queries)
+}
+
+// ListUsersByIDs batch-fetches users by their document IDs (avoids N+1).
+// Returns an empty list when ids is empty.
+func (s *AppwriteService) ListUsersByIDs(ids []string) (*appwrite.DocumentList, error) {
+	if len(ids) == 0 {
+		return &appwrite.DocumentList{Total: 0, Documents: nil}, nil
+	}
+	ifaces := make([]interface{}, len(ids))
+	for i, v := range ids {
+		ifaces[i] = v
+	}
+	return s.client.ListDocuments(models.CollectionUsers, []string{
+		appwrite.QueryEqual("$id", ifaces...),
+		appwrite.QueryLimit(len(ids)),
+	})
 }
 
 func (s *AppwriteService) UpdateUser(userID string, data map[string]interface{}) (map[string]interface{}, error) {
@@ -204,6 +273,22 @@ func (s *AppwriteService) ListDeliveryPartners(queries []string) (*appwrite.Docu
 	return s.client.ListDocuments(models.CollectionDeliveryPartners, queries)
 }
 
+// ListDeliveryPartnersByUserIDs batch-fetches delivery_partner docs by their user_id
+// field (avoids N+1 when enriching a list of orders with partner details).
+func (s *AppwriteService) ListDeliveryPartnersByUserIDs(userIDs []string) (*appwrite.DocumentList, error) {
+	if len(userIDs) == 0 {
+		return &appwrite.DocumentList{Total: 0, Documents: nil}, nil
+	}
+	ifaces := make([]interface{}, len(userIDs))
+	for i, v := range userIDs {
+		ifaces[i] = v
+	}
+	return s.client.ListDocuments(models.CollectionDeliveryPartners, []string{
+		appwrite.QueryEqual("user_id", ifaces...),
+		appwrite.QueryLimit(len(userIDs)),
+	})
+}
+
 func (s *AppwriteService) CreateDeliveryPartner(id string, data map[string]interface{}) (map[string]interface{}, error) {
 	return s.client.CreateDocument(models.CollectionDeliveryPartners, id, data)
 }
@@ -222,8 +307,42 @@ func (s *AppwriteService) CreateUser(id string, data map[string]interface{}) (ma
 
 // ─── Notifications (create) ───
 
+// CreateNotification stores a notification and fires an FCM push asynchronously
+// so the device's Android system tray shows it even when the app is backgrounded
+// or the WS channel is down. FCM is best-effort; a failure never fails the create.
+//
+// The push extracts its payload from `data`:
+//   - user_id → recipient (required for push)
+//   - title, body, type → FCM notification header
+//   - any nested `data` map is forwarded as FCM data (used for deep_link routing)
 func (s *AppwriteService) CreateNotification(id string, data map[string]interface{}) (map[string]interface{}, error) {
-	return s.client.CreateDocument(models.CollectionNotifications, id, data)
+	doc, err := s.client.CreateDocument(models.CollectionNotifications, id, data)
+	if err != nil {
+		return doc, err
+	}
+
+	userID, _ := data["user_id"].(string)
+	title, _ := data["title"].(string)
+	body, _ := data["body"].(string)
+	notifType, _ := data["type"].(string)
+
+	var pushData map[string]interface{}
+	switch raw := data["data"].(type) {
+	case map[string]interface{}:
+		pushData = raw
+	case string:
+		if raw != "" {
+			var parsed map[string]interface{}
+			if jerr := json.Unmarshal([]byte(raw), &parsed); jerr == nil {
+				pushData = parsed
+			}
+		}
+	}
+
+	if userID != "" && s.fcm != nil {
+		go s.sendPushToUser(userID, title, body, notifType, pushData)
+	}
+	return doc, nil
 }
 
 func (s *AppwriteService) UploadFile(bucketID, filename, contentType string, data []byte) (map[string]interface{}, error) {

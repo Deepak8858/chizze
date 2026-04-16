@@ -52,12 +52,12 @@ class PushNotificationService {
     try {
       final messaging = FirebaseMessaging.instance;
 
-      // Request visual notification permission (silent alerts only):
-      // alert=true, badge=true, sound=false, provisional=false.
+      // Request visual + audible permission so heads-up notifications on iOS
+      // and Android 13+ surface with sound by default.
       final settings = await messaging.requestPermission(
         alert: true,
         badge: true,
-        sound: false,
+        sound: true,
         provisional: false,
       );
       if (kDebugMode) debugPrint('[Push] Permission status: ${settings.authorizationStatus}');
@@ -80,14 +80,20 @@ class PushNotificationService {
           return;
         }
 
+        // Fall back to the data payload when the message has no notification
+        // block (happens when backend sends data-only pushes). Ensures every
+        // FCM that reaches a foregrounded app still surfaces in the tray.
         final notification = message.notification;
-        if (notification != null) {
-          showLocalNotification(
-            title: notification.title ?? 'Chizze',
-            body: notification.body ?? '',
-            payload: _extractRoute(message.data),
-          );
-        }
+        final title = notification?.title ??
+            (message.data['title'] as String? ?? 'Chizze');
+        final body = notification?.body ??
+            (message.data['body'] as String? ?? '');
+        if (title.isEmpty && body.isEmpty) return;
+        showLocalNotification(
+          title: title,
+          body: body,
+          payload: _extractRoute(message.data),
+        );
       });
 
       // Handle notification taps (app was in background)
@@ -126,7 +132,7 @@ class PushNotificationService {
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
-      requestSoundPermission: false,
+      requestSoundPermission: true,
     );
     const settings = InitializationSettings(
       android: androidSettings,
@@ -139,6 +145,27 @@ class PushNotificationService {
         _handleNotificationRoute(response.payload);
       },
     );
+
+    // Create the main Android channel eagerly so that the very first FCM
+    // message (which Firebase binds to `android_channel_id`) has a channel
+    // configured with the correct importance — otherwise the OS falls back
+    // to the low-importance default and the notification never pops up.
+    final androidPlugin = _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'chizze_main',
+          'Chizze Notifications',
+          description: 'Order updates, offers & more',
+          importance: Importance.high,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
+      await androidPlugin.requestNotificationsPermission();
+    }
   }
 
   /// Handle an incoming delivery_request FCM push.
@@ -260,18 +287,22 @@ class PushNotificationService {
     String? payload,
   }) async {
     const androidDetails = AndroidNotificationDetails(
-      'chizze_main_silent',
+      'chizze_main',
       'Chizze Notifications',
       channelDescription: 'Order updates, offers & more',
       importance: Importance.high,
       priority: Priority.high,
       showWhen: true,
-      playSound: false,
+      playSound: true,
+      enableVibration: true,
+      ticker: 'Chizze',
+      visibility: NotificationVisibility.public,
+      category: AndroidNotificationCategory.message,
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
-      presentSound: false,
+      presentSound: true,
     );
     const details = NotificationDetails(
       android: androidDetails,

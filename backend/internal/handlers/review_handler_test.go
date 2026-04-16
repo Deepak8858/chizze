@@ -12,7 +12,7 @@ import (
 func registerReviewRoutes(te *testutil.TestEnv) {
 	te.T.Helper()
 
-	reviewHandler := handlers.NewReviewHandler(te.AWService)
+	reviewHandler := handlers.NewReviewHandler(te.AWService, nil)
 	restaurantHandler := handlers.NewRestaurantHandler(te.AWService, te.GeoService, te.CacheService)
 	adminHandler := handlers.NewAdminHandler(te.AWService, te.RedisClient, te.Hub)
 
