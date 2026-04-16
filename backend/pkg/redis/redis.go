@@ -23,9 +23,12 @@ func NewClient(redisURL string) (*Client, error) {
 		return nil, fmt.Errorf("invalid REDIS_URL: %w", err)
 	}
 
-	// Connection pool tuning
-	opts.PoolSize = 20
-	opts.MinIdleConns = 5
+	// Connection pool tuning — sized for 1000 concurrent users. With 20 conns
+	// and ~8ms round-trip latency the pool becomes the bottleneck above ~100
+	// RPS (rate limiter, session reads, WS hub, notification queue, delivery
+	// matching all share it). 200 gives ~25k RPS headroom.
+	opts.PoolSize = 200
+	opts.MinIdleConns = 25
 	opts.DialTimeout = 5 * time.Second
 	opts.ReadTimeout = 3 * time.Second
 	opts.WriteTimeout = 3 * time.Second

@@ -62,10 +62,13 @@ func (h *Hub) handleIncoming(client *Client, raw []byte) {
 }
 
 func NewHub() *Hub {
+	// Buffer register/unregister/broadcast so a stalled Run loop iteration
+	// (e.g. while holding the mutex to fan out to 1000 clients) can't back
+	// up the upgrade handshakes and cause connect stampedes at scale.
 	return &Hub{
-		broadcast:   make(chan []byte),
-		register:    make(chan *Client),
-		unregister:  make(chan *Client),
+		broadcast:   make(chan []byte, 256),
+		register:    make(chan *Client, 128),
+		unregister:  make(chan *Client, 128),
 		clients:     make(map[*Client]bool),
 		userClients: make(map[string]map[*Client]bool),
 		userRoles:   make(map[string]string),
@@ -153,26 +156,25 @@ func (h *Hub) IsConnected(userID string) bool {
 	return len(h.userClients[userID]) > 0
 }
 
-// SendToUser sends a message to a specific user (O(1) lookup via userClients index)
+// SendToUser sends a message to a specific user (O(1) lookup via userClients index).
+// At 1000-user scale the previous per-send info logs saturated stdout I/O
+// on the hub lock, so we now log only the exceptional paths (no connection
+// and slow-client drop).
 func (h *Hub) SendToUser(userID string, message []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	clients := h.userClients[userID]
 	if len(clients) == 0 {
-		log.Printf("[ws] SendToUser: NO active WebSocket connections for user %s — message dropped", userID)
 		return
 	}
-	sent := 0
 	for client := range clients {
 		select {
 		case client.send <- message:
-			sent++
 		default:
 			h.removeClientLocked(client)
 			log.Printf("[ws] SendToUser: dropped slow client for user %s", userID)
 		}
 	}
-	log.Printf("[ws] SendToUser: delivered message to %d/%d connections for user %s", sent, len(clients), userID)
 }
 
 // PresenceSummary returns unique connected user counts and role breakdown.

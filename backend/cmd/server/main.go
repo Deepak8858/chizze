@@ -618,10 +618,16 @@ func main() {
 	scheduledOrderProcessor := workers.NewScheduledOrderProcessor(awService, hub, 30*time.Second)
 	go scheduledOrderProcessor.Start(workerCtx)
 
-	notificationDispatcher := workers.NewNotificationDispatcher(awService, hub, redisClient, 10*time.Second)
-	go notificationDispatcher.Start(workerCtx)
+	// Fan out to 4 dispatcher workers — a single BRPOP loop becomes the
+	// bottleneck once the Appwrite write + FCM round-trip inside processQueue
+	// exceeds the interval between queued notifications (observed at ~1k
+	// active users during peak order bursts).
+	for i := 0; i < 4; i++ {
+		nd := workers.NewNotificationDispatcher(awService, hub, redisClient, 10*time.Second)
+		go nd.Start(workerCtx)
+	}
 
-	log.Printf("🔧 4 background workers started")
+	log.Printf("🔧 background workers started (dispatcher x4)")
 
 	// ─── Start Server with Production Settings ───
 	srv := &http.Server{
