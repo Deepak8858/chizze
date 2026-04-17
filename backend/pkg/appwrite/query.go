@@ -30,6 +30,19 @@ func QuerySearch(attribute string, value string) string {
 	return string(b)
 }
 
+// Contains creates a contains query. Use for string[] attributes
+// (e.g. restaurants.cuisines) where fulltext "search" is unavailable.
+// For single-string attributes, contains also matches substrings.
+func QueryContains(attribute string, value string) string {
+	q := map[string]interface{}{
+		"method":    "contains",
+		"attribute": attribute,
+		"values":    []string{value},
+	}
+	b, _ := json.Marshal(q)
+	return string(b)
+}
+
 // OrderDesc creates a descending order query
 func QueryOrderDesc(attribute string) string {
 	q := map[string]interface{}{

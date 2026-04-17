@@ -164,6 +164,34 @@ class PushNotificationService {
           enableVibration: true,
         ),
       );
+      // Dedicated high-priority channel for restaurant owners. Backend's
+      // FCM payload sets android_channel_id=new_orders (see order_handler.go
+      // line 455); without this registration Android silently routes the push
+      // to the fallback low-importance default — owners missed orders.
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'new_orders',
+          'New Orders',
+          description: 'Incoming orders for restaurant partners',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
+      // Dedicated channel for delivery-partner assignment pushes (matcher →
+      // fcm.DeliveryRequestPayload uses android_channel_id=delivery_requests).
+      // Importance.max + vibration so riders see the 30s countdown even when
+      // the screen is locked.
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'delivery_requests',
+          'Delivery Requests',
+          description: 'New delivery assignments for partners',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
       await androidPlugin.requestNotificationsPermission();
     }
   }

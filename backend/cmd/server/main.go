@@ -133,10 +133,13 @@ func main() {
 	r.Use(middleware.CORS(cfg))                             // CORS
 	r.Use(middleware.MaxBodySize(2 << 20))                  // 2MB max request body
 	r.Use(middleware.Gzip())                                // Response compression
-	// Per-IP rate limit (sliding 1s window, 500 req/s per IP). Prevents a
-	// single abusive client from exhausting the server; is generous enough
-	// that legitimate users behind NAT/corp networks are not affected.
-	r.Use(middleware.RedisRateLimit(redisClient, 500, 500))
+	// Per-IP rate limit (sliding 1s window, 2000 req/s per IP). Raised from
+	// 500 to accommodate 1000 concurrent users behind NAT/corporate gateways
+	// where many legitimate clients share a single egress IP. 500/s tipped
+	// a load test into 429 storms for the shared-IP case; 2000 gives headroom
+	// without meaningfully weakening abuse protection (the per-user limit
+	// still bounds individual accounts).
+	r.Use(middleware.RedisRateLimit(redisClient, 2000, 2000))
 
 	// Health check — liveness probe (always 200 if server is running)
 	r.GET("/health", func(c *gin.Context) {

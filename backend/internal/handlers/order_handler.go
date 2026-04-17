@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/chizze/backend/internal/middleware"
@@ -115,11 +116,18 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		}
 		// Also acquire a short order-placement lock so two parallel clicks on
 		// "Place Order" with the same key don't both hit CreateOrder concurrently.
+		// MUST release on return — otherwise any retry within 15s of a failure
+		// returns 409 to the customer even though no order is actually pending.
+		// The 24-hour idempotency cache (set after CreateOrder) is the real
+		// duplicate-suppression layer; this lock only protects the concurrent window.
 		lockKey := "place_order_lock:" + userID + ":" + idempotencyKey
 		acquired, lockErr := h.redis.SetNX(ctx, lockKey, "1", 15*time.Second)
 		if lockErr == nil && !acquired {
 			utils.Error(c, http.StatusConflict, "An identical order is already being placed. Please wait a moment.")
 			return
+		}
+		if lockErr == nil && acquired {
+			defer func() { _ = h.redis.Del(ctx, lockKey) }()
 		}
 	}
 
@@ -223,6 +231,13 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	restLng, _ := restaurant["longitude"].(float64)
 	addrLat, _ := address["latitude"].(float64)
 	addrLng, _ := address["longitude"].(float64)
+	// A 0,0 address is a "Null Island" placeholder — clients sometimes save
+	// addresses without a geocode. Fail with a targeted message rather than
+	// the misleading "too far from restaurant" (distance would be 6000+ km).
+	if addrLat == 0 && addrLng == 0 {
+		utils.BadRequest(c, "Your delivery address is missing location data. Please re-add it with a pin on the map.")
+		return
+	}
 	distanceKm := h.geo.Distance(restLat, restLng, addrLat, addrLng)
 	if distanceKm > 20.0 {
 		utils.BadRequest(c, "Delivery address is too far from restaurant")
@@ -701,6 +716,21 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		}
 	}
 
+	// has_review: only meaningful for the customer viewing a delivered order.
+	// Drives the "Rate now" CTA in the Flutter UI.
+	if role == "customer" {
+		statusVal, _ := order["status"].(string)
+		normalized := strings.ToLower(strings.TrimSpace(statusVal))
+		if normalized == strings.ToLower(models.OrderStatusDelivered) || normalized == "completed" {
+			existing, rErr := h.appwrite.ListReviewsByQuery([]string{
+				appwrite.QueryEqual("order_id", orderID),
+				appwrite.QueryEqual("customer_id", userID),
+				appwrite.QueryLimit(1),
+			})
+			order["has_review"] = rErr == nil && existing != nil && existing.Total > 0
+		}
+	}
+
 	utils.Success(c, order)
 }
 
@@ -849,6 +879,43 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 					order["delivery_partner_phone"] = phone
 				}
 			}
+		}
+	}
+
+	// For customers, mark which delivered orders they've already reviewed so the
+	// UI can show a "Rate now" badge instead of forcing the user to hunt through
+	// past orders. Single batch query: reviews WHERE order_id IN [delivered ids]
+	// AND customer_id = me. Skipped entirely for partner/delivery roles.
+	if role == "customer" {
+		deliveredIDs := make([]interface{}, 0)
+		for _, order := range result.Documents {
+			status, _ := order["status"].(string)
+			normalized := strings.ToLower(strings.TrimSpace(status))
+			if normalized == strings.ToLower(models.OrderStatusDelivered) || normalized == "completed" {
+				if id, _ := order["$id"].(string); id != "" {
+					deliveredIDs = append(deliveredIDs, id)
+				}
+			}
+		}
+		reviewedSet := make(map[string]struct{})
+		if len(deliveredIDs) > 0 {
+			reviewList, rErr := h.appwrite.ListReviewsByQuery([]string{
+				appwrite.QueryEqual("order_id", deliveredIDs...),
+				appwrite.QueryEqual("customer_id", userID),
+				appwrite.QueryLimit(len(deliveredIDs)),
+			})
+			if rErr == nil && reviewList != nil {
+				for _, rev := range reviewList.Documents {
+					if oid, _ := rev["order_id"].(string); oid != "" {
+						reviewedSet[oid] = struct{}{}
+					}
+				}
+			}
+		}
+		for _, order := range result.Documents {
+			id, _ := order["$id"].(string)
+			_, has := reviewedSet[id]
+			order["has_review"] = has
 		}
 	}
 

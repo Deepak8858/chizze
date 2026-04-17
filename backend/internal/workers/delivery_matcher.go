@@ -410,6 +410,13 @@ func (w *DeliveryMatcher) Process(ctx context.Context) {
 		// The matcher runs every 8s so effective re-send window is 10-18s.
 		_ = w.redisClient.Set(ctx, pendingKey, riderID, 10*time.Second)
 
+		// Record the rider officially assigned to this order. AcceptOrder consults
+		// this to reject "drive-by" accepts from riders who were never targeted
+		// (e.g. a rider sniffing orderIDs from the OrderTracking collection and
+		// POSTing /accept). 45s TTL covers the rider's 30s countdown + buffer;
+		// it's intentionally decoupled from pendingKey's re-match TTL.
+		_ = w.redisClient.Set(ctx, "assigned_rider:"+orderID, riderID, 45*time.Second)
+
 		// Mark rider as having a pending request so they don't get multiple orders at once.
 		// Uses ONLY a TTL-based key (no SET) — the SET had no TTL and permanently blocked riders.
 		// Auto-expires after 10s so same rider gets the order again if they didn't respond.

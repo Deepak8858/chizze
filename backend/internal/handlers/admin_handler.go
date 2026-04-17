@@ -1711,7 +1711,7 @@ func (h *AdminHandler) VerifyDeliveryPartner(c *gin.Context) {
 func (h *AdminHandler) DeliveryPartnerPayouts(c *gin.Context) {
 	result, err := h.appwrite.ListPayouts([]string{
 		appwrite.QueryEqual("partner_id", c.Param("id")),
-		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryOrderDesc("$createdAt"),
 		appwrite.QueryLimit(50),
 	})
 	if err != nil {
@@ -1734,7 +1734,7 @@ func (h *AdminHandler) ListPayouts(c *gin.Context) {
 	queries := []string{
 		appwrite.QueryLimit(p.PerPage),
 		appwrite.QueryOffset(p.Offset()),
-		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryOrderDesc("$createdAt"),
 	}
 	if status := c.Query("status"); status != "" {
 		queries = append(queries, appwrite.QueryEqual("status", status))
@@ -1826,7 +1826,9 @@ func (h *AdminHandler) ListReviews(c *gin.Context) {
 	queries := []string{
 		appwrite.QueryLimit(p.PerPage),
 		appwrite.QueryOffset(p.Offset()),
-		appwrite.QueryOrderDesc("created_at"),
+		// reviews collection has no user-defined created_at attribute — use
+		// the Appwrite managed $createdAt system field to avoid a 400.
+		appwrite.QueryOrderDesc("$createdAt"),
 	}
 
 	status := strings.ToLower(strings.TrimSpace(c.Query("status")))

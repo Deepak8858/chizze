@@ -181,7 +181,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                         type: MapMarkerType.customer,
                         latitude: request.customerLatitude,
                         longitude: request.customerLongitude,
-                        label: 'Customer',
+                        label: request.customerName,
                       ),
                       MapMarker(
                         type: MapMarkerType.rider,
@@ -312,7 +312,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                       ),
                     ),
                     Text(
-                      isRestaurantStep ? request.restaurantName : 'Customer',
+                      isRestaurantStep ? request.restaurantName : request.customerName,
                       style: AppTypography.body2,
                     ),
                   ],

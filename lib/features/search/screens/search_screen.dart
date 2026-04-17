@@ -310,7 +310,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: GlassCard(
-        onTap: () => context.push('/restaurant/${restaurant.id}'),
+        onTap: () {
+          if (!restaurant.isOnline) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(restaurant.offlineMessage),
+                duration: const Duration(seconds: 3),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
+          context.push('/restaurant/${restaurant.id}');
+        },
         padding: EdgeInsets.zero,
         child: Row(
           children: [

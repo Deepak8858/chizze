@@ -187,11 +187,14 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
   /// Listen for order_update events via WebSocket (Go backend hub) as a
   /// redundant real-time channel. This ensures instant status updates even when
   /// Appwrite Realtime is slow or disconnected.
+  ///
+  /// Also stops the polling fallback: backend WS is just as reliable as
+  /// Appwrite Realtime for new-order delivery, so we shouldn't pay the 5s
+  /// poll cost when either real-time path is alive.
   void _subscribeToWebSocket() {
     try {
       _wsSub = _ws.orderUpdates.listen((event) {
-        // An order status changed — reload data to refresh the dashboard.
-        // The WS event is targeted at the restaurant owner by the backend.
+        _stopPolling();
         _loadData(notifyNewOrders: false);
       });
     } catch (e) {
@@ -202,6 +205,7 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     // triggers an instant refresh + alert, not just the Appwrite Realtime path.
     try {
       _wsNewOrderSub = _ws.newOrders.listen((_) {
+        _stopPolling();
         _loadData(notifyNewOrders: true);
       });
     } catch (e) {
@@ -211,16 +215,19 @@ class PartnerNotifier extends StateNotifier<PartnerState> {
     }
   }
 
-  /// Polling fallback: fetch orders every 5s when there are in-transit orders
-  /// (pickedUp / outForDelivery) so delivered status shows immediately, or
-  /// every 8s otherwise. Previously 15s — too slow for delivered updates.
+  /// Polling fallback: fetch orders every 15s when realtime is unavailable.
+  /// Previously 5s (720 req/hr/partner) which didn't scale to 1000 partners —
+  /// backend ran ~200 req/s just for /partner/orders polling under target load.
+  /// 15s is a safe tradeoff because the FCM push and backend WS already cover
+  /// new-order wake-up instantly; this poll only matters during extended
+  /// realtime outages.
   void _startPollingFallback() {
     if (_pollingTimer?.isActive == true) return; // Already polling
     if (kDebugMode) debugPrint('[PartnerNotifier] Starting polling fallback');
     state = state.copyWith(
       connectionStatus: RealtimeConnectionStatus.polling,
     );
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       _loadData(notifyNewOrders: true);
     });
   }

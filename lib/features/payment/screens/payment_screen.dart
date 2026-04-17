@@ -29,12 +29,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final cartState = ref.watch(cartProvider);
     final paymentState = ref.watch(paymentProvider);
 
-    // Listen for payment success → navigate to confirmation
+    // Listen for payment success → navigate to confirmation.
+    // Cart is cleared inside PaymentNotifier._handlePaymentSuccess — do not
+    // clear it again here or the double-call logs a spurious "cart already
+    // empty" warning and can race with the order-confirmation screen that
+    // reads cart state for rendering.
     ref.listen<PaymentState>(paymentProvider, (prev, next) {
       if (next.isSuccess && !(prev?.isSuccess ?? false)) {
         final orderId = next.orderId ?? '';
-        ref.read(cartProvider.notifier).clearCart();
-        // Fetch the newly created order so it's available immediately
         ref.read(ordersProvider.notifier).fetchOrderById(orderId);
         context.go('/order-confirmation/$orderId');
       }
@@ -418,8 +420,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           )
         : null;
 
-    // If no saved address exists but profile has address data, auto-create one
-    if (defaultAddress == null && profile.address.isNotEmpty) {
+    // If no saved address exists but profile has address data with a valid
+    // geocode, auto-create one. Skip the auto-create when lat/lng are 0 —
+    // backend rejects 0,0 addresses and the customer would see a cryptic
+    // "address missing location data" error. Better to route them to the
+    // address picker which captures a real pin.
+    if (defaultAddress == null &&
+        profile.address.isNotEmpty &&
+        profile.latitude != 0 &&
+        profile.longitude != 0) {
       final created = await ref
           .read(addressProvider.notifier)
           .addAddressAsync(
@@ -476,12 +485,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       ref.read(ordersProvider.notifier).fetchOrders(); // background refresh
       context.go('/order-confirmation/$orderId');
     } else {
-      // Razorpay — initiate payment with the backend order ID
+      // Razorpay — use the backend-authoritative grand_total. The client-side
+      // `total` is computed from pre-rounded floats AND re-adds the tip that
+      // the backend has already baked into grand_total, which caused Razorpay
+      // checkout to reject the amount mismatch.
+      final backendTotal = (orderDoc['grand_total'] as num?)?.toDouble() ?? total;
       await ref
           .read(paymentProvider.notifier)
           .startPayment(
             orderId: orderId,
-            amount: total,
+            amount: backendTotal,
             customerEmail: userEmail,
             customerPhone: userPhone,
             customerName: userName,

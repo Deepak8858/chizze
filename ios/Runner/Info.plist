@@ -63,5 +63,29 @@
 		<string>remote-notification</string>
 		<string>location</string>
 	</array>
+
+	<!-- Facebook SDK -->
+	<key>FacebookAppID</key>
+	<string>1871056600222264</string>
+	<key>FacebookClientToken</key>
+	<string>REPLACE_WITH_CLIENT_TOKEN</string>
+	<key>FacebookDisplayName</key>
+	<string>Chizze</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fb1871056600222264</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fbapi</string>
+		<string>fb-messenger-share-api</string>
+		<string>fbauth2</string>
+		<string>fbshareextension</string>
+	</array>
 </dict>
 </plist>

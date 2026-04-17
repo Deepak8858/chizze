@@ -117,13 +117,15 @@ func (h *AuthHandler) isPartnerSignupAllowed(role string) bool {
 		appwrite.QueryLimit(1),
 	})
 	if err != nil {
-		// Transient lookup failure shouldn't permanently lock partner signup —
-		// default-deny is safer for the role gate, but log so ops can alert.
-		log.Printf("[WARN] isPartnerSignupAllowed: ListDocuments(settings) failed, default-deny: %v", err)
-		return false
+		// Default-allow: settings collection is optional admin-override. A missing
+		// collection (404) or transient Appwrite error must NOT permanently lock
+		// partner signup — a fresh deployment has no settings doc at all.
+		log.Printf("[WARN] isPartnerSignupAllowed: ListDocuments(settings) failed, default-allow: %v", err)
+		return true
 	}
 	if settings == nil || len(settings.Documents) == 0 {
-		return false
+		// No admin override configured — allow partner signup by default.
+		return true
 	}
 
 	doc := settings.Documents[0]
@@ -464,6 +466,10 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		OTP         string `json:"otp" binding:"required"`
 		UserID      string `json:"user_id"`
 		AppwriteJWT string `json:"appwrite_jwt" binding:"required"`
+		// Optional role selected at signup. Must match Exchange's behavior so
+		// partners/riders aren't silently downgraded to "customer" when they
+		// enter the app through the OTP path instead of Exchange.
+		Role string `json:"role"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, "Phone, OTP, and appwrite_jwt are required")
@@ -504,13 +510,28 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 
 	role := "customer"
 	if user == nil {
+		// Honor the client-selected role for new users. Validate it's one of
+		// the allowed values and that partner signup is currently enabled.
+		if req.Role != "" {
+			switch req.Role {
+			case "customer", "restaurant_owner", "delivery_partner":
+				role = req.Role
+			default:
+				utils.BadRequest(c, "Invalid role selected")
+				return
+			}
+		}
+		if !h.isPartnerSignupAllowed(role) {
+			utils.Error(c, http.StatusForbidden, partnerSignupDisabledMessage(role))
+			return
+		}
 		// Create user with all required fields. We MUST surface failures — if
 		// we silently ignore them, the client receives a JWT but every subsequent
 		// /users/me etc. request will 404 because no user doc exists.
 		userData := map[string]interface{}{
 			"name":  "",
 			"phone": req.Phone,
-			"role":  "customer",
+			"role":  role,
 		}
 		if _, createErr := h.appwrite.CreateUser(appwriteUserID, userData); createErr != nil && !appwrite.IsConflict(createErr) {
 			log.Printf("[ERROR] VerifyOTP: CreateUser(%s) failed: %v", appwriteUserID, createErr)
@@ -520,6 +541,14 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	} else {
 		if r, ok := user["role"].(string); ok && r != "" {
 			role = r
+		}
+		// Cross-role guard: if an existing user tries to sign in with a
+		// different role, reject with a clear message.
+		if req.Role != "" && req.Role != role {
+			utils.Error(c, http.StatusConflict,
+				"This phone number is already registered as "+roleDisplayName(role)+
+					". Please use a different number.")
+			return
 		}
 	}
 

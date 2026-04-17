@@ -209,18 +209,30 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
   }
 
   /// Poll for pending delivery requests as a fallback when WebSocket is
-  /// disconnected. Checks every 10 seconds for available orders.
+  /// disconnected. 5s interval keeps rider-side order discovery snappy
+  /// enough that WS disconnects during a commute don't leave them idle
+  /// for 10+ seconds while orders pile up at the matcher. Slower than the
+  /// 8s matcher tick so we don't hammer the backend when WS is healthy;
+  /// the matcher clears pending_delivery the moment it broadcasts, so
+  /// faster polling doesn't produce duplicate displays.
   void _startDeliveryRequestPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       if (!mounted || !state.partner.isOnline || state.hasActiveDelivery) return;
       try {
         final response = await _api.get(
           '${ApiConfig.deliveryOrders}?mode=available&per_page=5',
         );
         if (response.success && response.data != null) {
-          final data = response.data as Map<String, dynamic>;
-          final orders = (data['data'] as List<dynamic>?) ?? [];
+          // Paginated backend responses unwrap to a List (not a Map). Earlier
+          // versions cast to Map and swallowed a TypeError, so riders never
+          // saw orders when WebSocket was down — matcher looped forever.
+          final raw = response.data;
+          final orders = raw is List
+              ? raw
+              : raw is Map<String, dynamic>
+                  ? ((raw['data'] as List<dynamic>?) ?? const [])
+                  : const [];
           // Don't show orders that are already in the incoming requests queue
           final existingIds = state.incomingRequests.map((r) => r.order.id).toSet();
           for (final orderData in orders) {
@@ -236,6 +248,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
                 restaurantAddress: orderData['restaurant_address'] as String? ?? '',
                 restaurantLatitude: (orderData['restaurant_latitude'] as num?)?.toDouble() ?? 0,
                 restaurantLongitude: (orderData['restaurant_longitude'] as num?)?.toDouble() ?? 0,
+                customerName: orderData['customer_name'] as String? ?? 'Customer',
+                customerPhone: orderData['customer_phone'] as String? ?? '',
                 customerAddress: orderData['delivery_address'] as String? ?? '',
                 customerLatitude: (orderData['delivery_latitude'] as num?)?.toDouble() ?? 0,
                 customerLongitude: (orderData['delivery_longitude'] as num?)?.toDouble() ?? 0,
@@ -620,18 +634,26 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
         body: body,
       );
       if (!response.success) {
-        // Rollback
+        // Rollback: also tear down location tracking started optimistically above.
+        // Without this, the rider's phone keeps streaming GPS while the backend
+        // thinks they're offline — battery drain + zombie geo entries.
         state = state.copyWith(
           partner: state.partner.copyWith(isOnline: !newOnline),
         );
-        if (newOnline) _stopDeliveryRequestPolling();
+        if (newOnline) {
+          _stopLocationTracking();
+          _stopDeliveryRequestPolling();
+        }
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[Delivery] toggleOnline error: $e');
       state = state.copyWith(
         partner: state.partner.copyWith(isOnline: !newOnline),
       );
-      if (newOnline) _stopDeliveryRequestPolling();
+      if (newOnline) {
+        _stopLocationTracking();
+        _stopDeliveryRequestPolling();
+      }
     }
   }
 

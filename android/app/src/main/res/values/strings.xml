@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Facebook SDK
+         App ID: https://developers.facebook.com/apps/1871056600222264/
+         Client Token must be taken from Settings → Advanced → Client Token
+         and pasted below. Without it the FB SDK throws on init. -->
+    <string name="app_name">Chizze</string>
+    <string name="facebook_app_id">1871056600222264</string>
+    <string name="facebook_client_token">eb2863427296c6f8551613aaee553ac6</string>
+    <string name="fb_login_protocol_scheme">fb1871056600222264</string>
+</resources>

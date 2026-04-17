@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/theme.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../models/delivery_partner.dart';
@@ -438,6 +439,60 @@ class _DeliveryDashboardScreenState
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // Customer name with optional call chip
+          Row(
+            children: [
+              const Icon(
+                Icons.person_rounded,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  request.customerName,
+                  style: AppTypography.caption,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (request.customerPhone.isNotEmpty)
+                GestureDetector(
+                  onTap: () async {
+                    final Uri telUri = Uri(scheme: 'tel', path: request.customerPhone);
+                    if (await canLaunchUrl(telUri)) {
+                      await launchUrl(telUri);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.phone_rounded,
+                          size: 12,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Call',
+                          style: AppTypography.buttonSmall.copyWith(
+                            color: AppColors.primary,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: AppSpacing.md),
           Row(

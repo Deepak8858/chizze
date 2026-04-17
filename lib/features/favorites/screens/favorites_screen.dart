@@ -87,8 +87,19 @@ class FavoritesScreen extends ConsumerWidget {
                         onRemove: () => ref
                             .read(favoritesProvider.notifier)
                             .removeFavorite(restaurant.id),
-                        onTap: () =>
-                            context.push('/restaurant/${restaurant.id}'),
+                        onTap: () {
+                          if (!restaurant.isOnline) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(restaurant.offlineMessage),
+                                duration: const Duration(seconds: 3),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            return;
+                          }
+                          context.push('/restaurant/${restaurant.id}');
+                        },
                       )
                           .animate()
                           .fadeIn(

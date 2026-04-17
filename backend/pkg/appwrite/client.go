@@ -255,6 +255,28 @@ func (c *Client) ListDocumentsCtx(ctx context.Context, collectionID string, quer
 	return &result, nil
 }
 
+// ListCollectionAttributes returns metadata for every attribute defined on a
+// collection. Used at boot by the schema validator to catch drift between code
+// and Appwrite schema before the first live request hits it.
+func (c *Client) ListCollectionAttributes(ctx context.Context, collectionID string) ([]map[string]interface{}, error) {
+	// Use the Appwrite 1.9 JSON query syntax so we can request up to 100 attrs
+	// in one call (default limit is 25).
+	path := fmt.Sprintf("/databases/%s/collections/%s/attributes?queries[]=%s",
+		c.databaseID, collectionID, url.QueryEscape(`{"method":"limit","values":[100]}`))
+	data, err := c.request(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Total      int                      `json:"total"`
+		Attributes []map[string]interface{} `json:"attributes"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal attributes: %w", err)
+	}
+	return result.Attributes, nil
+}
+
 // GetDocument retrieves a single document
 func (c *Client) GetDocument(collectionID, documentID string) (map[string]interface{}, error) {
 	return c.GetDocumentCtx(context.Background(), collectionID, documentID)

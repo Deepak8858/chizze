@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/services/facebook_service.dart';
 import '../../orders/models/order.dart';
 import '../../restaurant/models/menu_item.dart';
 
@@ -122,7 +124,10 @@ class CartState {
     return itemTotal >= 299 ? 0 : 40;
   }
   double get platformFee => 5;
-  double get gst => (itemTotal * 0.05); // 5% GST
+  // Round to 2dp so the client estimate matches backend (which returns paise-based totals).
+  // Without rounding, itemTotal×0.05 can produce values like 14.9999 that break amount-
+  // comparison in Razorpay flows when summed into grandTotal.
+  double get gst => ((itemTotal * 0.05) * 100).roundToDouble() / 100;
   double get discount => couponDiscount;
   String get deliveryType => isEcoDelivery ? 'eco' : 'standard';
   double get grandTotal =>
@@ -163,6 +168,13 @@ class CartNotifier extends StateNotifier<CartState> {
       restaurantId: item.restaurantId,
       restaurantName: item.restaurantName,
     );
+
+    // FB App Events: AddToCart event for Ads retargeting + optimisation.
+    unawaited(FacebookService.instance.logAddToCart(
+      itemId: item.menuItem.id,
+      price: item.menuItem.price,
+      itemName: item.menuItem.name,
+    ));
   }
 
   /// Update quantity of an item

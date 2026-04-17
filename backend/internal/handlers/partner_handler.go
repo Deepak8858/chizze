@@ -62,6 +62,20 @@ func (h *PartnerHandler) Dashboard(c *gin.Context) {
 		return
 	}
 
+	// Short-lived cache to absorb the partner app's 5s polling storm.
+	// TTL below the poll interval is intentional: each partner refreshes at most
+	// once per TTL window, so staleness is bounded and invalidation is unnecessary.
+	cacheKey := "partner:dashboard:" + restID
+	if h.redis != nil {
+		if cached, err := h.redis.Get(c.Request.Context(), cacheKey); err == nil && cached != "" {
+			var payload gin.H
+			if json.Unmarshal([]byte(cached), &payload) == nil {
+				utils.Success(c, payload)
+				return
+			}
+		}
+	}
+
 	// Get today's date range in RFC3339
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
@@ -106,7 +120,7 @@ func (h *PartnerHandler) Dashboard(c *gin.Context) {
 
 	coverImageUrl, _ := restaurant["cover_image_url"].(string)
 
-	utils.Success(c, gin.H{
+	payload := gin.H{
 		"restaurant_id":        restID,
 		"restaurant_name":      name,
 		"is_online":            isOnline,
@@ -115,7 +129,13 @@ func (h *PartnerHandler) Dashboard(c *gin.Context) {
 		"avg_rating":           rating,
 		"pending_orders":       pendingOrders,
 		"restaurant_image_url": coverImageUrl,
-	})
+	}
+	if h.redis != nil {
+		if b, err := json.Marshal(payload); err == nil {
+			_ = h.redis.Set(c.Request.Context(), cacheKey, string(b), 3*time.Second)
+		}
+	}
+	utils.Success(c, payload)
 }
 
 // ListOrders returns orders for the partner's restaurant with status filtering
@@ -141,6 +161,30 @@ func (h *PartnerHandler) ListOrders(c *gin.Context) {
 	}
 
 	pg := models.ParsePagination(c)
+	statusFilter := c.Query("status")
+	fromDate := c.Query("from")
+	toDate := c.Query("to")
+
+	// Short-lived cache for the partner app's 5s polling. TTL intentionally
+	// under the poll interval; cache key scoped to every filter parameter.
+	cacheKey := fmt.Sprintf("partner:orders:%s:p%d:l%d:s%s:f%s:t%s",
+		restID, pg.Page, pg.PerPage, statusFilter, fromDate, toDate)
+	if h.redis != nil {
+		if cached, err := h.redis.Get(c.Request.Context(), cacheKey); err == nil && cached != "" {
+			var payload struct {
+				Data []map[string]interface{} `json:"data"`
+				Meta struct {
+					Page    int `json:"page"`
+					PerPage int `json:"per_page"`
+					Total   int `json:"total"`
+				} `json:"meta"`
+			}
+			if json.Unmarshal([]byte(cached), &payload) == nil {
+				utils.Paginated(c, payload.Data, payload.Meta.Page, payload.Meta.PerPage, payload.Meta.Total)
+				return
+			}
+		}
+	}
 
 	queries := []string{
 		appwrite.QueryEqual("restaurant_id", restID),
@@ -149,16 +193,13 @@ func (h *PartnerHandler) ListOrders(c *gin.Context) {
 		appwrite.QueryOffset(pg.Offset()),
 	}
 
-	// Optional status filter
-	if status := c.Query("status"); status != "" {
-		queries = append(queries, appwrite.QueryEqual("status", status))
+	if statusFilter != "" {
+		queries = append(queries, appwrite.QueryEqual("status", statusFilter))
 	}
-
-	// Optional date range filter
-	if fromDate := c.Query("from"); fromDate != "" {
+	if fromDate != "" {
 		queries = append(queries, appwrite.QueryGreaterThanEqual("placed_at", fromDate))
 	}
-	if toDate := c.Query("to"); toDate != "" {
+	if toDate != "" {
 		queries = append(queries, appwrite.QueryLessThanEqual("placed_at", toDate))
 	}
 
@@ -166,6 +207,35 @@ func (h *PartnerHandler) ListOrders(c *gin.Context) {
 	if err != nil {
 		utils.InternalError(c, "Failed to fetch orders")
 		return
+	}
+
+	// Collect customer IDs that need enrichment (missing denormalized name/phone)
+	// so we can batch-fetch them in a single Appwrite query instead of N+1.
+	missingIDSet := make(map[string]struct{})
+	for _, order := range result.Documents {
+		custID, _ := order["customer_id"].(string)
+		if custID == "" {
+			continue
+		}
+		name, _ := order["customer_name"].(string)
+		phone, _ := order["customer_phone"].(string)
+		if name == "" || phone == "" {
+			missingIDSet[custID] = struct{}{}
+		}
+	}
+	userByID := make(map[string]map[string]interface{}, len(missingIDSet))
+	if len(missingIDSet) > 0 {
+		ids := make([]string, 0, len(missingIDSet))
+		for id := range missingIDSet {
+			ids = append(ids, id)
+		}
+		if userList, uErr := h.appwrite.ListUsersByIDs(ids); uErr == nil && userList != nil {
+			for _, u := range userList.Documents {
+				if uid, _ := u["$id"].(string); uid != "" {
+					userByID[uid] = u
+				}
+			}
+		}
 	}
 
 	// Enrich orders with accept deadline (90 seconds from placed_at for new orders)
@@ -183,18 +253,37 @@ func (h *PartnerHandler) ListOrders(c *gin.Context) {
 			order["is_new"] = false
 		}
 
-		// Enrich with customer name from users collection
+		// Fill missing customer name/phone from the batch-fetched user map.
 		if custID, _ := order["customer_id"].(string); custID != "" {
-			if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
-				if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
-					if name, _ := user["name"].(string); name != "" {
-						order["customer_name"] = name
+			if user, ok := userByID[custID]; ok {
+				if existing, _ := order["customer_name"].(string); existing == "" {
+					if n, _ := user["name"].(string); n != "" {
+						order["customer_name"] = n
+					}
+				}
+				if existing, _ := order["customer_phone"].(string); existing == "" {
+					if p, _ := user["phone"].(string); p != "" {
+						order["customer_phone"] = p
 					}
 				}
 			}
 		}
 
 		enriched = append(enriched, order)
+	}
+
+	if h.redis != nil {
+		payload := map[string]interface{}{
+			"data": enriched,
+			"meta": map[string]interface{}{
+				"page":     pg.Page,
+				"per_page": pg.PerPage,
+				"total":    result.Total,
+			},
+		}
+		if b, err := json.Marshal(payload); err == nil {
+			_ = h.redis.Set(c.Request.Context(), cacheKey, string(b), 3*time.Second)
+		}
 	}
 
 	utils.Paginated(c, enriched, pg.Page, pg.PerPage, result.Total)
@@ -219,6 +308,22 @@ func (h *PartnerHandler) Analytics(c *gin.Context) {
 	}
 
 	period := c.DefaultQuery("period", "week")
+
+	// 30-second Redis cache keyed on restaurant+period. Analytics data is
+	// aggregate-across-1000-orders — not remotely real-time — and the partner
+	// dashboard polls it on every screen focus. At 1000 concurrent partners
+	// the raw path spawned a ListOrders(limit=1000) per hit, which
+	// dominated our Appwrite quota.
+	analyticsCacheKey := "partner_analytics:" + restID + ":" + period
+	if h.redis != nil {
+		if cached, err := h.redis.Get(c.Request.Context(), analyticsCacheKey); err == nil && cached != "" {
+			var payload gin.H
+			if jerr := json.Unmarshal([]byte(cached), &payload); jerr == nil {
+				utils.Success(c, payload)
+				return
+			}
+		}
+	}
 
 	now := time.Now()
 	var fromDate time.Time
@@ -344,7 +449,7 @@ func (h *PartnerHandler) Analytics(c *gin.Context) {
 		avgOrderValue = totalRevenue / float64(totalOrders)
 	}
 
-	utils.Success(c, gin.H{
+	analyticsPayload := gin.H{
 		"period":          period,
 		"total_revenue":   totalRevenue,
 		"total_orders":    totalOrders,
@@ -352,7 +457,13 @@ func (h *PartnerHandler) Analytics(c *gin.Context) {
 		"revenue_data":    dailyRevenue,
 		"top_items":       topItems,
 		"peak_hours":      peakHours,
-	})
+	}
+	if h.redis != nil {
+		if encoded, jerr := json.Marshal(analyticsPayload); jerr == nil {
+			_ = h.redis.Set(c.Request.Context(), analyticsCacheKey, string(encoded), 30*time.Second)
+		}
+	}
+	utils.Success(c, analyticsPayload)
 }
 
 // ToggleOnline toggles the restaurant's online/offline status
@@ -575,6 +686,20 @@ func (h *PartnerHandler) Performance(c *gin.Context) {
 		return
 	}
 
+	// 30-second Redis cache. Same rationale as Analytics — sliding-7d metrics
+	// don't need sub-minute freshness, but the partner app polls this on every
+	// dashboard refresh and each uncached hit is a ListOrders(limit=1000).
+	perfCacheKey := "partner_performance:" + restID
+	if h.redis != nil {
+		if cached, err := h.redis.Get(c.Request.Context(), perfCacheKey); err == nil && cached != "" {
+			var payload gin.H
+			if jerr := json.Unmarshal([]byte(cached), &payload); jerr == nil {
+				utils.Success(c, payload)
+				return
+			}
+		}
+	}
+
 	// Get last 7 days of orders
 	fromDate := time.Now().AddDate(0, 0, -7).Format(time.RFC3339)
 	queries := []string{
@@ -629,14 +754,20 @@ func (h *PartnerHandler) Performance(c *gin.Context) {
 		avgPrepTime = totalPrepTimeMin / float64(prepCount)
 	}
 
-	utils.Success(c, gin.H{
+	perfPayload := gin.H{
 		"total_orders":      totalOrders,
 		"accepted_orders":   acceptedOrders,
 		"cancelled_orders":  cancelledOrders,
 		"acceptance_rate":   acceptanceRate,
 		"cancellation_rate": cancellationRate,
 		"avg_prep_time_min": avgPrepTime,
-	})
+	}
+	if h.redis != nil {
+		if encoded, jerr := json.Marshal(perfPayload); jerr == nil {
+			_ = h.redis.Set(c.Request.Context(), perfCacheKey, string(encoded), 30*time.Second)
+		}
+	}
+	utils.Success(c, perfPayload)
 }
 
 // UpdateRestaurant updates restaurant metadata (e.g. image URL)
@@ -818,7 +949,7 @@ func (h *PartnerHandler) ListPayouts(c *gin.Context) {
 
 	queries := []string{
 		appwrite.QueryEqual("partner_id", restID),
-		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryOrderDesc("$createdAt"),
 		appwrite.QueryLimit(pg.PerPage),
 		appwrite.QueryOffset(pg.Offset()),
 	}

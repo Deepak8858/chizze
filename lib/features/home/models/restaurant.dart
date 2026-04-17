@@ -75,6 +75,32 @@ class Restaurant {
     );
   }
 
+  /// User-facing label like "Opens 10:00 AM – 8:00 PM" derived from
+  /// [openingTime]/[closingTime] (stored as 24h "HH:MM"). Falls back to a
+  /// generic message if either value can't be parsed.
+  String get offlineMessage {
+    final opens = _formatTimeOfDay(openingTime);
+    final closes = _formatTimeOfDay(closingTime);
+    if (opens == null || closes == null) {
+      return 'Restaurant is currently offline';
+    }
+    return 'Restaurant will open from $opens to $closes';
+  }
+
+  static String? _formatTimeOfDay(String hhmm) {
+    final parts = hhmm.split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) {
+      return null;
+    }
+    final period = h >= 12 ? 'PM' : 'AM';
+    final h12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
+    final mm = m.toString().padLeft(2, '0');
+    return '$h12:$mm $period';
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'owner_id': ownerId,

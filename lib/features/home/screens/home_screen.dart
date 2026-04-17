@@ -693,8 +693,22 @@ class HomeScreen extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.base),
-      child: GlassCard(
-        onTap: () => context.push('/restaurant/${restaurant.id}'),
+      child: Opacity(
+        opacity: restaurant.isOnline ? 1.0 : 0.6,
+        child: GlassCard(
+        onTap: () {
+          if (!restaurant.isOnline) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(restaurant.offlineMessage),
+                duration: const Duration(seconds: 3),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
+          context.push('/restaurant/${restaurant.id}');
+        },
         padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -798,6 +812,26 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  if (!restaurant.isOnline)
+                    Positioned(
+                      bottom: 8,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.75),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Closed',
+                          style: AppTypography.overline.copyWith(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -902,6 +936,7 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     ).animate(delay: (400 + index * 100).ms).fadeIn().slideY(begin: 0.05);

@@ -312,6 +312,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   },
           ),
         ),
+
+        const SizedBox(width: AppSpacing.md),
+
+        // Facebook
+        Expanded(
+          child: _SocialButton(
+            icon: Icons.facebook_rounded,
+            label: 'Facebook',
+            onTap: authState.isLoading
+                ? null
+                : () {
+                    ref
+                        .read(authProvider.notifier)
+                        .loginWithFacebook();
+                  },
+          ),
+        ),
       ],
     ).animate(delay: 600.ms).fadeIn();
   }

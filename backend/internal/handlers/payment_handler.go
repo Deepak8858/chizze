@@ -294,9 +294,28 @@ func (h *PaymentHandler) Webhook(c *gin.Context) {
 					paymentID, rzpOrderID, err)
 			}
 
-			if _, err := h.appwrite.UpdateOrder(orderID, map[string]interface{}{
+			// Cancel the order alongside marking payment failed. Without this
+			// the order stayed in "placed" status and the restaurant-acceptance
+			// + delivery-matching workers would continue acting on a doomed
+			// order, producing phantom rider assignments and restaurant pings.
+			orderDoc, gErr := h.appwrite.GetOrder(orderID)
+			var currentOrderStatus string
+			if gErr == nil && orderDoc != nil {
+				currentOrderStatus, _ = orderDoc["status"].(string)
+			}
+
+			orderUpdate := map[string]interface{}{
 				"payment_status": models.PaymentFailed,
-			}); err != nil {
+			}
+			// Only cancel if the order hasn't already progressed. A restaurant
+			// that already confirmed/prepared the order takes precedence over
+			// a delayed payment.failed — those are handled by refund flows.
+			if currentOrderStatus == "" || currentOrderStatus == models.OrderStatusPlaced {
+				orderUpdate["status"] = models.OrderStatusCancelled
+				orderUpdate["cancellation_reason"] = "Payment failed"
+			}
+
+			if _, err := h.appwrite.UpdateOrder(orderID, orderUpdate); err != nil {
 				log.Printf("[ERROR] webhook payment.failed: UpdateOrder failed: order=%s payment=%s: %v",
 					orderID, paymentID, err)
 			}

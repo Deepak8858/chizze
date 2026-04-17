@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
+import '../../../core/services/facebook_service.dart';
 import '../../cart/providers/cart_provider.dart';
 
 /// Razorpay configuration
@@ -26,6 +28,7 @@ class PaymentState {
   final String? orderId;
   final String? razorpayOrderId;
   final bool isSuccess;
+  final int amountPaise; // retained across Razorpay callback for FB Purchase event
 
   const PaymentState({
     this.isProcessing = false,
@@ -34,6 +37,7 @@ class PaymentState {
     this.orderId,
     this.razorpayOrderId,
     this.isSuccess = false,
+    this.amountPaise = 0,
   });
 
   PaymentState copyWith({
@@ -43,6 +47,7 @@ class PaymentState {
     String? orderId,
     String? razorpayOrderId,
     bool? isSuccess,
+    int? amountPaise,
   }) {
     return PaymentState(
       isProcessing: isProcessing ?? this.isProcessing,
@@ -51,6 +56,7 @@ class PaymentState {
       orderId: orderId ?? this.orderId,
       razorpayOrderId: razorpayOrderId ?? this.razorpayOrderId,
       isSuccess: isSuccess ?? this.isSuccess,
+      amountPaise: amountPaise ?? this.amountPaise,
     );
   }
 }
@@ -119,6 +125,24 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         final data = response.data as Map<String, dynamic>;
         final orderId = data['\$id'] as String? ?? '';
         state = state.copyWith(orderId: orderId, isProcessing: false);
+        // FB App Events: Purchase + InitiatedCheckout for Ads attribution.
+        // We fire Purchase here for COD (which completes immediately on order
+        // creation) and InitiatedCheckout for online methods (Razorpay fires
+        // Purchase again on verified payment — see _handlePaymentSuccess).
+        final total = (data['grand_total'] as num?)?.toDouble() ?? 0;
+        final itemCount = items.length;
+        if (paymentMethod == 'cod') {
+          unawaited(FacebookService.instance.logPurchase(
+            amount: total,
+            orderId: orderId,
+            itemCount: itemCount,
+          ));
+        } else {
+          unawaited(FacebookService.instance.logInitiatedCheckout(
+            totalAmount: total,
+            itemCount: itemCount,
+          ));
+        }
         return data;
       } else {
         state = state.copyWith(
@@ -167,14 +191,26 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
       String razorpayOrderId = '';
       String razorpayKeyId = RazorpayConfig.keyId;
-      int amountPaise = (amount * 100).toInt();
+      // `.round()` — not `.toInt()` — so a floating-point itemTotal×0.05 GST
+      // that lands at e.g. 14999.999 becomes 15000 paise. Razorpay rejects the
+      // checkout if the client amount doesn't exactly match the order amount.
+      int amountPaise = (amount * 100).round();
 
       if (response.success && response.data != null) {
         final data = response.data as Map<String, dynamic>;
         razorpayOrderId = data['razorpay_order_id'] ?? '';
         razorpayKeyId = data['razorpay_key_id'] ?? RazorpayConfig.keyId;
-        amountPaise = data['amount'] ?? amountPaise;
-        state = state.copyWith(razorpayOrderId: razorpayOrderId);
+        // Always trust the backend amount: it's the authoritative value used
+        // when the Razorpay order was created. Any client-side computation is
+        // advisory only.
+        final backendAmount = data['amount'];
+        if (backendAmount is num) {
+          amountPaise = backendAmount.toInt();
+        }
+        state = state.copyWith(
+          razorpayOrderId: razorpayOrderId,
+          amountPaise: amountPaise,
+        );
       } else {
         state = state.copyWith(
           isProcessing: false,
@@ -252,6 +288,15 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     } catch (e) {
       if (kDebugMode) debugPrint('[Payment] Backend verification failed: $e');
       // Non-fatal — webhook will catch it server-side
+    }
+
+    // FB Purchase event fires now (after signature verified) for online
+    // payments. Amount is in paise from Razorpay; convert to INR.
+    if (state.orderId != null && state.orderId!.isNotEmpty) {
+      unawaited(FacebookService.instance.logPurchase(
+        amount: state.amountPaise / 100.0,
+        orderId: state.orderId!,
+      ));
     }
 
     state = PaymentState(

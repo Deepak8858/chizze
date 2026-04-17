@@ -41,4 +41,20 @@ class Environment {
   static bool get isProduction => env == 'production';
   static bool get isDev => env == 'dev';
   static bool get isStaging => env == 'staging';
+
+  // ── Facebook SDK ──
+  // App ID and Client Token come from Facebook Developer Console:
+  //   App ID → Settings → Basic
+  //   Client Token → Settings → Advanced → Client Token
+  // The App ID is public (shipped in AndroidManifest/Info.plist), but the
+  // Client Token can be overridden per-build if needed.
+  static const String facebookAppId = String.fromEnvironment(
+    'FB_APP_ID',
+    defaultValue: '1871056600222264',
+  );
+  static const String facebookClientToken = String.fromEnvironment(
+    'FB_CLIENT_TOKEN',
+    defaultValue: 'eb2863427296c6f8551613aaee553ac6',
+  );
+  static const String facebookDisplayName = 'Chizze';
 }

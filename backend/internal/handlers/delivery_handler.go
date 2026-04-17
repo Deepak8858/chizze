@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -303,9 +305,30 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 	orderID := c.Param("id")
 	userID := middleware.GetUserID(c)
 
+	// Fail-closed if Redis is unavailable. Without the distributed lock we
+	// can't safely prevent two riders double-accepting the same order — the
+	// subsequent Appwrite "delivery_partner_id == ''" check races. Returning
+	// 503 forces the client to retry once Redis recovers.
+	if h.redis == nil {
+		utils.Error(c, http.StatusServiceUnavailable, "Delivery dispatch temporarily unavailable. Please retry.")
+		return
+	}
+
 	// Distributed lock to prevent two partners accepting simultaneously
 	if h.redis != nil {
 		ctx := context.Background()
+
+		// Enforce matcher's assignment. Without this, any rider with a valid
+		// token can scrape ready-status orderIDs and POST /accept to steal
+		// them. The matcher writes assigned_rider:<orderID>=<riderID> for 45s
+		// when it dispatches the request. If the key is absent (TTL expired
+		// or the order came through the polling fallback path) we allow the
+		// accept — the later "already assigned" check still guards races.
+		if assignedRaw, aErr := h.redis.Get(ctx, "assigned_rider:"+orderID); aErr == nil && assignedRaw != "" && assignedRaw != userID {
+			utils.Forbidden(c, "This order is assigned to another delivery partner")
+			return
+		}
+
 		lockKey := "delivery_lock:" + orderID
 		acquired, err := h.redis.SetNX(ctx, lockKey, userID, 30*time.Second)
 		if err != nil || !acquired {
@@ -390,6 +413,7 @@ func (h *DeliveryHandler) AcceptOrder(c *gin.Context) {
 	if h.redis != nil {
 		ctx := c.Request.Context()
 		_ = h.redis.Del(ctx, "pending_delivery:"+orderID)
+		_ = h.redis.Del(ctx, "assigned_rider:"+orderID)
 		_ = h.redis.Del(ctx, "rejected_riders:"+orderID)
 		// Remove from pending state so rider can receive new delivery requests
 		_, _ = h.redis.SRem(ctx, "pending_riders", userID)
@@ -613,11 +637,56 @@ func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 		totalCount = result.Total
 	}
 
+	// Per-request caches so multiple orders from the same customer / restaurant
+	// / delivery address only hit Appwrite once. Without this, 50 orders from
+	// the same restaurant do 50 GetRestaurant calls under load, which breaks
+	// the 1000-user target. Cache entries are map[string]interface{} or nil
+	// for sticky-negative lookups (not-found is cached too so we don't retry).
+	userCache := make(map[string]map[string]interface{})
+	restCache := make(map[string]map[string]interface{})
+	addrCache := make(map[string]map[string]interface{})
+	getUserCached := func(id string) map[string]interface{} {
+		if cached, ok := userCache[id]; ok {
+			return cached
+		}
+		u, err := h.appwrite.GetUser(id)
+		if err != nil {
+			userCache[id] = nil
+			return nil
+		}
+		userCache[id] = u
+		return u
+	}
+	getRestCached := func(id string) map[string]interface{} {
+		if cached, ok := restCache[id]; ok {
+			return cached
+		}
+		r, err := h.appwrite.GetRestaurant(id)
+		if err != nil {
+			restCache[id] = nil
+			return nil
+		}
+		restCache[id] = r
+		return r
+	}
+	getAddrCached := func(id string) map[string]interface{} {
+		if cached, ok := addrCache[id]; ok {
+			return cached
+		}
+		a, err := h.appwrite.GetAddress(id)
+		if err != nil {
+			addrCache[id] = nil
+			return nil
+		}
+		addrCache[id] = a
+		return a
+	}
+
 	// Enrich orders with customer name/phone and delivery partner details
 	for _, order := range allDocs {
 		if custID, _ := order["customer_id"].(string); custID != "" {
 			if _, exists := order["customer_name"]; !exists || order["customer_name"] == nil {
-				if user, uErr := h.appwrite.GetUser(custID); uErr == nil && user != nil {
+				if user := getUserCached(custID); user != nil {
 					if name, _ := user["name"].(string); name != "" {
 						order["customer_name"] = name
 					}
@@ -644,7 +713,7 @@ func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 		// The WS path sends enriched data from the matcher; polling must match.
 		if restID, _ := order["restaurant_id"].(string); restID != "" {
 			if _, hasName := order["restaurant_name"]; !hasName || order["restaurant_name"] == nil || order["restaurant_name"] == "" {
-				if rest, rErr := h.appwrite.GetRestaurant(restID); rErr == nil && rest != nil {
+				if rest := getRestCached(restID); rest != nil {
 					if n, _ := rest["name"].(string); n != "" {
 						order["restaurant_name"] = n
 					}
@@ -666,7 +735,7 @@ func (h *DeliveryHandler) ActiveOrders(c *gin.Context) {
 		// Enrich delivery address lat/lng
 		if addrID, _ := order["delivery_address_id"].(string); addrID != "" {
 			if _, hasLat := order["delivery_latitude"]; !hasLat || order["delivery_latitude"] == nil {
-				if addr, aErr := h.appwrite.GetAddress(addrID); aErr == nil && addr != nil {
+				if addr := getAddrCached(addrID); addr != nil {
 					if lat, ok := addr["latitude"].(float64); ok {
 						order["delivery_latitude"] = lat
 					}
@@ -702,6 +771,22 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 		return
 	}
 	userID := middleware.GetUserID(c)
+
+	// 3-second Redis cache. Riders poll this endpoint aggressively for the
+	// "am I online / any active deliveries" badge, and under 1000-user load
+	// the two ListOrders + multi-order enrichment dominated Appwrite quota.
+	// A 3s TTL is short enough that active-order changes appear nearly
+	// instantly while collapsing rapid polling into a single backing query.
+	dashCacheKey := "delivery_dashboard:" + userID
+	if h.redis != nil {
+		if cached, err := h.redis.Get(c.Request.Context(), dashCacheKey); err == nil && cached != "" {
+			var payload gin.H
+			if jerr := json.Unmarshal([]byte(cached), &payload); jerr == nil {
+				utils.Success(c, payload)
+				return
+			}
+		}
+	}
 
 	// Get today's completed/active orders for this partner
 	now := time.Now()
@@ -887,6 +972,12 @@ func (h *DeliveryHandler) Dashboard(c *gin.Context) {
 		resp["active_orders"] = activeDeliveryOrders
 		// Backward-compat: single active_order field for older clients
 		resp["active_order"] = activeDeliveryOrders[0]
+	}
+
+	if h.redis != nil {
+		if encoded, jerr := json.Marshal(resp); jerr == nil {
+			_ = h.redis.Set(c.Request.Context(), dashCacheKey, string(encoded), 3*time.Second)
+		}
 	}
 
 	utils.Success(c, resp)
@@ -1244,7 +1335,7 @@ func (h *DeliveryHandler) ListPayouts(c *gin.Context) {
 
 	queries := []string{
 		appwrite.QueryEqual("user_id", userID),
-		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryOrderDesc("$createdAt"),
 		appwrite.QueryLimit(pg.PerPage),
 		appwrite.QueryOffset(pg.Offset()),
 	}
@@ -1425,6 +1516,10 @@ func (h *DeliveryHandler) RejectOrder(c *gin.Context) {
 	if h.redis != nil {
 		ctx := context.Background()
 		h.redis.Del(ctx, "pending_delivery:"+orderID)
+		// Clear assignment so next matched rider can accept. Without this, a
+		// rejected rider's "assigned_rider" key lingers for up to 45s and
+		// blocks the next rider's accept.
+		h.redis.Del(ctx, "assigned_rider:"+orderID)
 		// Track this rider as having rejected the order so matcher won't re-send to them
 		rejectedKey := "rejected_riders:" + orderID
 		h.redis.SAdd(ctx, rejectedKey, userID)

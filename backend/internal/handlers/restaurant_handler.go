@@ -39,7 +39,6 @@ func NewRestaurantHandler(aw *services.AppwriteService, geo *services.GeoService
 func (h *RestaurantHandler) List(c *gin.Context) {
 	pg := models.ParsePagination(c)
 	queries := []string{
-		appwrite.QueryEqual("is_online", true),
 		appwrite.QueryLimit(pg.PerPage),
 		appwrite.QueryOffset(pg.Offset()),
 	}
@@ -48,7 +47,11 @@ func (h *RestaurantHandler) List(c *gin.Context) {
 		queries = append(queries, appwrite.QuerySearch("name", q))
 	}
 	if cuisine := c.Query("cuisine"); cuisine != "" {
-		queries = append(queries, appwrite.QuerySearch("cuisines", cuisine))
+		// cuisines is a string[] attribute — fulltext "search" requires an
+		// index Appwrite doesn't auto-create for arrays, which caused every
+		// /restaurants?cuisine=... request to 500. "contains" matches any
+		// element in the array and needs no fulltext index.
+		queries = append(queries, appwrite.QueryContains("cuisines", cuisine))
 	}
 	if c.Query("veg_only") == "true" {
 		queries = append(queries, appwrite.QueryEqual("is_veg_only", true))
@@ -97,7 +100,6 @@ func (h *RestaurantHandler) Nearby(c *gin.Context) {
 	minLat, maxLat, minLng, maxLng := h.geo.NearbyBounds(lat, lng, radius)
 
 	queries := []string{
-		appwrite.QueryEqual("is_online", true),
 		appwrite.QueryGreaterThanEqual("latitude", fmt.Sprintf("%f", minLat)),
 		appwrite.QueryLessThanEqual("latitude", fmt.Sprintf("%f", maxLat)),
 		appwrite.QueryGreaterThanEqual("longitude", fmt.Sprintf("%f", minLng)),
@@ -252,7 +254,9 @@ func (h *RestaurantHandler) GetReviews(c *gin.Context) {
 	result, err := h.appwrite.ListReviewsByQuery([]string{
 		appwrite.QueryEqual("restaurant_id", restaurantID),
 		appwrite.QueryEqual("is_visible", true),
-		appwrite.QueryOrderDesc("created_at"),
+		// Appwrite's managed timestamp is $createdAt; reviews collection has
+		// no user-defined "created_at" attribute, so the old query 400-errored.
+		appwrite.QueryOrderDesc("$createdAt"),
 		appwrite.QueryLimit(pg.PerPage),
 		appwrite.QueryOffset(pg.Offset()),
 	})

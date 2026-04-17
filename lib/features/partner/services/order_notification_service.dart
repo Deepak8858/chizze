@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -12,6 +13,7 @@ class OrderNotificationService {
 
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   bool _initialized = false;
   Timer? _alertTimer;
 
@@ -45,6 +47,13 @@ class OrderNotificationService {
   }) async {
     // Haptic feedback — heavy impact
     await HapticFeedback.heavyImpact();
+
+    // Play notification sound
+    try {
+      await _audioPlayer.play(AssetSource('faaah.mp3'));
+    } catch (e) {
+      if (kDebugMode) debugPrint('[OrderNotificationService] audio error: $e');
+    }
 
     // Show local notification without sound
     if (_initialized) {
@@ -89,8 +98,11 @@ class OrderNotificationService {
   /// Start repeated alert for unattended orders (haptic feedback every 10s)
   void startRepeatedAlert() {
     stopRepeatedAlert();
-    _alertTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    _alertTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
       HapticFeedback.heavyImpact();
+      try {
+        await _audioPlayer.play(AssetSource('faaah.mp3'));
+      } catch (_) {}
     });
   }
 
@@ -107,5 +119,6 @@ class OrderNotificationService {
 
   void dispose() {
     stopRepeatedAlert();
+    _audioPlayer.dispose();
   }
 }

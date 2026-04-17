@@ -9,13 +9,22 @@ import (
 	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/internal/websocket"
 	"github.com/chizze/backend/pkg/appwrite"
+	redispkg "github.com/chizze/backend/pkg/redis"
 )
 
 // OrderTimeout periodically checks for orders that have been in "placed" status for too long
 // and auto-cancels them if the restaurant hasn't confirmed within the timeout period.
+//
+// Behaviour: an order is eligible for auto-cancel only if the owner was actually
+// reachable when the order was placed (i.e. we saw WS active OR FCM was sent).
+// If neither delivery channel worked, PlaceOrder would have recorded no flag in
+// Redis — those orders are logged as STUCK_ORDER instead of cancelled, because
+// auto-cancelling an order the restaurant never even saw is worse UX than
+// letting a human resolve it via admin.
 type OrderTimeout struct {
 	awService *services.AppwriteService
 	hub       *websocket.Hub
+	redis     *redispkg.Client
 	interval  time.Duration
 	timeout   time.Duration
 }
@@ -23,12 +32,14 @@ type OrderTimeout struct {
 func NewOrderTimeout(
 	awService *services.AppwriteService,
 	hub *websocket.Hub,
+	redis *redispkg.Client,
 	interval time.Duration,
 	timeout time.Duration,
 ) *OrderTimeout {
 	return &OrderTimeout{
 		awService: awService,
 		hub:       hub,
+		redis:     redis,
 		interval:  interval,
 		timeout:   timeout,
 	}
@@ -83,6 +94,20 @@ func (w *OrderTimeout) process() {
 
 		// If order is older than timeout, cancel it
 		if now.Sub(createdAt) > w.timeout {
+			// Skip auto-cancel if the restaurant owner was never reachable.
+			// PlaceOrder writes order_notif:<id>:ws or :fcm when a notification
+			// actually went out. Missing both means the order is stuck and
+			// needs human intervention (admin dashboard) rather than silent
+			// cancel — silent cancel hides the bug from ops visibility.
+			if w.redis != nil {
+				ctx := context.Background()
+				wsFlag, _ := w.redis.Get(ctx, "order_notif:"+orderID+":ws")
+				fcmFlag, _ := w.redis.Get(ctx, "order_notif:"+orderID+":fcm")
+				if wsFlag == "" && fcmFlag == "" {
+					log.Printf("[worker] OrderTimeout: STUCK_ORDER %s — restaurant owner was unreachable when placed (no WS, no FCM). Leaving for admin review.", orderID)
+					continue
+				}
+			}
 			log.Printf("[worker] OrderTimeout: auto-canceling order %s (placed %v ago, limit %v)", orderID, now.Sub(createdAt).Round(time.Second), w.timeout)
 
 			updates := map[string]interface{}{

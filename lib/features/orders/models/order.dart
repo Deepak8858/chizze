@@ -8,6 +8,7 @@ class Order {
   final String orderNumber;
   final String customerId;
   final String? customerName;
+  final String? customerPhone;
   final String restaurantId;
   final String restaurantName;
   final String? deliveryPartnerId;
@@ -46,12 +47,16 @@ class Order {
   final DateTime? cancelledAt;
   final String? cancellationReason;
   final String? cancelledBy;
+  /// Server-derived: customer has already submitted a review for this order.
+  /// Only set on the customer's own delivered orders; null otherwise.
+  final bool? hasReview;
 
   const Order({
     required this.id,
     required this.orderNumber,
     required this.customerId,
     this.customerName,
+    this.customerPhone,
     required this.restaurantId,
     required this.restaurantName,
     this.deliveryPartnerId,
@@ -90,6 +95,7 @@ class Order {
     this.cancelledAt,
     this.cancellationReason,
     this.cancelledBy,
+    this.hasReview,
   });
 
   factory Order.fromMap(Map<String, dynamic> map) {
@@ -98,6 +104,7 @@ class Order {
       orderNumber: map['order_number'] ?? '',
       customerId: map['customer_id'] ?? '',
       customerName: map['customer_name'],
+      customerPhone: map['customer_phone'],
       restaurantId: map['restaurant_id'] ?? '',
       restaurantName: map['restaurant_name'] ?? '',
       deliveryPartnerId: map['delivery_partner_id'],
@@ -146,6 +153,7 @@ class Order {
           : null,
       cancellationReason: map['cancellation_reason'],
       cancelledBy: map['cancelled_by'],
+      hasReview: map['has_review'] is bool ? map['has_review'] as bool : null,
     );
   }
 
@@ -194,6 +202,7 @@ class Order {
       'order_number': orderNumber,
       'customer_id': customerId,
       'customer_name': customerName,
+      'customer_phone': customerPhone,
       'restaurant_id': restaurantId,
       'restaurant_name': restaurantName,
       'delivery_address_id': deliveryAddressId,
@@ -230,6 +239,7 @@ class Order {
     String? paymentStatus,
     String? paymentId,
     String? customerName,
+    String? customerPhone,
     String? deliveryPartnerId,
     String? deliveryPartnerName,
     String? deliveryPartnerPhone,
@@ -241,12 +251,14 @@ class Order {
     DateTime? cancelledAt,
     String? cancellationReason,
     String? cancelledBy,
+    bool? hasReview,
   }) {
     return Order(
       id: id,
       orderNumber: orderNumber,
       customerId: customerId,
       customerName: customerName ?? this.customerName,
+      customerPhone: customerPhone ?? this.customerPhone,
       restaurantId: restaurantId,
       restaurantName: restaurantName,
       deliveryPartnerId: deliveryPartnerId ?? this.deliveryPartnerId,
@@ -285,6 +297,7 @@ class Order {
       cancelledAt: cancelledAt ?? this.cancelledAt,
       cancellationReason: cancellationReason ?? this.cancellationReason,
       cancelledBy: cancelledBy ?? this.cancelledBy,
+      hasReview: hasReview ?? this.hasReview,
     );
   }
 }

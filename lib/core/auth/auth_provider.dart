@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/appwrite_service.dart';
 import '../services/api_client.dart';
+import '../services/facebook_service.dart';
 import '../models/api_response.dart';
 
 /// Secure storage keys for persisted auth data
@@ -566,6 +567,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         status: AuthStatus.authenticated,
         isLoading: false,
       );
+      // FB App Events: track registration so FB Ads can attribute installs.
+      // isNewUser flag is set by _exchangeToken based on backend response.
+      if (state.isNewUser) {
+        unawaited(FacebookService.instance.logCompletedRegistration(method: 'phone_otp'));
+      }
     } on AppwriteException catch (e) {
       if (kDebugMode) {
         debugPrint('[Auth] verifyPhoneOTP: failed — ${e.message} (${e.code})');
@@ -625,6 +631,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Facebook Login. Two-step: (1) native FB SDK gets access token for Ads
+  /// attribution + App Events matching, (2) Appwrite OAuth creates the actual
+  /// session + backend JWT exchange via the existing OAuth path.
+  ///
+  /// We call the native SDK first because FB's attribution model depends on
+  /// seeing a native login event to deduplicate installs vs. organic users.
+  /// Failure of the native step is non-fatal — Appwrite OAuth still runs.
+  Future<void> loginWithFacebook() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      // Best-effort native SDK login for Ads attribution. Token result is
+      // not used here because Appwrite handles the actual session.
+      await FacebookService.instance.signIn();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Auth] FB SDK pre-step failed (continuing): $e');
+    }
+    // Delegate to the shared OAuth path — same exchange + role handling.
+    await loginWithOAuth(OAuthProvider.facebook);
+    if (state.status == AuthStatus.authenticated) {
+      unawaited(FacebookService.instance.logCompletedRegistration(method: 'facebook'));
+    }
+  }
+
   /// Set the role the user selected on the role selection screen (before login)
   void setSelectedRole(String role) {
     if (state.selectedRole == role) return; // no-op if already set
@@ -636,6 +665,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> completeOnboarding({
     required String name,
     String? email,
+    String? phone,
     String? address,
     String? city,
     double? latitude,
@@ -655,6 +685,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       };
       if (email != null && email.isNotEmpty) {
         body['email'] = email;
+      }
+      if (phone != null && phone.isNotEmpty) {
+        body['phone'] = phone;
       }
       if (address != null && address.isNotEmpty) {
         body['address'] = address;

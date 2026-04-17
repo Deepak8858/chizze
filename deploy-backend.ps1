@@ -39,7 +39,10 @@ $dirs = @(
 foreach ($d in $dirs) {
     if (Test-Path $d.local) {
         Invoke-Expression "$SSH 'mkdir -p $($d.remote)'"
-        Invoke-Expression "$SCP -r $($d.local) ${VM_USER}@${VM}:$(Split-Path $d.remote -Parent)/"
+        # NB: PowerShell's Split-Path replaces / with \ on Windows, mangling the
+        # remote unix path. Compute the parent with a string op instead.
+        $remoteParent = $d.remote.Substring(0, $d.remote.LastIndexOf('/'))
+        Invoke-Expression "$SCP -r $($d.local) ${VM_USER}@${VM}:$remoteParent/"
         if ($LASTEXITCODE -ne 0) { Fail "Failed to copy $($d.local)" }
     }
 }
@@ -90,8 +93,10 @@ if ($nginxWsCheck -eq "0" -or $LASTEXITCODE -ne 0) {
 }
 
 # ── Clear stale Redis delivery state on every deploy ──
+# Also wipes assigned_rider:* (new key introduced with the matcher's
+# assignment-guard) so post-deploy accepts aren't blocked by a stale key.
 Log "Clearing stale Redis delivery state..."
-Invoke-Expression "$SSH 'docker exec backend-redis-1 redis-cli DEL busy_riders pending_riders > /dev/null && docker exec backend-redis-1 redis-cli KEYS ""pending_rider:*"" | xargs -r docker exec -i backend-redis-1 redis-cli DEL > /dev/null && docker exec backend-redis-1 redis-cli KEYS ""pending_delivery:*"" | xargs -r docker exec -i backend-redis-1 redis-cli DEL > /dev/null && echo ok'" 2>$null
+Invoke-Expression "$SSH 'docker exec backend-redis-1 redis-cli DEL busy_riders pending_riders > /dev/null && docker exec backend-redis-1 redis-cli KEYS ""pending_rider:*"" | xargs -r docker exec -i backend-redis-1 redis-cli DEL > /dev/null && docker exec backend-redis-1 redis-cli KEYS ""pending_delivery:*"" | xargs -r docker exec -i backend-redis-1 redis-cli DEL > /dev/null && docker exec backend-redis-1 redis-cli KEYS ""assigned_rider:*"" | xargs -r docker exec -i backend-redis-1 redis-cli DEL > /dev/null && echo ok'" 2>$null
 Ok "Stale Redis delivery state cleared"
 
 # ── Verify key endpoints ──

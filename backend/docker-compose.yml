@@ -1,6 +1,10 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      # BuildKit uses an isolated bridge whose DNS is flaky on this VM —
+      # host network lets `go mod download` resolve proxy.golang.org.
+      network: host
     network_mode: host
     env_file:
       - .env

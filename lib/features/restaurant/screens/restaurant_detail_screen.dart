@@ -360,6 +360,36 @@ class _RestaurantDetailScreenState
 
           const SizedBox(height: AppSpacing.base),
           const Divider(color: AppColors.divider),
+          if (!restaurant.isOnline)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.md),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.base,
+                  vertical: AppSpacing.md,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  border: Border.all(
+                    color: AppColors.error.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.store_mall_directory_rounded, color: AppColors.error, size: 18),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        restaurant.offlineMessage,
+                        style: AppTypography.body2.copyWith(color: AppColors.error),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     ).animate().fadeIn(duration: 400.ms);
@@ -586,6 +616,16 @@ class _RestaurantDetailScreenState
   }
 
   void _addToCart(MenuItem item) {
+    if (!restaurant.isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(restaurant.offlineMessage),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     if (item.customizations.isNotEmpty) {
       _showCustomizationSheet(item);
     } else {

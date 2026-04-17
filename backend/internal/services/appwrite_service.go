@@ -454,7 +454,10 @@ func (s *AppwriteService) GetRestaurantByOwner(ownerID string) (*appwrite.Docume
 func (s *AppwriteService) ListFavorites(userID string) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionFavorites, []string{
 		appwrite.QueryEqual("user_id", userID),
-		appwrite.QueryOrderDesc("created_at"),
+		// $createdAt is the Appwrite-managed timestamp and is always indexed;
+		// a user-defined "created_at" requires an explicit Appwrite index,
+		// which isn't guaranteed to exist on this collection.
+		appwrite.QueryOrderDesc("$createdAt"),
 	})
 }
 
@@ -483,7 +486,7 @@ func (s *AppwriteService) GetActiveGoldSubscription(userID string) (*appwrite.Do
 	return s.client.ListDocuments(models.CollectionGoldSubscriptions, []string{
 		appwrite.QueryEqual("user_id", userID),
 		appwrite.QueryEqual("status", "active"),
-		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryOrderDesc("$createdAt"),
 	})
 }
 
@@ -500,7 +503,7 @@ func (s *AppwriteService) CreateReferral(id string, data map[string]interface{})
 func (s *AppwriteService) ListReferrals(userID string) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionReferrals, []string{
 		appwrite.QueryEqual("referrer_user_id", userID),
-		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryOrderDesc("$createdAt"),
 	})
 }
 
@@ -540,7 +543,7 @@ func (s *AppwriteService) CreateDeliveryIssue(id string, data map[string]interfa
 func (s *AppwriteService) ListDeliveryIssues(orderID string) (*appwrite.DocumentList, error) {
 	return s.client.ListDocuments(models.CollectionDeliveryIssues, []string{
 		appwrite.QueryEqual("order_id", orderID),
-		appwrite.QueryOrderDesc("created_at"),
+		appwrite.QueryOrderDesc("$createdAt"),
 	})
 }
 

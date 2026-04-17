@@ -24,6 +24,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   // Common fields
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
 
   // Restaurant-specific
@@ -67,12 +68,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void initState() {
     super.initState();
     _autoDetectLocation();
+    // Pre-populate phone from the Appwrite account if available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final phone = ref.read(authProvider).user?.phone ?? '';
+      if (phone.isNotEmpty && _phoneController.text.isEmpty) {
+        _phoneController.text = phone;
+      }
+    });
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _addressController.dispose();
     _restaurantNameController.dispose();
     _restaurantAddressController.dispose();
@@ -153,9 +162,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       }
     }
 
-    // Customers must share their current location — it is required to find
-    // nearby restaurants and to set a delivery address.
+    // Customers must provide phone number and current location
     if (role == 'customer') {
+      if (_phoneController.text.trim().isEmpty) {
+        _showError('Please enter your phone number');
+        return;
+      }
       if (_latitude == null || _longitude == null) {
         _showError(
           'Your current location is required to continue. '
@@ -182,6 +194,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       await authNotifier.completeOnboarding(
         name: name,
         email: _emailController.text.trim(),
+        phone: _phoneController.text.trim(),
         address: _addressController.text.trim(),
         city: _city,
         latitude: _latitude,
@@ -277,6 +290,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 const SizedBox(height: AppSpacing.base),
                 _buildVehicleNumberCard(),
               ] else ...[
+                _buildPhoneCard(),
+                const SizedBox(height: AppSpacing.base),
                 _buildLocationCard(),
               ],
 
@@ -339,6 +354,35 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         ],
       ),
     ).animate(delay: 250.ms).fadeIn().slideY(begin: 0.1);
+  }
+
+  Widget _buildPhoneCard() {
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Phone Number', style: AppTypography.caption),
+              Text(
+                ' *',
+                style: AppTypography.caption.copyWith(color: AppColors.error),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: _phoneController,
+            style: AppTypography.body1,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              hintText: '+91 9876543210',
+              prefixIcon: Icon(Icons.phone_outlined),
+            ),
+          ),
+        ],
+      ),
+    ).animate(delay: 275.ms).fadeIn().slideY(begin: 0.1);
   }
 
   Widget _buildLocationCard() {

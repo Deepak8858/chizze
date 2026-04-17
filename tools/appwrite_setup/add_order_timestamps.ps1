@@ -15,10 +15,10 @@ $DB = "chizze_db"
 $COLL = "orders"
 
 Write-Host "Adding preparing_at to ${COLL}..." -ForegroundColor Yellow
-appwrite databases create-datetime-attribute --database-id $DB --collection-id $COLL --key preparing_at --required $false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id $COLL --key preparing_at --required false
 
 Write-Host "Adding accepted_at to ${COLL}..." -ForegroundColor Yellow
-appwrite databases create-datetime-attribute --database-id $DB --collection-id $COLL --key accepted_at --required $false
+appwrite databases create-datetime-attribute --database-id $DB --collection-id $COLL --key accepted_at --required false
 
 Write-Host ""
 Write-Host "Done. Verify in Appwrite console -> Databases -> chizze_db -> orders." -ForegroundColor Green

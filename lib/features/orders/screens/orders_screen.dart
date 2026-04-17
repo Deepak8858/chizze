@@ -224,11 +224,19 @@ class OrdersScreen extends ConsumerWidget {
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => context.push('/review/${order.id}'),
-                      icon: const Icon(Icons.star_rounded, size: 16),
-                      label: const Text('Rate'),
-                    ),
+                    child: order.hasReview == true
+                        ? OutlinedButton.icon(
+                            onPressed: null,
+                            icon: const Icon(Icons.check_circle_rounded,
+                                size: 16),
+                            label: const Text('Reviewed'),
+                          )
+                        : FilledButton.icon(
+                            onPressed: () =>
+                                context.push('/review/${order.id}'),
+                            icon: const Icon(Icons.star_rounded, size: 16),
+                            label: const Text('Rate now'),
+                          ),
                   ),
                 ],
               ),

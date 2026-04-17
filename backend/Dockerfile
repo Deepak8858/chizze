@@ -7,9 +7,16 @@ ARG VERSION=dev
 
 RUN apk add --no-cache git ca-certificates
 
+# GOPROXY fallback chain + disabled checksum DB so a transient DNS
+# blip on proxy.golang.org doesn't kill the whole build.
+ENV GOPROXY=https://proxy.golang.org,https://goproxy.io,direct \
+    GOSUMDB=off \
+    GOFLAGS=-mod=mod
+
 WORKDIR /app
 COPY go.mod go.sum ./
-RUN go mod download
+# Retry a couple of times — proxy.golang.org is intermittent from this VM.
+RUN for i in 1 2 3; do go mod download && break || sleep 5; done
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}" -o /chizze-api ./cmd/server

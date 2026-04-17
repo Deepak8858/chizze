@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/theme.dart';
@@ -272,6 +273,47 @@ class _PartnerOrdersScreenState extends ConsumerState<PartnerOrdersScreen> {
                       ),
                     ),
                   ),
+                  if (order.customerPhone != null &&
+                      order.customerPhone!.isNotEmpty)
+                    GestureDetector(
+                      onTap: () async {
+                        final uri = Uri(
+                          scheme: 'tel',
+                          path: order.customerPhone,
+                        );
+                        // ignore: deprecated_member_use
+                        await launchUrl(uri);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.phone_rounded,
+                              size: 12,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Call',
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.primary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 4),
