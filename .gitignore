@@ -78,6 +78,7 @@ deploy/.env.staging
 analyze_output.txt
 analyze_result.txt
 build_output.txt
+build.md
 
 # Backend build artifacts
 backend/tmp/

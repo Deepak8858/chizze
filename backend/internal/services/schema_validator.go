@@ -30,6 +30,14 @@ var expectedCollectionAttrs = map[string][]string{
 		"prepared_at", "accepted_at", "picked_up_at", "delivered_at", "cancelled_at",
 		"cancellation_reason", "cancelled_by",
 	},
+	// reviews: every attribute CreateReview writes. Added after customers
+	// reported they couldn't submit reviews — silent schema drift here produced
+	// the same 400 document_invalid_structure that hit the orders collection.
+	models.CollectionReviews: {
+		"order_id", "customer_id", "restaurant_id", "delivery_partner_id",
+		"food_rating", "delivery_rating", "review_text", "tags",
+		"is_visible", "created_at", "restaurant_reply",
+	},
 }
 
 // ValidateCollectionSchemas fetches each tracked collection's attributes from

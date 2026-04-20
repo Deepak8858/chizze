@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,9 +9,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../router/app_router.dart';
 import 'api_client.dart';
 import 'api_config.dart';
+import 'location_update_service.dart';
 
 /// Key under which the device push token is cached locally
 const _kDeviceTokenKey = 'chizze_device_push_token';
+
+/// Sentinel payload value used to signal that tapping a local notification
+/// should trigger the "refresh my saved location" flow rather than navigate.
+const _kUpdateLocationPayload = '__action:update_location__';
 
 /// Top-level handler for background FCM messages.
 /// Must be a top-level function (not a method or closure).
@@ -24,9 +30,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// Falls back to a dev-mode placeholder token when Firebase is not
 /// configured (e.g. missing google-services.json).
 class PushNotificationService {
-  PushNotificationService(this._api);
+  PushNotificationService(this._api, this._ref);
 
   final ApiClient _api;
+  final Ref _ref;
 
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -44,7 +51,9 @@ class PushNotificationService {
     await _initLocalNotifications();
     await _initFirebaseMessaging();
     await _ensureDeviceToken();
-    if (kDebugMode) debugPrint('[Push] Service initialised. Token: $_deviceToken');
+    if (kDebugMode) {
+      debugPrint('[Push] Service initialised. Token: $_deviceToken');
+    }
   }
 
   /// Set up Firebase Messaging listeners
@@ -60,15 +69,20 @@ class PushNotificationService {
         sound: true,
         provisional: false,
       );
-      if (kDebugMode) debugPrint('[Push] Permission status: ${settings.authorizationStatus}');
+      if (kDebugMode) {
+        debugPrint('[Push] Permission status: ${settings.authorizationStatus}');
+      }
 
       // Register background handler
-      FirebaseMessaging.onBackgroundMessage(
-          firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
       // Foreground messages → show local notification + handle delivery_request
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        if (kDebugMode) debugPrint('[Push] Foreground message: ${message.messageId} type=${message.data["type"]}');
+        if (kDebugMode) {
+          debugPrint(
+            '[Push] Foreground message: ${message.messageId} type=${message.data["type"]}',
+          );
+        }
         final msgType = message.data['type'] as String? ?? '';
 
         // Delivery request FCM — app is foreground, trigger in-app handling
@@ -80,14 +94,31 @@ class PushNotificationService {
           return;
         }
 
+        // Location-refresh broadcast: show a tap-to-update notification.
+        if (msgType == 'update_location') {
+          final notif = message.notification;
+          showLocalNotification(
+            title:
+                notif?.title ??
+                (message.data['title'] as String? ?? 'Update your location'),
+            body:
+                notif?.body ??
+                (message.data['body'] as String? ??
+                    'Tap to refresh for faster delivery'),
+            payload: _kUpdateLocationPayload,
+          );
+          return;
+        }
+
         // Fall back to the data payload when the message has no notification
         // block (happens when backend sends data-only pushes). Ensures every
         // FCM that reaches a foregrounded app still surfaces in the tray.
         final notification = message.notification;
-        final title = notification?.title ??
+        final title =
+            notification?.title ??
             (message.data['title'] as String? ?? 'Chizze');
-        final body = notification?.body ??
-            (message.data['body'] as String? ?? '');
+        final body =
+            notification?.body ?? (message.data['body'] as String? ?? '');
         if (title.isEmpty && body.isEmpty) return;
         showLocalNotification(
           title: title,
@@ -98,10 +129,14 @@ class PushNotificationService {
 
       // Handle notification taps (app was in background)
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        if (kDebugMode) debugPrint('[Push] Notification opened: ${message.data}');
+        if (kDebugMode) {
+          debugPrint('[Push] Notification opened: ${message.data}');
+        }
         final msgType = message.data['type'] as String? ?? '';
         if (msgType == 'delivery_request') {
           _onDeliveryRequestPush(message.data);
+        } else if (msgType == 'update_location') {
+          _runLocationUpdate();
         } else {
           _handleNotificationRoute(_extractRoute(message.data));
         }
@@ -110,10 +145,17 @@ class PushNotificationService {
       // Check if app was launched from a notification
       final initial = await messaging.getInitialMessage();
       if (initial != null) {
-        if (kDebugMode) debugPrint('[Push] App launched from notification: ${initial.data}');
+        if (kDebugMode) {
+          debugPrint('[Push] App launched from notification: ${initial.data}');
+        }
         // Delay to let the router initialise
         Future.delayed(const Duration(milliseconds: 500), () {
-          _handleNotificationRoute(_extractRoute(initial.data));
+          final msgType = initial.data['type'] as String? ?? '';
+          if (msgType == 'update_location') {
+            _runLocationUpdate();
+          } else {
+            _handleNotificationRoute(_extractRoute(initial.data));
+          }
         });
       }
 
@@ -141,7 +183,9 @@ class PushNotificationService {
     await _localNotifications.initialize(
       settings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        if (kDebugMode) debugPrint('[Push] Local notification tapped: ${response.payload}');
+        if (kDebugMode) {
+          debugPrint('[Push] Local notification tapped: ${response.payload}');
+        }
         _handleNotificationRoute(response.payload);
       },
     );
@@ -152,7 +196,8 @@ class PushNotificationService {
     // to the low-importance default and the notification never pops up.
     final androidPlugin = _localNotifications
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidPlugin != null) {
       await androidPlugin.createNotificationChannel(
         const AndroidNotificationChannel(
@@ -230,15 +275,53 @@ class PushNotificationService {
 
   /// Navigate to the route encoded in a notification payload.
   /// Supported routes: /order-tracking/:id, /review/:id, /orders, etc.
+  /// Also recognises the `_kUpdateLocationPayload` sentinel used by the
+  /// "refresh your location" broadcast.
   void _handleNotificationRoute(String? route) {
     if (route == null || route.isEmpty) return;
+    if (route == _kUpdateLocationPayload) {
+      _runLocationUpdate();
+      return;
+    }
     final context = rootNavigatorKey.currentContext;
     if (context == null) {
-      if (kDebugMode) debugPrint('[Push] No navigator context — cannot route to $route');
+      if (kDebugMode) {
+        debugPrint('[Push] No navigator context — cannot route to $route');
+      }
       return;
     }
     if (kDebugMode) debugPrint('[Push] Navigating to: $route');
     GoRouter.of(context).go(route);
+  }
+
+  /// Capture the device's current GPS, reverse-geocode it, and persist it
+  /// to the user profile + default saved address. Invoked when the user
+  /// taps the "update your location" push notification.
+  Future<void> _runLocationUpdate() async {
+    // Navigate to profile so the user sees the updated address when the
+    // network call completes.
+    final navCtx = rootNavigatorKey.currentContext;
+    if (navCtx != null) GoRouter.of(navCtx).go('/profile');
+
+    final outcome = await _ref
+        .read(locationUpdateServiceProvider)
+        .updateFromCurrentLocation();
+
+    final message = switch (outcome) {
+      LocationUpdateOutcome.success => 'Location updated',
+      LocationUpdateOutcome.permissionDenied =>
+        'Location permission required — enable it in settings',
+      LocationUpdateOutcome.serviceDisabled =>
+        'Please turn on GPS to update your location',
+      LocationUpdateOutcome.gpsTimeout =>
+        'Could not get your location — please try again',
+      LocationUpdateOutcome.networkError => 'Network error — please try again',
+    };
+
+    final ctx = rootNavigatorKey.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(ctx);
+    messenger?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   // ─── Device Token ───
@@ -282,10 +365,7 @@ class PushNotificationService {
   Future<void> registerToken() async {
     if (_deviceToken == null) return;
     try {
-      await _api.put(
-        ApiConfig.fcmToken,
-        body: {'token': _deviceToken},
-      );
+      await _api.put(ApiConfig.fcmToken, body: {'token': _deviceToken});
       if (kDebugMode) debugPrint('[Push] Token registered with backend');
     } catch (e) {
       // Non-fatal — will retry on next app start
@@ -351,7 +431,9 @@ class PushNotificationService {
 }
 
 /// Global provider for the push notification service
-final pushNotificationServiceProvider = Provider<PushNotificationService>((ref) {
+final pushNotificationServiceProvider = Provider<PushNotificationService>((
+  ref,
+) {
   final api = ref.watch(apiClientProvider);
-  return PushNotificationService(api);
+  return PushNotificationService(api, ref);
 });

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -90,48 +91,84 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _autoDetectLocation() async {
+    final locationService = ref.read(locationServiceProvider);
+
+    // Instant path: if warm-up (from login screen) already captured a position,
+    // show it immediately with zero perceived latency.
+    final cached = locationService.lastPosition;
+    if (cached != null && _latitude == null) {
+      _applyPosition(cached.latitude, cached.longitude);
+    }
+
     setState(() {
       _isLoadingLocation = true;
       _locationError = null;
     });
-    try {
-      final locationService = ref.read(locationServiceProvider);
-      final position = await locationService.getCurrentPosition();
-      _latitude = position.latitude;
-      _longitude = position.longitude;
 
-      try {
-        final placemarks = await geo.placemarkFromCoordinates(
-          position.latitude,
-          position.longitude,
-        );
-        if (placemarks.isNotEmpty) {
-          final p = placemarks.first;
-          final parts = <String>[
-            if (p.subLocality?.isNotEmpty == true) p.subLocality!,
-            if (p.locality?.isNotEmpty == true) p.locality!,
-            if (p.administrativeArea?.isNotEmpty == true) p.administrativeArea!,
-            if (p.postalCode?.isNotEmpty == true) p.postalCode!,
-          ];
-          final addressStr = parts.join(', ');
+    final position = await locationService.getFastCurrentPosition();
+    if (!mounted) return;
+
+    if (position == null) {
+      // Real failure — tell the user exactly why and how to fix it.
+      final status = await locationService.permissionStatus();
+      if (!mounted) return;
+      setState(() {
+        _isLoadingLocation = false;
+        _locationError = switch (status) {
+          LocationPermissionStatus.serviceDisabled =>
+            'Location services are off. Turn on Location in your phone settings, then tap "Detect" again.',
+          LocationPermissionStatus.permanentlyDenied =>
+            'Location permission was permanently denied. Open Settings → Apps → Chizze → Permissions and allow Location, then tap "Detect" again.',
+          LocationPermissionStatus.denied =>
+            'We need location access to set up your account. Please tap "Detect" again and allow location.',
+          LocationPermissionStatus.granted =>
+            'Could not get your GPS fix. Please step near a window or outdoors and tap "Detect" again.',
+        };
+      });
+      return;
+    }
+
+    _applyPosition(position.latitude, position.longitude);
+    setState(() => _isLoadingLocation = false);
+
+    // Reverse-geocode async — coords are already saved; if this fails, user
+    // can type the address. Never blocks onboarding.
+    unawaited(_fillAddressFromCoords(position.latitude, position.longitude));
+  }
+
+  void _applyPosition(double lat, double lng) {
+    if (!mounted) return;
+    setState(() {
+      _latitude = lat;
+      _longitude = lng;
+      _locationError = null;
+    });
+  }
+
+  Future<void> _fillAddressFromCoords(double lat, double lng) async {
+    try {
+      final placemarks = await geo.placemarkFromCoordinates(lat, lng);
+      if (!mounted || placemarks.isEmpty) return;
+      final p = placemarks.first;
+      final parts = <String>[
+        if (p.subLocality?.isNotEmpty == true) p.subLocality!,
+        if (p.locality?.isNotEmpty == true) p.locality!,
+        if (p.administrativeArea?.isNotEmpty == true) p.administrativeArea!,
+        if (p.postalCode?.isNotEmpty == true) p.postalCode!,
+      ];
+      final addressStr = parts.join(', ');
+      if (addressStr.isEmpty) return;
+      setState(() {
+        if (_addressController.text.isEmpty) {
           _addressController.text = addressStr;
-          _city = p.locality ?? p.administrativeArea;
-          // Also pre-fill restaurant address if empty
-          if (_restaurantAddressController.text.isEmpty) {
-            _restaurantAddressController.text = addressStr;
-          }
         }
-      } catch (_) {}
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _locationError =
-              'Could not detect your location. Please tap "Detect" to try again, '
-              'or check that location access is enabled in your phone settings.';
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _isLoadingLocation = false);
+        _city = p.locality ?? p.administrativeArea;
+        if (_restaurantAddressController.text.isEmpty) {
+          _restaurantAddressController.text = addressStr;
+        }
+      });
+    } catch (_) {
+      // Geocoding is best-effort; the user can type the address.
     }
   }
 
@@ -180,13 +217,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     setState(() => _isSaving = true);
 
     try {
-      // Request permissions FIRST (before marking onboarding as complete)
+      // Location permission was resolved during _autoDetectLocation; request
+      // notification permission here (non-blocking if denied).
       final permSvc = ref.read(permissionServiceProvider);
-      if (role == 'delivery_partner') {
-        await permSvc.requestDeliveryPermissions();
-      } else {
-        await permSvc.requestEssentialPermissions();
-      }
+      unawaited(permSvc.ensureNotificationPermission());
 
       if (!mounted) return;
 

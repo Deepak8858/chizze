@@ -357,8 +357,8 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
 
     // Pre-check permissions before subscribing (Fixes FLUTTER-1)
     try {
-      final hasPermission = await _location.checkPermissions();
-      if (!hasPermission || !mounted) {
+      final status = await _location.permissionStatus();
+      if (status != LocationPermissionStatus.granted || !mounted) {
         if (kDebugMode) debugPrint('[Delivery] Location permission not granted — skipping tracking');
         return;
       }
@@ -407,19 +407,18 @@ class DeliveryNotifier extends StateNotifier<DeliveryState> {
     // Validate both coordinates before pushing (Fixes FLUTTER-2/3)
     if (state.partner.currentLatitude == 0 && state.partner.currentLongitude == 0) {
       // Try to get a one-shot position if stream hasn't delivered yet
-      try {
-        final loc = await _location.getCurrentPosition();
-        if (!mounted) return;
-        state = state.copyWith(
-          partner: state.partner.copyWith(
-            currentLatitude: loc.latitude,
-            currentLongitude: loc.longitude,
-          ),
-        );
-      } catch (e) {
-        if (kDebugMode) debugPrint('[Delivery] one-shot location error: $e');
+      final loc = await _location.getCurrentPosition();
+      if (!mounted) return;
+      if (loc == null) {
+        if (kDebugMode) debugPrint('[Delivery] one-shot location unavailable');
         return;
       }
+      state = state.copyWith(
+        partner: state.partner.copyWith(
+          currentLatitude: loc.latitude,
+          currentLongitude: loc.longitude,
+        ),
+      );
     }
 
     // Skip if we still don't have valid coordinates

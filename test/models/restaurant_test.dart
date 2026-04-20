@@ -54,6 +54,15 @@ void main() {
       expect(r.createdAt.year, 2024);
     });
 
+    test('prefers estimated_delivery_min over avg_delivery_time_min', () {
+      final r = Restaurant.fromMap({
+        ...sampleMap,
+        'avg_delivery_time_min': 35,
+        'estimated_delivery_min': 58,
+      });
+      expect(r.avgDeliveryTimeMin, 58);
+    });
+
     test('handles empty map with defaults', () {
       final r = Restaurant.fromMap({});
       expect(r.id, '');
@@ -64,7 +73,7 @@ void main() {
       expect(r.rating, 0.0);
       expect(r.totalRatings, 0);
       expect(r.priceForTwo, 0);
-      expect(r.avgDeliveryTimeMin, 30);
+      expect(r.avgDeliveryTimeMin, 90);
       expect(r.isVegOnly, isFalse);
       expect(r.isOnline, isFalse);
       expect(r.isFeatured, isFalse);

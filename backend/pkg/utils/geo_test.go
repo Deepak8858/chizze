@@ -76,11 +76,11 @@ func TestEstimateETA(t *testing.T) {
 		distanceKm float64
 		wantMin    int
 	}{
-		{"zero distance", 0, 5},           // 0 km → just the 5 min buffer
-		{"1 km", 1.0, 8},                  // (1/25)*60 = 2.4 → ceil=3 + 5 = 8
-		{"5 km", 5.0, 17},                 // (5/25)*60 = 12 → ceil=12 + 5 = 17
-		{"10 km", 10.0, 29},               // (10/25)*60 = 24 → ceil=24 + 5 = 29
-		{"25 km (1 hour travel)", 25.0, 65}, // (25/25)*60 = 60 + 5 = 65
+		{"zero distance", 0, 10},             // 0 km → just the 10 min pickup buffer
+		{"1 km", 1.0, 14},                    // (1/15)*60 = 4 → ceil=4 + 10 = 14
+		{"5 km", 5.0, 30},                    // (5/15)*60 = 20 → ceil=20 + 10 = 30
+		{"10 km", 10.0, 50},                  // (10/15)*60 = 40 → ceil=40 + 10 = 50
+		{"15 km (1 hour travel)", 15.0, 70},  // (15/15)*60 = 60 + 10 = 70
 	}
 
 	for _, tc := range tests {
@@ -95,8 +95,8 @@ func TestEstimateETA(t *testing.T) {
 
 func TestEstimateETA_AlwaysPositive(t *testing.T) {
 	got := EstimateETA(0)
-	if got < 5 {
-		t.Errorf("EstimateETA(0) should be at least 5 (buffer), got %d", got)
+	if got < 10 {
+		t.Errorf("EstimateETA(0) should be at least 10 (buffer), got %d", got)
 	}
 }
 

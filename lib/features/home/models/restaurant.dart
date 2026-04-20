@@ -64,7 +64,19 @@ class Restaurant {
       rating: (map['rating'] ?? 0).toDouble(),
       totalRatings: map['total_ratings'] ?? 0,
       priceForTwo: map['price_for_two'] ?? 0,
-      avgDeliveryTimeMin: map['avg_delivery_time_min'] ?? 30,
+      // Prefer the distance-aware `estimated_delivery_min` injected by the
+      // backend's nearby-restaurants handler (restaurant_handler.go) — it
+      // factors travel time from the user's current location + restaurant
+      // prep time. Fall back to the collection-level `avg_delivery_time_min`
+      // when no customer coordinates are available (e.g. list views without
+      // location), then to a conservative 90-min ceiling.
+      avgDeliveryTimeMin: (map['estimated_delivery_min'] is num
+              ? (map['estimated_delivery_min'] as num).toInt()
+              : null) ??
+          (map['avg_delivery_time_min'] is num
+              ? (map['avg_delivery_time_min'] as num).toInt()
+              : null) ??
+          90,
       isVegOnly: map['is_veg_only'] ?? false,
       isOnline: map['is_online'] ?? false,
       isFeatured: map['is_featured'] ?? false,

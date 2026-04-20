@@ -382,6 +382,7 @@ func main() {
 		partner.DELETE("/categories/:id", partnerHandler.DeleteCategory)
 
 		// Reviews
+		partner.GET("/reviews", partnerHandler.ListReviews)
 		partner.POST("/reviews/:id/reply", reviewHandler.ReplyToReview)
 
 		// Bank details & payouts
@@ -553,12 +554,18 @@ func main() {
 	// ─── Start Background Workers ───
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 
-	// FCM client for push notifications when WS is down (owners + riders backgrounded)
-	fcmClient := fcm.NewClient(cfg.FCMServerKey)
+	// FCM client for push notifications (HTTP v1 API via Firebase Admin SDK).
+	// Legacy FCM_SERVER_KEY is ignored — Google decommissioned that endpoint
+	// on 2024-06-20. Set FIREBASE_CREDENTIALS_JSON + FIREBASE_PROJECT_ID
+	// to enable push delivery to backgrounded/killed apps.
+	if cfg.FCMServerKey != "" {
+		log.Printf("[startup] WARNING: FCM_SERVER_KEY is set but ignored — the legacy FCM API was shut down on 2024-06-20. Set FIREBASE_CREDENTIALS_JSON + FIREBASE_PROJECT_ID instead.")
+	}
+	fcmClient := fcm.NewClient(cfg.FirebaseCredentialsJSON, cfg.FirebaseProjectID)
 	if fcmClient != nil {
-		log.Printf("[startup] FCM push notifications enabled")
+		log.Printf("[startup] FCM push notifications enabled (HTTP v1)")
 	} else {
-		log.Printf("[startup] FCM disabled (set FCM_SERVER_KEY to enable push to backgrounded users)")
+		log.Printf("[startup] FCM disabled — set FIREBASE_CREDENTIALS_JSON (service-account path) and FIREBASE_PROJECT_ID to enable push to backgrounded users")
 	}
 
 	// Wire FCM into AppwriteService so every CreateNotification call also fires

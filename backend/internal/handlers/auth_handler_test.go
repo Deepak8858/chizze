@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chizze/backend/internal/services"
 	"github.com/chizze/backend/internal/testutil"
 )
 
@@ -1126,6 +1127,224 @@ func TestOnboard_ShortDeliveryUserID_NoPanic(t *testing.T) {
 	}
 	if te.FakeAW.DocumentCount("delivery_partners") == 0 {
 		t.Error("expected delivery partner created with short-ID suffix")
+	}
+}
+
+// TestOnboard_InvalidatesProfileCache is the regression test for the
+// "signup name not showing on profile tab" bug. The Flutter client watches
+// userProfileProvider at the app root, so GET /users/me runs — and populates
+// the Redis profile cache — BEFORE the user finishes onboarding. If Onboard
+// doesn't clear that cache, the post-onboarding refetch reads back the empty
+// pre-onboarding snapshot and the profile tab shows "Set up your profile".
+func TestOnboard_InvalidatesProfileCache(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	// New user doc as it would look right after Exchange (phone OTP signups
+	// have no name from Appwrite).
+	te.SeedUser("onb_cache_user", map[string]interface{}{
+		"phone": "+919876543210",
+		"role":  "customer",
+		"name":  "",
+	})
+
+	ctx := context.Background()
+	cacheKey := services.UserProfileKey("onb_cache_user")
+
+	// Simulate the pre-onboarding GET /users/me having already cached the
+	// stale profile (empty name).
+	stale := map[string]interface{}{
+		"$id":   "onb_cache_user",
+		"name":  "",
+		"phone": "+919876543210",
+		"role":  "customer",
+	}
+	if err := te.CacheService.SetJSON(ctx, cacheKey, stale, services.UserProfileTTL); err != nil {
+		t.Fatalf("failed to seed profile cache: %v", err)
+	}
+
+	var cached map[string]interface{}
+	found, _ := te.CacheService.GetJSON(ctx, cacheKey, &cached)
+	if !found {
+		t.Fatal("precondition: expected stale profile to be cached before onboarding")
+	}
+
+	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
+		"name":      "Real Name",
+		"latitude":  12.9716,
+		"longitude": 77.5946,
+	}, "onb_cache_user", "customer")
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The user doc must be updated...
+	userDoc := te.FakeAW.GetDocument("users", "onb_cache_user")
+	if userDoc["name"] != "Real Name" {
+		t.Errorf("expected name=Real Name on user doc, got %v", userDoc["name"])
+	}
+
+	// ...and the stale cache must be gone so the next GET /users/me returns
+	// fresh data from Appwrite instead of the empty-name snapshot.
+	var after map[string]interface{}
+	found, _ = te.CacheService.GetJSON(ctx, cacheKey, &after)
+	if found {
+		t.Errorf("expected profile cache to be invalidated after onboarding, still cached: %+v", after)
+	}
+}
+
+// TestOnboard_NameWithUnicode covers signups with non-ASCII names (common in
+// India, e.g. Hindi/Tamil scripts, plus emoji). The stored name should round-
+// trip exactly so the profile tab shows what the user typed.
+func TestOnboard_NameWithUnicode(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	te.SeedUser("onb_unicode", map[string]interface{}{
+		"phone": "+919876543210", "role": "customer",
+	})
+
+	name := "राहुल O'Brien 🍔"
+	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
+		"name":      name,
+		"latitude":  12.9716,
+		"longitude": 77.5946,
+	}, "onb_unicode", "customer")
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	userDoc := te.FakeAW.GetDocument("users", "onb_unicode")
+	if userDoc["name"] != name {
+		t.Errorf("expected unicode name to round-trip, got %v", userDoc["name"])
+	}
+}
+
+// TestOnboard_NameOnlyWhitespace rejects names that become empty after the
+// backend's validation. The Flutter form trims client-side, but a crafted
+// request bypassing the client must not create an empty-name profile.
+func TestOnboard_NameOnlyWhitespace(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	te.SeedUser("onb_ws", map[string]interface{}{
+		"phone": "+919876543210", "role": "customer",
+	})
+
+	// Pure whitespace — backend treats "" as missing; " " is technically
+	// non-empty but useless as a display name. The current contract only
+	// rejects genuinely empty strings, so assert that behavior explicitly
+	// so a future stricter check doesn't silently regress the UX.
+	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
+		"name": "",
+	}, "onb_ws", "customer")
+	if rec.Code != 400 {
+		t.Fatalf("expected 400 for empty name, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestOnboard_ResponseIncludesUpdatedName verifies the response body echoes
+// the just-saved user doc with the correct name. This is the safety net that
+// lets the Flutter client populate the profile from the onboard response
+// directly if we ever stop relying on the post-onboarding GET /users/me.
+func TestOnboard_ResponseIncludesUpdatedName(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	te.SeedUser("onb_resp_user", map[string]interface{}{
+		"phone": "+919876543210", "role": "customer", "name": "",
+	})
+
+	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
+		"name":      "Alice",
+		"latitude":  12.9716,
+		"longitude": 77.5946,
+	}, "onb_resp_user", "customer")
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := te.ParseResponse(rec)
+	data, _ := resp["data"].(map[string]interface{})
+	user, _ := data["user"].(map[string]interface{})
+	if user == nil {
+		t.Fatalf("expected user in response, got %+v", data)
+	}
+	if user["name"] != "Alice" {
+		t.Errorf("expected response user.name=Alice, got %v", user["name"])
+	}
+}
+
+// TestOnboard_RestaurantOwner_InvalidatesProfileCache covers the partner
+// code path — the cache invalidation must also fire when the role-specific
+// branch runs, not just for customers.
+func TestOnboard_RestaurantOwner_InvalidatesProfileCache(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+	te.SeedPartnerSignupEnabled()
+
+	te.SeedUser("onb_rest_cache", map[string]interface{}{
+		"phone": "+919876543210", "role": "restaurant_owner", "name": "",
+	})
+
+	ctx := context.Background()
+	cacheKey := services.UserProfileKey("onb_rest_cache")
+	_ = te.CacheService.SetJSON(ctx, cacheKey, map[string]interface{}{
+		"$id": "onb_rest_cache", "name": "",
+	}, services.UserProfileTTL)
+
+	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
+		"name":               "Owner Name",
+		"restaurant_name":    "My Restaurant",
+		"restaurant_address": "123 Main St",
+		"city":               "Bangalore",
+		"latitude":           12.97,
+		"longitude":          77.59,
+	}, "onb_rest_cache", "restaurant_owner")
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var after map[string]interface{}
+	found, _ := te.CacheService.GetJSON(ctx, cacheKey, &after)
+	if found {
+		t.Errorf("expected profile cache to be invalidated after restaurant-owner onboarding, still cached: %+v", after)
+	}
+}
+
+// TestOnboard_DeliveryPartner_InvalidatesProfileCache is the delivery-partner
+// analog of the restaurant-owner cache test above.
+func TestOnboard_DeliveryPartner_InvalidatesProfileCache(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+	te.SeedPartnerSignupEnabled()
+
+	te.SeedUser("onb_dp_cache", map[string]interface{}{
+		"phone": "+919876543210", "role": "delivery_partner", "name": "",
+	})
+
+	ctx := context.Background()
+	cacheKey := services.UserProfileKey("onb_dp_cache")
+	_ = te.CacheService.SetJSON(ctx, cacheKey, map[string]interface{}{
+		"$id": "onb_dp_cache", "name": "",
+	}, services.UserProfileTTL)
+
+	rec := te.AuthRequest("POST", "/api/v1/auth/onboard", map[string]interface{}{
+		"name":           "Rider Name",
+		"vehicle_type":   "bike",
+		"vehicle_number": "KA01AB1234",
+	}, "onb_dp_cache", "delivery_partner")
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var after map[string]interface{}
+	found, _ := te.CacheService.GetJSON(ctx, cacheKey, &after)
+	if found {
+		t.Errorf("expected profile cache to be invalidated after delivery-partner onboarding, still cached: %+v", after)
 	}
 }
 

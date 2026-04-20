@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
@@ -312,10 +313,106 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 
   void _handlePaymentError(PaymentFailureResponse response) {
+    // Razorpay's `response.message` is unreliable for user display: on some
+    // SDK/platform combos it's a JSON-encoded error payload, a pass-through of
+    // the gateway's raw string ("undefined" when the callback fires before a
+    // payment attempt), or null. Translate the numeric `code` to a stable,
+    // professional message and only fall back to raw text as a last resort.
+    final code = response.code;
+    final wasCancelled = code == Razorpay.PAYMENT_CANCELLED;
+    final friendly = _mapPaymentFailureToMessage(code, response.message);
+
+    // An abandoned online-pay order sits in status=placed/payment_status=pending
+    // and would otherwise be picked up by restaurant/rider workers before the
+    // webhook fired. Best-effort cancel so nobody starts cooking a meal the
+    // customer hasn't paid for.
+    final orderId = state.orderId;
+    if (orderId != null && orderId.isNotEmpty) {
+      unawaited(_cancelPendingOrder(orderId, wasCancelled));
+    }
+
+    if (kDebugMode) {
+      debugPrint('[Payment] error code=$code message=${response.message}');
+    }
+
     state = PaymentState(
       isProcessing: false,
-      error: response.message ?? 'Payment failed',
+      error: friendly,
+      orderId: orderId,
     );
+  }
+
+  /// Maps a Razorpay [PaymentFailureResponse.code] + [raw] message into a
+  /// professional, user-facing string. Visible for testing.
+  @visibleForTesting
+  static String mapPaymentFailureToMessage(int? code, String? raw) =>
+      _mapPaymentFailureToMessage(code, raw);
+
+  static String _mapPaymentFailureToMessage(int? code, String? raw) {
+    switch (code) {
+      case Razorpay.PAYMENT_CANCELLED:
+        return 'Payment cancelled. Your order has not been placed — try again when you\'re ready.';
+      case Razorpay.NETWORK_ERROR:
+        return 'Payment failed: no internet connection. Check your network and try again.';
+      case Razorpay.INVALID_OPTIONS:
+        return 'Payment could not start due to a configuration issue. Please try again in a moment.';
+      case Razorpay.TLS_ERROR:
+        return 'Secure connection to the payment gateway failed. Update your device and try again.';
+      case Razorpay.UNKNOWN_ERROR:
+      default:
+        final desc = _extractRazorpayDescription(raw);
+        if (desc != null) {
+          return 'Payment failed: $desc';
+        }
+        return 'Payment could not be completed. No amount has been charged — please try again.';
+    }
+  }
+
+  static String? _extractRazorpayDescription(String? raw) {
+    if (raw == null) return null;
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty || trimmed.toLowerCase() == 'undefined' || trimmed.toLowerCase() == 'null') {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map) {
+        final err = decoded['error'];
+        if (err is Map) {
+          final desc = err['description'];
+          if (desc is String && desc.trim().isNotEmpty) return desc.trim();
+          final reason = err['reason'];
+          if (reason is String && reason.trim().isNotEmpty) {
+            return reason.trim().replaceAll('_', ' ');
+          }
+        }
+        final desc = decoded['description'];
+        if (desc is String && desc.trim().isNotEmpty) return desc.trim();
+      }
+    } catch (_) {
+      // Not JSON — fall through to plain-text handling.
+    }
+    return trimmed;
+  }
+
+  Future<void> _cancelPendingOrder(String orderId, bool userCancelled) async {
+    try {
+      await _api.put(
+        '${ApiConfig.orders}/$orderId/cancel',
+        body: {
+          'reason': userCancelled
+              ? 'Payment cancelled by customer'
+              : 'Payment failed',
+        },
+      );
+    } catch (e) {
+      // Best-effort — Razorpay webhook (payment.failed) + order-timeout
+      // worker are the authoritative safety nets. Keep the UI responsive
+      // regardless of network outcome.
+      if (kDebugMode) {
+        debugPrint('[Payment] best-effort order-cancel failed: $e');
+      }
+    }
   }
 
   void _handleExternalWallet(ExternalWalletResponse response) {

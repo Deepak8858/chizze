@@ -731,39 +731,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
         debugPrint('[Auth] Onboarding profile saved via /auth/onboard');
       }
 
-      // For customers, auto-create a saved address from onboarding data
-      if (state.userRole == 'customer' && address != null && address.isNotEmpty) {
-        try {
-          final hasValidCoords =
-              latitude != null &&
-              longitude != null &&
-              latitude >= -90 &&
-              latitude <= 90 &&
-              longitude >= -180 &&
-              longitude <= 180 &&
-              (latitude != 0 || longitude != 0);
-
-          final body = <String, dynamic>{
-            'label': 'Home',
-            'full_address': address,
-            'landmark': '',
-            'is_default': true,
-          };
-          if (hasValidCoords) {
-            body['latitude'] = latitude;
-            body['longitude'] = longitude;
-          }
-
-          await _apiClient.post('/users/me/addresses', body: body);
-          if (kDebugMode) {
-            debugPrint('[Auth] Auto-created saved address from onboarding');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint(
-              '[Auth] Auto-create saved address failed (non-critical): $e',
-            );
-          }
+      // For customers: save a "Home" address atomically with onboarding.
+      // This is REQUIRED — if it fails the user sees an error and can retry,
+      // so the profile always has a default address after signup.
+      if (state.userRole == 'customer' &&
+          address != null &&
+          address.isNotEmpty &&
+          latitude != null &&
+          longitude != null) {
+        await _apiClient.post('/users/me/addresses', body: {
+          'label': 'Home',
+          'full_address': address,
+          'landmark': '',
+          'latitude': latitude,
+          'longitude': longitude,
+          'is_default': true,
+        });
+        if (kDebugMode) {
+          debugPrint('[Auth] Auto-created saved address from onboarding');
         }
       }
 

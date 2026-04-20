@@ -19,11 +19,15 @@ func Haversine(lat1, lng1, lat2, lng2 float64) float64 {
 	return earthRadiusKm * c
 }
 
-// EstimateETA estimates delivery time in minutes based on distance
+// EstimateETA estimates delivery time in minutes based on distance.
+// Uses a realistic 15 km/h effective speed for two-wheeler deliveries in
+// dense Indian cities (accounts for traffic, signals, building access,
+// parking, handover). Adds a 10 min pickup buffer so the rider has time to
+// reach the restaurant from their current spot. Callers layer prep time
+// on top of this travel estimate.
 func EstimateETA(distanceKm float64) int {
-	// Average speed: 25 km/h in city + 5 min pickup buffer
-	minutes := (distanceKm / 25.0) * 60.0
-	return int(math.Ceil(minutes)) + 5
+	minutes := (distanceKm / 15.0) * 60.0
+	return int(math.Ceil(minutes)) + 10
 }
 
 // BoundingBox returns min/max lat/lng for a center + radius (km)

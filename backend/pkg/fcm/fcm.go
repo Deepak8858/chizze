@@ -1,37 +1,61 @@
 package fcm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"time"
+
+	firebase "firebase.google.com/go/v4"
+	"firebase.google.com/go/v4/messaging"
+	"google.golang.org/api/option"
 )
 
-// Client sends Firebase Cloud Messaging push notifications using
-// the FCM Legacy HTTP API (v1 compatible endpoint).
-// Configure via FCM_SERVER_KEY environment variable.
+// Client sends Firebase Cloud Messaging push notifications using the
+// HTTP v1 API via the Firebase Admin SDK. The legacy FCM HTTP API
+// (https://fcm.googleapis.com/fcm/send) that this client previously used
+// was decommissioned by Google on June 20, 2024 — hence the migration.
+//
+// Configure via:
+//   - FIREBASE_CREDENTIALS_JSON = absolute path to a service account JSON
+//     (Firebase Console → Project Settings → Service Accounts → Generate
+//     new private key)
+//   - FIREBASE_PROJECT_ID       = the Firebase project ID (e.g. chizze-app)
 type Client struct {
-	serverKey  string
-	httpClient *http.Client
+	messaging *messaging.Client
 }
 
-// NewClient creates an FCM client. serverKey is the FCM Server Key
-// from Firebase Console → Project Settings → Cloud Messaging.
-// Returns nil if serverKey is empty (FCM disabled).
-func NewClient(serverKey string) *Client {
-	if serverKey == "" {
+// NewClient creates an FCM client backed by the Firebase Admin SDK.
+// credentialsPath is the path to a service account JSON; projectID is
+// the Firebase project ID. Returns nil (FCM disabled) when either is
+// empty or when Firebase initialisation fails — callers must treat a
+// nil client as a soft no-op.
+func NewClient(credentialsPath, projectID string) *Client {
+	if credentialsPath == "" || projectID == "" {
 		return nil
 	}
-	return &Client{
-		serverKey: serverKey,
-		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
-		},
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	app, err := firebase.NewApp(ctx,
+		&firebase.Config{ProjectID: projectID},
+		option.WithCredentialsFile(credentialsPath),
+	)
+	if err != nil {
+		log.Printf("[fcm] Firebase app init failed (push disabled): %v", err)
+		return nil
 	}
+
+	msgClient, err := app.Messaging(ctx)
+	if err != nil {
+		log.Printf("[fcm] Messaging client init failed (push disabled): %v", err)
+		return nil
+	}
+
+	log.Printf("[fcm] Firebase Admin SDK initialised (project=%s)", projectID)
+	return &Client{messaging: msgClient}
 }
 
 // DeliveryRequestPayload is the data sent to a rider for a new delivery request.
@@ -41,58 +65,59 @@ type DeliveryRequestPayload struct {
 	EstimatedEarning float64
 }
 
-// SendDeliveryRequest sends an FCM data+notification push to a single device token.
-// This wakes the app from background/killed state and triggers the delivery flow.
+// SendDeliveryRequest sends a high-priority FCM push to a single device
+// token. Wakes the rider's app from background/killed state and triggers
+// the delivery flow. Honoured channel: `delivery_requests` on Android.
 func (c *Client) SendDeliveryRequest(ctx context.Context, fcmToken string, p DeliveryRequestPayload) error {
 	if c == nil || fcmToken == "" {
 		return nil
 	}
-	// Ignore dev/test tokens
 	if len(fcmToken) < 20 {
 		return nil
 	}
 
-	body := map[string]interface{}{
-		"to":                fcmToken,
-		"priority":          "high",
-		"content_available": true, // wake iOS
-		// Data-only message so the Flutter background handler can process it
-		// without showing a system notification (the app handles the UI itself)
-		"data": map[string]string{
+	body := fmt.Sprintf("From %s • ₹%.0f earning", p.RestaurantName, p.EstimatedEarning)
+
+	message := &messaging.Message{
+		Token: fcmToken,
+		Notification: &messaging.Notification{
+			Title: "🛵 New Delivery Request",
+			Body:  body,
+		},
+		Data: map[string]string{
 			"type":              "delivery_request",
 			"order_id":          p.OrderID,
 			"restaurant_name":   p.RestaurantName,
 			"estimated_earning": fmt.Sprintf("%.0f", p.EstimatedEarning),
 			"click_action":      "FLUTTER_NOTIFICATION_CLICK",
 		},
-		// Notification block so device shows heads-up even if app is killed
-		"notification": map[string]interface{}{
-			"title":              "🛵 New Delivery Request",
-			"body":               fmt.Sprintf("From %s • ₹%.0f earning", p.RestaurantName, p.EstimatedEarning),
-			"sound":              "mkb", // custom sound (must be bundled in iOS app)
-			"android_channel_id": "delivery_requests",
-		},
-		"android": map[string]interface{}{
-			"priority": "high",
-			"ttl":      "30s", // matches the 30s rider countdown
-		},
-		"apns": map[string]interface{}{
-			"headers": map[string]string{
-				"apns-priority": "10",
+		Android: &messaging.AndroidConfig{
+			Priority: "high",
+			TTL:      durationPtr(30 * time.Second),
+			Notification: &messaging.AndroidNotification{
+				ChannelID: "delivery_requests",
+				Sound:     "mkb",
 			},
-			"payload": map[string]interface{}{
-				"aps": map[string]interface{}{
-					"content-available": 1,
-					"sound":             "mkb.mp3",
+		},
+		APNS: &messaging.APNSConfig{
+			Headers: map[string]string{"apns-priority": "10"},
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{
+					ContentAvailable: true,
+					Sound:            "mkb.mp3",
 				},
 			},
 		},
 	}
 
-	return c.send(ctx, body)
+	return c.send(ctx, message, fcmToken)
 }
 
 // SendPush sends a general push notification to a device token.
+// `data` populates the FCM data payload (used for deep-link routing).
+// When data contains `android_channel_id`, it is also set on the
+// Android notification so the device routes it to the right tray
+// channel (e.g. `new_orders`, `chizze_main`).
 func (c *Client) SendPush(ctx context.Context, fcmToken, title, body string, data map[string]string) error {
 	if c == nil || fcmToken == "" {
 		return nil
@@ -101,53 +126,81 @@ func (c *Client) SendPush(ctx context.Context, fcmToken, title, body string, dat
 		return nil
 	}
 
-	payload := map[string]interface{}{
-		"to":       fcmToken,
-		"priority": "high",
-		"data":     data,
-		"notification": map[string]string{
-			"title": title,
-			"body":  body,
+	channelID := "chizze_main"
+	if ch, ok := data["android_channel_id"]; ok && ch != "" {
+		channelID = ch
+	}
+
+	message := &messaging.Message{
+		Token: fcmToken,
+		Notification: &messaging.Notification{
+			Title: title,
+			Body:  body,
+		},
+		Data: data,
+		Android: &messaging.AndroidConfig{
+			Priority: "high",
+			Notification: &messaging.AndroidNotification{
+				ChannelID: channelID,
+				Sound:     "default",
+			},
+		},
+		APNS: &messaging.APNSConfig{
+			Headers: map[string]string{"apns-priority": "10"},
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{Sound: "default"},
+			},
 		},
 	}
-	return c.send(ctx, payload)
+
+	return c.send(ctx, message, fcmToken)
 }
 
-func (c *Client) send(ctx context.Context, payload interface{}) error {
-	data, err := json.Marshal(payload)
+// send dispatches a message and logs any failure. Returns the Firebase
+// error so callers can log at their own site too (double-logging is
+// intentional — FCM failures are easy to miss in production).
+func (c *Client) send(ctx context.Context, m *messaging.Message, token string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// Guard against callers passing the server's request context (which
+	// cancels on client disconnect) — FCM push is fire-and-forget.
+	sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp, err := c.messaging.Send(sendCtx, m)
 	if err != nil {
-		return fmt.Errorf("fcm: marshal error: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://fcm.googleapis.com/fcm/send", bytes.NewReader(data))
-	if err != nil {
-		return fmt.Errorf("fcm: request build error: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "key="+c.serverKey)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("fcm: HTTP error: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("fcm: server returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	// Parse response to check for per-token failures
-	var result struct {
-		Success int `json:"success"`
-		Failure int `json:"failure"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err == nil {
-		if result.Failure > 0 {
-			log.Printf("[fcm] Send had %d failures (success: %d)", result.Failure, result.Success)
+		isUnregistered := messaging.IsUnregistered(err) || messaging.IsRegistrationTokenNotRegistered(err)
+		if isUnregistered {
+			log.Printf("[fcm] token unregistered (device uninstalled?) token=%s…", truncateToken(token))
+			return errUnregisteredToken
 		}
+		log.Printf("[fcm] Send failed token=%s… err=%v", truncateToken(token), err)
+		return err
 	}
-
+	log.Printf("[fcm] Sent id=%s token=%s…", resp, truncateToken(token))
 	return nil
+}
+
+// ErrUnregisteredToken is returned when FCM reports a token is no longer
+// valid (app uninstalled, token rotated, etc.). Callers may want to
+// clear the stored fcm_token on the user doc to stop retrying.
+var errUnregisteredToken = errors.New("fcm: token unregistered")
+
+// IsUnregisteredToken reports whether err indicates the device token is
+// no longer valid. Thin wrapper so callers don't import this package's
+// internal sentinel.
+func IsUnregisteredToken(err error) bool {
+	return errors.Is(err, errUnregisteredToken)
+}
+
+func truncateToken(t string) string {
+	if len(t) <= 12 {
+		return t
+	}
+	return t[:12]
+}
+
+func durationPtr(d time.Duration) *time.Duration {
+	return &d
 }

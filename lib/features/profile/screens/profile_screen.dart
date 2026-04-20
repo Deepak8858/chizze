@@ -101,7 +101,7 @@ class ProfileScreen extends ConsumerWidget {
                 _SettingsTile(
                   icon: Icons.headset_mic_outlined,
                   label: 'Help & Support',
-                  onTap: () => launchUrl(Uri.parse('mailto:support@chizze.app')),
+                  onTap: () => launchUrl(Uri.parse('mailto:supportchizze@gmail.com')),
                 ),
                 _SettingsTile(
                   icon: Icons.info_outline_rounded,

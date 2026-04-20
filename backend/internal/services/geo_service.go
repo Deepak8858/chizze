@@ -4,6 +4,10 @@ import (
 	"github.com/chizze/backend/pkg/utils"
 )
 
+// FixedDeliveryETAMinutes is the flat delivery ETA surfaced to customers.
+// Set at 90 min to cover worst-case prep + travel + handover across cities.
+const FixedDeliveryETAMinutes = 90
+
 // GeoService handles location-based operations
 type GeoService struct{}
 
@@ -17,10 +21,9 @@ func (s *GeoService) Distance(lat1, lng1, lat2, lng2 float64) float64 {
 	return utils.Haversine(lat1, lng1, lat2, lng2)
 }
 
-// EstimateDeliveryTime returns estimated minutes for delivery
+// EstimateDeliveryTime returns a fixed delivery ETA in minutes.
 func (s *GeoService) EstimateDeliveryTime(distanceKm float64, prepTimeMin int) int {
-	travelMin := utils.EstimateETA(distanceKm)
-	return prepTimeMin + travelMin
+	return FixedDeliveryETAMinutes
 }
 
 // NearbyBounds returns bounding box for geo queries

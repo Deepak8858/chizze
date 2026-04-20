@@ -72,18 +72,38 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 		return
 	}
 
-	// Duplicate review check
-	existing, err := h.appwrite.ListReviewsByQuery([]string{
+	// Duplicate review check.
+	//
+	// We use a deterministic document ID (`rev_<orderID>`) so the primary
+	// duplicate check is a cheap point lookup that works without any index
+	// on the reviews collection. The previous filter-query approach failed
+	// with 500 "Failed to validate existing reviews" whenever the Appwrite
+	// `reviews` collection lacked an index on `order_id`+`customer_id` —
+	// which blocked every customer from submitting a rating.
+	//
+	// A legacy filter check runs as a secondary line of defence to catch
+	// reviews that were created with Appwrite's `unique()` IDs before this
+	// handler switched to deterministic keys. That check is fail-open: if
+	// the query errors (e.g. missing index), we log and continue rather
+	// than blocking the customer.
+	reviewID := "rev_" + orderID
+	if existing, getErr := h.appwrite.GetReview(reviewID); getErr == nil && existing != nil {
+		utils.BadRequest(c, "You have already reviewed this order")
+		return
+	} else if getErr != nil && !appwrite.IsNotFound(getErr) {
+		log.Printf("[ReviewHandler.CreateReview] deterministic dup lookup for order %s failed (continuing): %v", orderID, getErr)
+	}
+
+	if legacy, err := h.appwrite.ListReviewsByQuery([]string{
 		appwrite.QueryEqual("order_id", orderID),
 		appwrite.QueryEqual("customer_id", userID),
 		appwrite.QueryLimit(1),
-	})
-	if err != nil {
-		log.Printf("[ReviewHandler.CreateReview] Failed to check duplicate reviews for order %s: %v", orderID, err)
-		utils.InternalError(c, "Failed to validate existing reviews")
-		return
-	}
-	if existing.Total > 0 {
+	}); err != nil {
+		// Fail-open: index/schema issues on the reviews collection must not
+		// block submission — the deterministic ID above and the 409 handling
+		// on Create below still prevent duplicates.
+		log.Printf("[ReviewHandler.CreateReview] legacy dup filter failed for order %s (non-fatal): %v", orderID, err)
+	} else if legacy.Total > 0 {
 		utils.BadRequest(c, "You have already reviewed this order")
 		return
 	}
@@ -95,21 +115,44 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 		deliveryRating = *req.DeliveryRating
 	}
 
-	reviewData := map[string]interface{}{
-		"order_id":            orderID,
-		"customer_id":         userID,
-		"restaurant_id":       restaurantID,
-		"delivery_partner_id": deliveryPartnerID,
-		"food_rating":         req.FoodRating,
-		"delivery_rating":     deliveryRating,
-		"review_text":         req.ReviewText,
-		"tags":                req.Tags,
-		"is_visible":          true,
-		"created_at":          time.Now().Format(time.RFC3339),
+	// `tags` must be a non-nil slice; Appwrite string-array attributes reject
+	// JSON `null` with 400 document_invalid_structure, and the client sometimes
+	// sends a missing/null field when the user didn't tap any tag chip.
+	tags := req.Tags
+	if tags == nil {
+		tags = []string{}
 	}
 
-	doc, err := h.appwrite.CreateReview("unique()", reviewData)
+	reviewData := map[string]interface{}{
+		"order_id":        orderID,
+		"customer_id":     userID,
+		"restaurant_id":   restaurantID,
+		"food_rating":     req.FoodRating,
+		"delivery_rating": deliveryRating,
+		"review_text":     req.ReviewText,
+		"tags":            tags,
+		"is_visible":      true,
+		"created_at":      time.Now().Format(time.RFC3339),
+	}
+	// Only include delivery_partner_id when we actually have a rider. Pickup
+	// orders, orders cancelled before assignment, and legacy records without
+	// the denormalized field leave this empty — and the production Appwrite
+	// attribute is relationship/min-length constrained, so writing "" fails
+	// with 400 document_invalid_structure and blocks every such review.
+	if deliveryPartnerID != "" {
+		reviewData["delivery_partner_id"] = deliveryPartnerID
+	}
+
+	doc, err := h.appwrite.CreateReview(reviewID, reviewData)
 	if err != nil {
+		// 409 from Appwrite means the deterministic ID already exists —
+		// i.e. someone submitted between our GetReview lookup and this
+		// Create. Treat as a duplicate rather than a server error so the
+		// client gets an accurate, user-friendly message.
+		if appwrite.IsConflict(err) {
+			utils.BadRequest(c, "You have already reviewed this order")
+			return
+		}
 		log.Printf("[ReviewHandler.CreateReview] Failed to create review for order %s: %v", orderID, err)
 		utils.InternalError(c, "Failed to submit review")
 		return

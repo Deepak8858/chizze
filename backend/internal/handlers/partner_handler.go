@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"sort"
 	"strings"
@@ -768,6 +769,45 @@ func (h *PartnerHandler) Performance(c *gin.Context) {
 		}
 	}
 	utils.Success(c, perfPayload)
+}
+
+// ListReviews returns reviews for the partner's restaurant, newest first.
+// @Summary      List reviews for the partner's restaurant
+// @Description  Returns reviews for the restaurant owned by the authenticated partner, ordered newest-first. Fails open to an empty list if the underlying reviews collection has schema/index issues, matching the admin endpoint's defensive behaviour so the partner dashboard never surfaces a 500.
+// @Tags         Partners
+// @Accept       json
+// @Produce      json
+// @Param        page      query     int  false  "Page number (1-based)"
+// @Param        per_page  query     int  false  "Items per page"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/partner/reviews [get]
+func (h *PartnerHandler) ListReviews(c *gin.Context) {
+	_, restID, ok := h.getPartnerRestaurant(c)
+	if !ok {
+		return
+	}
+
+	p := models.ParsePagination(c)
+	queries := []string{
+		appwrite.QueryEqual("restaurant_id", restID),
+		appwrite.QueryLimit(p.PerPage),
+		appwrite.QueryOffset(p.Offset()),
+		// reviews collection has no user-defined created_at attribute — use
+		// the Appwrite managed $createdAt system field to avoid a 400.
+		appwrite.QueryOrderDesc("$createdAt"),
+	}
+
+	result, err := h.appwrite.ListReviewsByQuery(queries)
+	if err != nil {
+		// Fail-open: if the reviews collection is missing an index on
+		// restaurant_id the partner dashboard must still render.
+		log.Printf("[PartnerHandler.ListReviews] Appwrite error for restaurant %s: %v", restID, err)
+		utils.Paginated(c, []map[string]interface{}{}, p.Page, p.PerPage, 0)
+		return
+	}
+	utils.Paginated(c, result.Documents, p.Page, p.PerPage, result.Total)
 }
 
 // UpdateRestaurant updates restaurant metadata (e.g. image URL)

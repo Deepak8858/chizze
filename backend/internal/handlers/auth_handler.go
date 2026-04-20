@@ -953,6 +953,17 @@ func (h *AuthHandler) Onboard(c *gin.Context) {
 		}
 	}
 
+	// Invalidate the user profile cache so the next GET /users/me returns the
+	// just-saved name/phone/address instead of a stale pre-onboarding snapshot.
+	// Why: main.dart watches userProfileProvider at the app root, so the client
+	// fetches the profile as soon as the session turns authenticated — which
+	// populates the Redis cache BEFORE onboarding runs. Without this Del, the
+	// post-onboarding refetch reads back the empty-name snapshot and the
+	// profile tab shows "Set up your profile" instead of the entered name.
+	if err := h.redis.Del(c.Request.Context(), services.UserProfileKey(userID)); err != nil {
+		log.Printf("[WARN] Onboard: failed to invalidate profile cache for %s: %v", userID, err)
+	}
+
 	// Fetch updated user doc to return to client
 	updatedUser, _ := h.appwrite.GetUser(userID)
 

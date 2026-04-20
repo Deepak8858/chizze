@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:appwrite/enums.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/services/location_service.dart';
 import '../../../shared/widgets/chizze_button.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/app_logo.dart';
@@ -35,6 +36,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _roleSet = true;
       _selectedRole = _getSelectedRole(context);
       ref.read(authProvider.notifier).setSelectedRole(_selectedRole);
+
+      // Kick off GPS warm-up in the background while the user types the phone
+      // number / waits for OTP. By the time onboarding opens, the first real
+      // GPS fix is usually already cached — customers see their address
+      // instantly instead of watching a spinner.
+      if (_selectedRole == 'customer') {
+        ref.read(locationServiceProvider).warmUp();
+      }
     }
   }
 

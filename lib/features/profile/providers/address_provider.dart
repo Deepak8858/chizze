@@ -125,22 +125,31 @@ class AddressNotifier extends StateNotifier<List<SavedAddress>> {
     'is_default': a.isDefault,
   };
 
-  /// Add address — awaits server response. Returns the saved address or null on failure.
+  /// Add address with optimistic insert. The passed `address.id` is treated
+  /// as a temporary local id; once the server responds we swap in the real
+  /// document. On failure the optimistic entry is rolled back.
   Future<SavedAddress?> addAddress(SavedAddress address) async {
+    // Optimistic insert so the UI shows the new row immediately.
+    state = [...state, address];
     try {
       final r = await _api.post(ApiConfig.addresses, body: _toBody(address));
       if (r.success && r.data != null) {
-        final serverAddress = _parseDoc(r.data as Map<String, dynamic>, fallback: address);
-        state = [...state, serverAddress];
+        final serverAddress =
+            _parseDoc(r.data as Map<String, dynamic>, fallback: address);
+        state = state
+            .map((a) => a.id == address.id ? serverAddress : a)
+            .toList();
         if (kDebugMode) {
           debugPrint('[Address] add success: ${serverAddress.id}');
         }
         return serverAddress;
       }
       if (kDebugMode) debugPrint('[Address] add failed: ${r.error}');
+      state = state.where((a) => a.id != address.id).toList();
       return null;
     } catch (e) {
       if (kDebugMode) debugPrint('[Address] add error: $e');
+      state = state.where((a) => a.id != address.id).toList();
       return null;
     }
   }

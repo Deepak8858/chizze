@@ -15,6 +15,7 @@ func registerReviewRoutes(te *testutil.TestEnv) {
 	reviewHandler := handlers.NewReviewHandler(te.AWService, nil)
 	restaurantHandler := handlers.NewRestaurantHandler(te.AWService, te.GeoService, te.CacheService)
 	adminHandler := handlers.NewAdminHandler(te.AWService, te.RedisClient, te.Hub)
+	partnerHandler := handlers.NewPartnerHandler(te.AWService, te.RedisClient)
 
 	v1 := te.Router.Group("/api/v1")
 
@@ -36,6 +37,14 @@ func registerReviewRoutes(te *testutil.TestEnv) {
 	{
 		admin.GET("/reviews", adminHandler.ListReviews)
 		admin.PUT("/reviews/:id", adminHandler.UpdateReview)
+	}
+
+	partner := v1.Group("/partner")
+	partner.Use(middleware.Auth(te.Config, te.RedisClient))
+	partner.Use(middleware.RequireRole("restaurant_owner"))
+	{
+		partner.GET("/reviews", partnerHandler.ListReviews)
+		partner.POST("/reviews/:id/reply", reviewHandler.ReplyToReview)
 	}
 }
 
@@ -357,5 +366,255 @@ func TestCreateReview_DeliveryRatingOptionalFallsBackToFoodRating(t *testing.T) 
 	if !updated {
 		restaurant := te.FakeAW.GetDocument("restaurants", "rest_1")
 		t.Fatalf("expected restaurant aggregate update with total_ratings, got %#v", restaurant)
+	}
+}
+
+// TestCreateReview_DeterministicIDPreventsRetryDuplicate verifies the
+// deterministic review ID stops duplicates even when the legacy filter-query
+// check is bypassed (e.g. racing retries submitting in parallel).
+func TestCreateReview_DeterministicIDPreventsRetryDuplicate(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerReviewRoutes(te)
+
+	te.SeedRestaurant("rest_1", "owner_1", 12.97, 77.59, true)
+	te.SeedOrder("order_delivered", map[string]interface{}{
+		"customer_id":   "cust_1",
+		"restaurant_id": "rest_1",
+		"status":        "delivered",
+	})
+
+	body := map[string]interface{}{
+		"food_rating": 5,
+		"review_text": "Great",
+	}
+
+	rec := te.AuthRequest("POST", "/api/v1/orders/order_delivered/review", body, "cust_1", "customer")
+	if rec.Code != 201 {
+		t.Fatalf("first submit: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The created document must use the deterministic ID so the point-lookup
+	// duplicate check works without any collection index.
+	if doc := te.FakeAW.GetDocument("reviews", "rev_order_delivered"); doc == nil {
+		t.Fatalf("expected review seeded with deterministic id rev_order_delivered, fake store: %#v", te.FakeAW)
+	}
+
+	rec2 := te.AuthRequest("POST", "/api/v1/orders/order_delivered/review", body, "cust_1", "customer")
+	if rec2.Code != 400 {
+		t.Fatalf("second submit: expected 400 duplicate, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+	if te.FakeAW.DocumentCount("reviews") != 1 {
+		t.Fatalf("expected duplicate to be rejected, got %d documents", te.FakeAW.DocumentCount("reviews"))
+	}
+}
+
+// TestCreateReview_OmitsEmptyDeliveryPartnerID ensures orders that were never
+// assigned a rider (pickup, cancelled-before-assignment, legacy rows) still
+// accept reviews. Writing delivery_partner_id="" fails in production Appwrite
+// when the attribute is relationship-typed or min-length constrained — the
+// handler must omit the key entirely instead of sending an empty string.
+func TestCreateReview_OmitsEmptyDeliveryPartnerID(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerReviewRoutes(te)
+
+	te.SeedRestaurant("rest_1", "owner_1", 12.97, 77.59, true)
+	te.SeedOrder("order_no_rider", map[string]interface{}{
+		"customer_id":   "cust_1",
+		"restaurant_id": "rest_1",
+		"status":        "delivered",
+		// no delivery_partner_id — pickup or unassigned order
+	})
+
+	body := map[string]interface{}{
+		"food_rating": 5,
+		"review_text": "Solid pickup",
+	}
+
+	rec := te.AuthRequest("POST", "/api/v1/orders/order_no_rider/review", body, "cust_1", "customer")
+	if rec.Code != 201 {
+		t.Fatalf("expected 201 for pickup/no-rider order, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	stored := te.FakeAW.GetDocument("reviews", "rev_order_no_rider")
+	if stored == nil {
+		t.Fatalf("expected review stored with deterministic id")
+	}
+	if raw, present := stored["delivery_partner_id"]; present {
+		t.Fatalf("delivery_partner_id must be omitted when order has no rider, got %#v", raw)
+	}
+}
+
+// TestCreateReview_NilTagsNormalizedToEmptySlice guards against the client
+// omitting the tags field entirely (or sending null). Appwrite's string-array
+// attribute rejects JSON null with 400 document_invalid_structure, so the
+// handler must normalize to an empty array before the write.
+func TestCreateReview_NilTagsNormalizedToEmptySlice(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerReviewRoutes(te)
+
+	te.SeedRestaurant("rest_1", "owner_1", 12.97, 77.59, true)
+	te.SeedOrder("order_delivered", map[string]interface{}{
+		"customer_id":         "cust_1",
+		"restaurant_id":       "rest_1",
+		"delivery_partner_id": "dp_1",
+		"status":              "delivered",
+	})
+
+	// Explicitly no tags key in payload; req.Tags arrives as nil.
+	body := map[string]interface{}{
+		"food_rating": 4,
+		"review_text": "Great",
+	}
+	rec := te.AuthRequest("POST", "/api/v1/orders/order_delivered/review", body, "cust_1", "customer")
+	if rec.Code != 201 {
+		t.Fatalf("expected 201 when tags omitted, got %d: %s", rec.Code, rec.Body.String())
+	}
+	stored := te.FakeAW.GetDocument("reviews", "rev_order_delivered")
+	if stored == nil {
+		t.Fatalf("expected review to be stored")
+	}
+	tags, ok := stored["tags"].([]string)
+	if !ok {
+		// JSON round-trip through fake server may lose []string type; accept
+		// []interface{} as well as long as it's a non-nil slice.
+		if anyTags, okAny := stored["tags"].([]interface{}); okAny {
+			if anyTags == nil {
+				t.Fatalf("tags stored as nil — must be empty slice")
+			}
+			return
+		}
+		t.Fatalf("expected tags slice in stored review, got %#v", stored["tags"])
+	}
+	if tags == nil {
+		t.Fatalf("tags stored as nil — must be empty slice")
+	}
+}
+
+// TestCreateReview_EdgeCases covers non-owner, missing order, and invalid
+// rating payloads to make sure the handler gates everything before persisting.
+func TestCreateReview_EdgeCases(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerReviewRoutes(te)
+
+	te.SeedRestaurant("rest_1", "owner_1", 12.97, 77.59, true)
+	te.SeedOrder("order_delivered", map[string]interface{}{
+		"customer_id":   "cust_1",
+		"restaurant_id": "rest_1",
+		"status":        "delivered",
+	})
+
+	validBody := map[string]interface{}{"food_rating": 5, "review_text": "ok"}
+
+	t.Run("non-existent order returns 404", func(t *testing.T) {
+		rec := te.AuthRequest("POST", "/api/v1/orders/does_not_exist/review", validBody, "cust_1", "customer")
+		if rec.Code != 404 {
+			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("other customer cannot review", func(t *testing.T) {
+		rec := te.AuthRequest("POST", "/api/v1/orders/order_delivered/review", validBody, "stranger", "customer")
+		if rec.Code != 403 {
+			t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("missing food_rating returns 400", func(t *testing.T) {
+		rec := te.AuthRequest("POST", "/api/v1/orders/order_delivered/review",
+			map[string]interface{}{"review_text": "no rating"}, "cust_1", "customer")
+		if rec.Code != 400 {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("out-of-range food_rating returns 400", func(t *testing.T) {
+		rec := te.AuthRequest("POST", "/api/v1/orders/order_delivered/review",
+			map[string]interface{}{"food_rating": 9}, "cust_1", "customer")
+		if rec.Code != 400 {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("zero food_rating fails required validation", func(t *testing.T) {
+		rec := te.AuthRequest("POST", "/api/v1/orders/order_delivered/review",
+			map[string]interface{}{"food_rating": 0}, "cust_1", "customer")
+		if rec.Code != 400 {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestPartnerListReviews_OwnershipAndVisibility verifies partners see reviews
+// for their own restaurant, newest-first, and never reviews of restaurants
+// they do not own.
+func TestPartnerListReviews_OwnershipAndVisibility(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerReviewRoutes(te)
+
+	te.SeedRestaurant("rest_mine", "owner_1", 12.97, 77.59, true)
+	te.SeedRestaurant("rest_other", "owner_2", 12.97, 77.59, true)
+
+	now := time.Now().UTC()
+	te.FakeAW.SeedDocument("reviews", "rev_mine_new", map[string]interface{}{
+		"restaurant_id": "rest_mine",
+		"food_rating":   5,
+		"is_visible":    true,
+		"created_at":    now.Add(-1 * time.Minute).Format(time.RFC3339),
+	})
+	te.FakeAW.SeedDocument("reviews", "rev_mine_old", map[string]interface{}{
+		"restaurant_id": "rest_mine",
+		"food_rating":   4,
+		"is_visible":    true,
+		"created_at":    now.Add(-10 * time.Minute).Format(time.RFC3339),
+	})
+	te.FakeAW.SeedDocument("reviews", "rev_mine_hidden", map[string]interface{}{
+		"restaurant_id": "rest_mine",
+		"food_rating":   2,
+		"is_visible":    false,
+		"created_at":    now.Add(-5 * time.Minute).Format(time.RFC3339),
+	})
+	te.FakeAW.SeedDocument("reviews", "rev_other", map[string]interface{}{
+		"restaurant_id": "rest_other",
+		"food_rating":   5,
+		"is_visible":    true,
+		"created_at":    now.Format(time.RFC3339),
+	})
+
+	rec := te.AuthRequest("GET", "/api/v1/partner/reviews?per_page=50", nil, "owner_1", "restaurant_owner")
+	items := reviewListFromResponse(t, te, rec.Code, te.ParseResponse(rec))
+
+	// Partner sees ALL their reviews, hidden included — the partner dashboard
+	// needs visibility into moderated content, unlike the public endpoint.
+	if !containsReviewID(items, "rev_mine_new") ||
+		!containsReviewID(items, "rev_mine_old") ||
+		!containsReviewID(items, "rev_mine_hidden") {
+		t.Fatalf("expected partner to see all own-restaurant reviews, got %#v", items)
+	}
+	if containsReviewID(items, "rev_other") {
+		t.Fatalf("partner must not see reviews for restaurants they do not own, got %#v", items)
+	}
+}
+
+// TestPartnerListReviews_NoRestaurantReturns403 ensures callers without a
+// registered restaurant get a clean 403 rather than an empty-looking 200.
+func TestPartnerListReviews_NoRestaurantReturns403(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerReviewRoutes(te)
+
+	rec := te.AuthRequest("GET", "/api/v1/partner/reviews", nil, "orphan_owner", "restaurant_owner")
+	if rec.Code != 403 {
+		t.Fatalf("expected 403 when partner has no restaurant, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

@@ -10,7 +10,7 @@ class SupportScreen extends StatelessWidget {
   const SupportScreen({super.key});
 
   static const _supportPhone = '+918008008000';
-  static const _supportEmail = 'support@chizze.com';
+  static const _supportEmail = 'supportchizze@gmail.com';
 
   @override
   Widget build(BuildContext context) {

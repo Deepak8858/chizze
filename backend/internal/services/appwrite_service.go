@@ -315,17 +315,17 @@ func (s *AppwriteService) CreateUser(id string, data map[string]interface{}) (ma
 //   - user_id → recipient (required for push)
 //   - title, body, type → FCM notification header
 //   - any nested `data` map is forwarded as FCM data (used for deep_link routing)
+//
+// Callers may pass `data` either as a nested `map[string]interface{}` (natural
+// for inline construction) or as a pre-serialised JSON string. Appwrite's
+// `notifications` collection stores `data` as a String attribute, so we
+// transparently JSON-encode any map before persisting — otherwise the create
+// would 400 with `document_invalid_structure` and the notification (plus push)
+// would silently disappear inside the goroutine call-sites that use it.
 func (s *AppwriteService) CreateNotification(id string, data map[string]interface{}) (map[string]interface{}, error) {
-	doc, err := s.client.CreateDocument(models.CollectionNotifications, id, data)
-	if err != nil {
-		return doc, err
-	}
-
-	userID, _ := data["user_id"].(string)
-	title, _ := data["title"].(string)
-	body, _ := data["body"].(string)
-	notifType, _ := data["type"].(string)
-
+	// Snapshot the push-payload view from the data *before* we mutate the
+	// doc for persistence, so the push always carries a nested map even if
+	// we turn the on-disk value into a string.
 	var pushData map[string]interface{}
 	switch raw := data["data"].(type) {
 	case map[string]interface{}:
@@ -338,6 +338,32 @@ func (s *AppwriteService) CreateNotification(id string, data map[string]interfac
 			}
 		}
 	}
+
+	// Normalise for Appwrite persistence: a nested map must be stored as a
+	// JSON string on the `data` String attribute. If the caller already
+	// passed a string, leave it alone.
+	persisted := make(map[string]interface{}, len(data))
+	for k, v := range data {
+		persisted[k] = v
+	}
+	if nested, ok := persisted["data"].(map[string]interface{}); ok {
+		if encoded, jerr := json.Marshal(nested); jerr == nil {
+			persisted["data"] = string(encoded)
+		} else {
+			// Can't encode — drop the field rather than trip a 400.
+			delete(persisted, "data")
+		}
+	}
+
+	doc, err := s.client.CreateDocument(models.CollectionNotifications, id, persisted)
+	if err != nil {
+		return doc, err
+	}
+
+	userID, _ := persisted["user_id"].(string)
+	title, _ := persisted["title"].(string)
+	body, _ := persisted["body"].(string)
+	notifType, _ := persisted["type"].(string)
 
 	if userID != "" && s.fcm != nil {
 		go s.sendPushToUser(userID, title, body, notifType, pushData)

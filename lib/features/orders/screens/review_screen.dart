@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/models/api_response.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/api_config.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -330,13 +331,26 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       context.go('/home');
     } catch (e) {
       if (!mounted) return;
+      final alreadyReviewed = _isAlreadyReviewed(e);
       setState(() {
         _isSubmitting = false;
-        _lastSubmissionData = submissionData;
+        // Duplicate submission isn't retry-able — clear the retry slot so the
+        // user isn't invited to hammer a request that will keep 400ing.
+        _lastSubmissionData = alreadyReviewed ? null : submissionData;
       });
+      if (alreadyReviewed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You have already reviewed this order'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+        context.go('/home');
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to submit review: $e'),
+          content: Text(_friendlyError(e)),
           backgroundColor: AppColors.error,
           action: SnackBarAction(
             label: 'Retry',
@@ -375,14 +389,51 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       context.go('/home');
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isSubmitting = false);
+      final alreadyReviewed = _isAlreadyReviewed(e);
+      setState(() {
+        _isSubmitting = false;
+        if (alreadyReviewed) _lastSubmissionData = null;
+      });
+      if (alreadyReviewed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You have already reviewed this order'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+        context.go('/home');
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Retry failed: $e'),
+          content: Text(_friendlyError(e)),
           backgroundColor: AppColors.error,
         ),
       );
     }
+  }
+
+  /// Map an ApiException / network failure to a short user-facing sentence.
+  /// Shows the backend's `error` field verbatim for 4xx so the customer sees
+  /// the actual reason ("order not delivered yet"), and a plain offline
+  /// message for network drops instead of a Dart exception dump.
+  String _friendlyError(Object e) {
+    if (e is ApiException) {
+      if (e.statusCode == 0) {
+        return 'No internet connection. Your review will submit when you reconnect.';
+      }
+      if (e.statusCode >= 500) {
+        return 'Server error. Please try again in a moment.';
+      }
+      return e.message.isNotEmpty ? e.message : 'Could not submit review';
+    }
+    return 'Could not submit review. Please try again.';
+  }
+
+  bool _isAlreadyReviewed(Object e) {
+    if (e is! ApiException) return false;
+    if (e.statusCode != 400) return false;
+    return e.message.toLowerCase().contains('already reviewed');
   }
 
   Widget _buildStarRating({

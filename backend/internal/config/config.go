@@ -31,8 +31,13 @@ type Config struct {
 	// JWT
 	JWTSecret string
 
-	// FCM Push Notifications
-	FCMServerKey string
+	// FCM Push Notifications (HTTP v1 API via Firebase Admin SDK).
+	// Legacy FCMServerKey is kept on the struct so any stale deploys that
+	// still set FCM_SERVER_KEY don't crash — it's simply ignored at runtime
+	// (Google decommissioned the legacy HTTP API on 2024-06-20).
+	FirebaseCredentialsJSON string // absolute path to service-account JSON
+	FirebaseProjectID       string // e.g. "chizze-app"
+	FCMServerKey            string // DEPRECATED, no longer used
 
 	// CORS
 	AllowedOrigins string
@@ -73,7 +78,9 @@ func Load() *Config {
 		RazorpayKeyID:         getEnv("RAZORPAY_KEY_ID", ""),
 		RazorpayKeySecret:     getEnv("RAZORPAY_KEY_SECRET", ""),
 		RazorpayWebhookSecret: getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
-		FCMServerKey:          getEnv("FCM_SERVER_KEY", ""),
+		FirebaseCredentialsJSON: getEnv("FIREBASE_CREDENTIALS_JSON", ""),
+		FirebaseProjectID:       getEnv("FIREBASE_PROJECT_ID", ""),
+		FCMServerKey:            getEnv("FCM_SERVER_KEY", ""),
 		RedisURL:              getEnv("REDIS_URL", "redis://localhost:6379"),
 		JWTSecret:             getEnv("JWT_SECRET", "chizze-dev-secret"),
 		AllowedOrigins:        getEnv("ALLOWED_ORIGINS", "*"),

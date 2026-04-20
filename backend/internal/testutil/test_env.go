@@ -46,6 +46,8 @@ type TestEnv struct {
 	DeliveryHandler *handlers.DeliveryHandler
 	AuthHandler     *handlers.AuthHandler
 	PartnerHandler  *handlers.PartnerHandler
+	PaymentHandler  *handlers.PaymentHandler
+	PaymentService  *services.PaymentService
 	Router          *gin.Engine
 
 	// MatcherCalled is set to true when the matcherCallback fires.
@@ -65,17 +67,20 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	}
 
 	cfg := &config.Config{
-		Port:               "0",
-		AppwriteEndpoint:   fakeAW.Server.URL,
-		AppwriteProjectID:  "test_project",
-		AppwriteAPIKey:     "test_key",
-		AppwriteDatabaseID: TestDBID,
-		JWTSecret:          TestJWTSecret,
-		RedisURL:           "redis://" + mr.Addr(),
-		GinMode:            "test",
-		RequestTimeout:     5 * time.Second,
-		MaxConnections:     10,
-		AllowedOrigins:     "*",
+		Port:                  "0",
+		AppwriteEndpoint:      fakeAW.Server.URL,
+		AppwriteProjectID:     "test_project",
+		AppwriteAPIKey:        "test_key",
+		AppwriteDatabaseID:    TestDBID,
+		JWTSecret:             TestJWTSecret,
+		RedisURL:              "redis://" + mr.Addr(),
+		GinMode:               "test",
+		RequestTimeout:        5 * time.Second,
+		MaxConnections:        10,
+		AllowedOrigins:        "*",
+		RazorpayKeyID:         "rzp_test_key",
+		RazorpayKeySecret:     "test_key_secret",
+		RazorpayWebhookSecret: "test_webhook_secret",
 	}
 
 	awClient := appwrite.NewClient(cfg)
@@ -96,6 +101,8 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	deliveryHandler := handlers.NewDeliveryHandler(awService, geoService, redisClient, broadcaster)
 	authHandler := handlers.NewAuthHandler(awService, redisClient, cfg)
 	partnerHandler := handlers.NewPartnerHandler(awService, redisClient)
+	paymentService := services.NewPaymentService(cfg)
+	paymentHandler := handlers.NewPaymentHandler(awService, paymentService)
 
 	te := &TestEnv{
 		T:               t,
@@ -114,6 +121,8 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		DeliveryHandler: deliveryHandler,
 		AuthHandler:     authHandler,
 		PartnerHandler:  partnerHandler,
+		PaymentHandler:  paymentHandler,
+		PaymentService:  paymentService,
 	}
 
 	// Wire matcher callback so tests can verify it fires.
@@ -285,7 +294,16 @@ func (te *TestEnv) SetupRouter() {
 			orders.GET("/:id/tracking", te.OrderHandler.GetTracking)
 			orders.PUT("/:id/cancel", te.OrderHandler.CancelOrder)
 		}
+
+		payments := authenticated.Group("/payments")
+		{
+			payments.POST("/initiate", te.PaymentHandler.Initiate)
+			payments.POST("/verify", te.PaymentHandler.Verify)
+		}
 	}
+
+	// Razorpay webhook is public (secured by signature, not JWT)
+	v1.POST("/payments/webhook", te.PaymentHandler.Webhook)
 
 	// Partner routes
 	partner := v1.Group("/partner")

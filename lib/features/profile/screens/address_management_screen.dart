@@ -220,7 +220,6 @@ class AddressManagementScreen extends ConsumerWidget {
     String selectedLabel = existing?.label ?? 'Home';
     double? capturedLat = existing?.latitude;
     double? capturedLng = existing?.longitude;
-    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -376,73 +375,61 @@ class AddressManagementScreen extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: isSaving
-                      ? null
-                      : () async {
-                          if (addrCtrl.text.isEmpty) return;
-                          setSheetState(() => isSaving = true);
-                          try {
-                            if (isEdit) {
-                              final result = await ref
-                                  .read(addressProvider.notifier)
-                                  .updateAddress(
-                                    existing.copyWith(
-                                      label: selectedLabel,
-                                      fullAddress: addrCtrl.text,
-                                      landmark: landCtrl.text,
-                                      latitude: capturedLat ?? existing.latitude,
-                                      longitude: capturedLng ?? existing.longitude,
-                                    ),
-                                  );
-                              if (ctx.mounted) {
-                                Navigator.pop(ctx);
-                                if (result == null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Failed to update address')),
-                                  );
-                                }
-                              }
-                            } else {
-                              final result = await ref
-                                  .read(addressProvider.notifier)
-                                  .addAddress(
-                                    SavedAddress(
-                                      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-                                      label: selectedLabel,
-                                      fullAddress: addrCtrl.text,
-                                      landmark: landCtrl.text,
-                                      latitude: capturedLat ?? 0,
-                                      longitude: capturedLng ?? 0,
-                                    ),
-                                  );
-                              if (ctx.mounted) {
-                                Navigator.pop(ctx);
-                                if (result == null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Failed to save address. Please try again.')),
-                                  );
-                                }
-                              }
-                            }
-                          } finally {
-                            if (ctx.mounted) setSheetState(() => isSaving = false);
-                          }
-                        },
+                  onPressed: () {
+                    if (addrCtrl.text.isEmpty) return;
+                    final notifier = ref.read(addressProvider.notifier);
+                    final labelSnap = selectedLabel;
+                    final addrSnap = addrCtrl.text;
+                    final landSnap = landCtrl.text;
+                    final latSnap = capturedLat;
+                    final lngSnap = capturedLng;
+
+                    // Close the sheet immediately — optimistic state update
+                    // in the provider means the new/updated row already shows
+                    // in the list. If the server rejects, we roll back +
+                    // surface a SnackBar on the parent screen.
+                    Navigator.pop(ctx);
+
+                    Future<void>(() async {
+                      final result = isEdit
+                          ? await notifier.updateAddress(
+                              existing.copyWith(
+                                label: labelSnap,
+                                fullAddress: addrSnap,
+                                landmark: landSnap,
+                                latitude: latSnap ?? existing.latitude,
+                                longitude: lngSnap ?? existing.longitude,
+                              ),
+                            )
+                          : await notifier.addAddress(
+                              SavedAddress(
+                                id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+                                label: labelSnap,
+                                fullAddress: addrSnap,
+                                landmark: landSnap,
+                                latitude: latSnap ?? 0,
+                                longitude: lngSnap ?? 0,
+                              ),
+                            );
+                      if (result == null && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isEdit
+                                  ? 'Failed to update address'
+                                  : 'Failed to save address. Please try again.',
+                            ),
+                          ),
+                        );
+                      }
+                    });
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: isSaving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(isEdit ? 'Update Address' : 'Save Address'),
+                  child: Text(isEdit ? 'Update Address' : 'Save Address'),
                 ),
               ),
             ],

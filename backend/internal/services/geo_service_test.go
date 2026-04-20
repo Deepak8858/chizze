@@ -32,31 +32,20 @@ func TestGeoService_EstimateDeliveryTime(t *testing.T) {
 		name        string
 		distanceKm  float64
 		prepTimeMin int
-		wantMin     int
 	}{
-		{"short distance, low prep", 2, 10, 20},  // ETA(2) = ceil(2/25*60)+5 = 10, +10 prep = 20
-		{"zero distance", 0, 15, 20},               // ETA(0)=5, +15 = 20
-		{"5km with 20min prep", 5, 20, 37},          // ETA(5)=17, +20 = 37
+		{"short distance, low prep", 2, 10},
+		{"zero distance", 0, 15},
+		{"5km with 20min prep", 5, 20},
+		{"long distance, high prep", 20, 40},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := svc.EstimateDeliveryTime(tc.distanceKm, tc.prepTimeMin)
-			if got != tc.wantMin {
-				t.Errorf("EstimateDeliveryTime(%.1f, %d) = %d, want %d", tc.distanceKm, tc.prepTimeMin, got, tc.wantMin)
+			if got != FixedDeliveryETAMinutes {
+				t.Errorf("EstimateDeliveryTime(%.1f, %d) = %d, want %d", tc.distanceKm, tc.prepTimeMin, got, FixedDeliveryETAMinutes)
 			}
 		})
-	}
-}
-
-func TestGeoService_EstimateDeliveryTime_Additive(t *testing.T) {
-	svc := NewGeoService()
-
-	// Prep time should add directly to travel time
-	base := svc.EstimateDeliveryTime(5, 0)
-	withPrep := svc.EstimateDeliveryTime(5, 10)
-	if withPrep != base+10 {
-		t.Errorf("Prep time should add directly: base=%d, withPrep=%d, expected %d", base, withPrep, base+10)
 	}
 }
 
