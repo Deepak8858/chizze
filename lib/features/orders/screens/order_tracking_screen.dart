@@ -289,11 +289,32 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
             // ─── Actions ───
             if (order.status == OrderStatus.delivered) ...[
-              ChizzeButton(
-                label: 'Rate this Order',
-                icon: Icons.star_rounded,
-                onPressed: () => context.push('/review/${order.id}'),
-              ),
+              order.hasReview == true
+                  ? GlassCard(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: AppColors.success,
+                            size: 20,
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                            'Order Reviewed ✅',
+                            style: AppTypography.body1.copyWith(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ChizzeButton(
+                      label: 'Rate this Order',
+                      icon: Icons.star_rounded,
+                      onPressed: () => context.push('/review/${order.id}'),
+                    ),
               const SizedBox(height: AppSpacing.md),
             ],
 

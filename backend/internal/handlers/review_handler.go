@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -123,16 +124,27 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 		tags = []string{}
 	}
 
+	// Empty review_text must be omitted rather than sent as "" — matching
+	// the delivery_partner_id pattern below. The production Appwrite
+	// `review_text` attribute is size-constrained and rejects empty strings
+	// with 400 document_invalid_structure, which previously surfaced as a
+	// generic "server error" snackbar and blocked every customer who
+	// submitted a rating without typing review text (the UI marks it
+	// optional, so this was the common path).
+	reviewText := strings.TrimSpace(req.ReviewText)
+
 	reviewData := map[string]interface{}{
 		"order_id":        orderID,
 		"customer_id":     userID,
 		"restaurant_id":   restaurantID,
 		"food_rating":     req.FoodRating,
 		"delivery_rating": deliveryRating,
-		"review_text":     req.ReviewText,
 		"tags":            tags,
 		"is_visible":      true,
-		"created_at":      time.Now().Format(time.RFC3339),
+		"created_at":      time.Now().UTC().Format(time.RFC3339),
+	}
+	if reviewText != "" {
+		reviewData["review_text"] = reviewText
 	}
 	// Only include delivery_partner_id when we actually have a rider. Pickup
 	// orders, orders cancelled before assignment, and legacy records without
@@ -153,7 +165,19 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 			utils.BadRequest(c, "You have already reviewed this order")
 			return
 		}
-		log.Printf("[ReviewHandler.CreateReview] Failed to create review for order %s: %v", orderID, err)
+		log.Printf("[ReviewHandler.CreateReview] Failed to create review for order %s user %s: %v", orderID, userID, err)
+		// Appwrite 4xx responses (document_invalid_structure, size limits,
+		// relationship constraints) are input-validation failures, not
+		// server faults — returning 500 triggered the Flutter client's
+		// "Server error. Please try again in a moment." banner and its
+		// retry loop, hammering the backend for a request that will never
+		// succeed. Surface 4xx as 400 instead so the customer sees an
+		// actionable message and stops retrying.
+		var httpErr *appwrite.HTTPError
+		if errors.As(err, &httpErr) && httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 {
+			utils.BadRequest(c, "Could not submit review — please adjust your input and try again")
+			return
+		}
 		utils.InternalError(c, "Failed to submit review")
 		return
 	}

@@ -5,9 +5,9 @@
 $ErrorActionPreference = "Stop"
 
 # ── Config ──
-$VM       = "34.131.63.117"
-$VM_USER  = "deepakupkgs"
-$SSH_KEY  = "$env:USERPROFILE\.ssh\google-vm-key"
+$VM       = "13.206.142.100"
+$VM_USER  = "ubuntu"
+$SSH_KEY  = "$env:USERPROFILE\Downloads\chizze-server.pem"
 $REMOTE   = "/home/$VM_USER/chizze/backend"
 $LOCAL    = "$PSScriptRoot\backend"
 $SSH      = "ssh -i $SSH_KEY -o ConnectTimeout=10 ${VM_USER}@${VM}"

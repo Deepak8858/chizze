@@ -448,6 +448,91 @@ func TestCreateReview_OmitsEmptyDeliveryPartnerID(t *testing.T) {
 	}
 }
 
+// TestCreateReview_OmitsEmptyReviewText ensures customers who submit a
+// rating without typing free-text feedback (the UI marks it optional) still
+// succeed. Writing review_text="" fails in production Appwrite when the
+// attribute is size-constrained, and the previous 500 response surfaced as
+// "Server error. Please try again in a moment." blocking every such review.
+func TestCreateReview_OmitsEmptyReviewText(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerReviewRoutes(te)
+
+	te.SeedRestaurant("rest_1", "owner_1", 12.97, 77.59, true)
+
+	cases := []struct {
+		name    string
+		orderID string
+		body    map[string]interface{}
+	}{
+		{"explicit empty string", "order_empty", map[string]interface{}{"food_rating": 5, "review_text": ""}},
+		{"whitespace only", "order_ws", map[string]interface{}{"food_rating": 5, "review_text": "   \t\n"}},
+		{"missing field", "order_missing", map[string]interface{}{"food_rating": 5}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			te.SeedOrder(tc.orderID, map[string]interface{}{
+				"customer_id":         "cust_1",
+				"restaurant_id":       "rest_1",
+				"delivery_partner_id": "dp_1",
+				"status":              "delivered",
+			})
+
+			rec := te.AuthRequest("POST", "/api/v1/orders/"+tc.orderID+"/review", tc.body, "cust_1", "customer")
+			if rec.Code != 201 {
+				t.Fatalf("expected 201 with empty/missing review_text, got %d: %s", rec.Code, rec.Body.String())
+			}
+
+			stored := te.FakeAW.GetDocument("reviews", "rev_"+tc.orderID)
+			if stored == nil {
+				t.Fatalf("expected review stored with deterministic id")
+			}
+			if raw, present := stored["review_text"]; present {
+				t.Fatalf("review_text must be omitted when empty/whitespace, got %#v", raw)
+			}
+		})
+	}
+}
+
+// TestCreateReview_TrimsReviewText verifies the handler persists the trimmed
+// review text (not the raw input) so leading/trailing whitespace from copy-
+// paste on mobile keyboards doesn't survive into the review collection and
+// skew downstream text analysis.
+func TestCreateReview_TrimsReviewText(t *testing.T) {
+	te := testutil.NewTestEnv(t)
+	defer te.Close()
+
+	registerReviewRoutes(te)
+
+	te.SeedRestaurant("rest_1", "owner_1", 12.97, 77.59, true)
+	te.SeedOrder("order_delivered", map[string]interface{}{
+		"customer_id":   "cust_1",
+		"restaurant_id": "rest_1",
+		"status":        "delivered",
+	})
+
+	body := map[string]interface{}{
+		"food_rating": 5,
+		"review_text": "   Great food  \n",
+	}
+
+	rec := te.AuthRequest("POST", "/api/v1/orders/order_delivered/review", body, "cust_1", "customer")
+	if rec.Code != 201 {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	stored := te.FakeAW.GetDocument("reviews", "rev_order_delivered")
+	if stored == nil {
+		t.Fatalf("expected review stored")
+	}
+	text, _ := stored["review_text"].(string)
+	if text != "Great food" {
+		t.Fatalf("expected trimmed review_text, got %q", text)
+	}
+}
+
 // TestCreateReview_NilTagsNormalizedToEmptySlice guards against the client
 // omitting the tags field entirely (or sending null). Appwrite's string-array
 // attribute rejects JSON null with 400 document_invalid_structure, so the

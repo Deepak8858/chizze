@@ -6,9 +6,9 @@
 set -euo pipefail
 
 # ── Config ──
-VM_HOST="34.131.63.117"
-VM_USER="deepakupkgs"
-SSH_KEY="$HOME/.ssh/google-vm-key"
+VM_HOST="13.206.142.100"
+VM_USER="ubuntu"
+SSH_KEY="$HOME/Downloads/chizze-server.pem"
 REMOTE_DIR="/home/$VM_USER/chizze/backend"
 LOCAL_BACKEND="$(dirname "$0")/backend"
 SSH_CMD="ssh -i $SSH_KEY -o ConnectTimeout=10 $VM_USER@$VM_HOST"

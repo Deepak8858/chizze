@@ -219,6 +219,17 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     }
   }
 
+  /// Mark a specific order as reviewed in local state immediately.
+  /// Called right after a successful review submission so the UI
+  /// reflects the change without waiting for a network refresh.
+  void markOrderAsReviewed(String orderId) {
+    final updated = state.orders.map((o) {
+      if (o.id == orderId) return o.copyWith(hasReview: true);
+      return o;
+    }).toList();
+    state = state.copyWith(orders: updated);
+  }
+
   /// Fetch a single order by ID from the API and merge into local state.
   /// Used as fallback when the order isn't in the provider yet.
   Future<Order?> fetchOrderById(String orderId) async {

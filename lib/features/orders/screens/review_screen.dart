@@ -26,6 +26,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   final _selectedTags = <String>{};
   bool _isSubmitting = false;
   bool _isLoading = true;
+  bool _alreadyReviewed = false; // true when backend confirms order has a review
   String? _error;
 
   // Retry state
@@ -69,9 +70,18 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         _error = 'This order has not been delivered yet';
         _isLoading = false;
       });
-      // Navigate back after showing error
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) context.go('/home');
+      });
+      return;
+    }
+
+    // If the server says this order already has a review, skip the form
+    // and show the already-reviewed state directly.
+    if (order.hasReview == true) {
+      setState(() {
+        _alreadyReviewed = true;
+        _isLoading = false;
       });
       return;
     }
@@ -97,6 +107,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       appBar: AppBar(title: const Text('Rate Your Order')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : _alreadyReviewed
+          ? _buildAlreadyReviewedState()
           : _error != null
           ? Center(
               child: Padding(
@@ -290,6 +302,41 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     );
   }
 
+  /// Shows when the order has already been reviewed — no form, clean confirmation.
+  Widget _buildAlreadyReviewedState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('✅', style: TextStyle(fontSize: 64))
+                .animate()
+                .scale(begin: const Offset(0.5, 0.5), duration: 400.ms, curve: Curves.elasticOut),
+            const SizedBox(height: AppSpacing.xl),
+            Text(
+              'Already Reviewed',
+              style: AppTypography.h2,
+              textAlign: TextAlign.center,
+            ).animate().fadeIn(delay: 200.ms),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'You have already submitted a review for this order.\nThank you for your feedback!',
+              style: AppTypography.body2.copyWith(color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ).animate().fadeIn(delay: 300.ms),
+            const SizedBox(height: AppSpacing.xxl),
+            ChizzeButton(
+              label: 'Back to Orders',
+              icon: Icons.receipt_long_rounded,
+              onPressed: () => context.go('/orders'),
+            ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1),
+          ],
+        ),
+      ),
+    );
+  }
+
   Map<String, dynamic> _buildSubmissionData() {
     final payload = <String, dynamic>{
       'food_rating': _foodRating,
@@ -318,6 +365,9 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       );
 
       if (!mounted) return;
+      // Update local order state immediately so the "Rate now" button
+      // changes to "Reviewed" without requiring a manual refresh.
+      ref.read(ordersProvider.notifier).markOrderAsReviewed(widget.orderId);
       setState(() {
         _isSubmitting = false;
         _lastSubmissionData = null;
@@ -328,24 +378,18 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
           backgroundColor: AppColors.success,
         ),
       );
-      context.go('/home');
+      context.go('/orders');
     } catch (e) {
       if (!mounted) return;
       final alreadyReviewed = _isAlreadyReviewed(e);
       setState(() {
         _isSubmitting = false;
-        // Duplicate submission isn't retry-able — clear the retry slot so the
-        // user isn't invited to hammer a request that will keep 400ing.
+        // Duplicate submission isn't retry-able — clear the retry slot.
         _lastSubmissionData = alreadyReviewed ? null : submissionData;
       });
       if (alreadyReviewed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You have already reviewed this order'),
-            backgroundColor: AppColors.warning,
-          ),
-        );
-        context.go('/home');
+        // Show in-screen already-reviewed state instead of a transient snackbar
+        setState(() => _alreadyReviewed = true);
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
@@ -376,6 +420,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       );
 
       if (!mounted) return;
+      ref.read(ordersProvider.notifier).markOrderAsReviewed(widget.orderId);
       setState(() {
         _isSubmitting = false;
         _lastSubmissionData = null;
@@ -386,7 +431,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
           backgroundColor: AppColors.success,
         ),
       );
-      context.go('/home');
+      context.go('/orders');
     } catch (e) {
       if (!mounted) return;
       final alreadyReviewed = _isAlreadyReviewed(e);
@@ -395,13 +440,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         if (alreadyReviewed) _lastSubmissionData = null;
       });
       if (alreadyReviewed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You have already reviewed this order'),
-            backgroundColor: AppColors.warning,
-          ),
-        );
-        context.go('/home');
+        setState(() => _alreadyReviewed = true);
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
